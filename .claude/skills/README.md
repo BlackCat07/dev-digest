@@ -6,6 +6,7 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 
 | Skill | Scope | Description |
 |-------|-------|-------------|
+| [engineering-insights](engineering-insights/SKILL.md) | Meta | Reads a package's `INSIGHTS.md` before the work, appends what was learned after it |
 | [fastify-best-practices](fastify-best-practices/SKILL.md) | Backend | Fastify routes, plugins, JSON-schema validation, error handling |
 | [drizzle-orm-patterns](drizzle-orm-patterns/SKILL.md) | Backend | Drizzle schema, queries, relations, transactions, migrations |
 | [postgresql-table-design](postgresql-table-design/SKILL.md) | Backend | Postgres schema design, data types, indexing, constraints |
@@ -16,6 +17,10 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [typescript-expert](typescript-expert/SKILL.md) | Full-stack | Type-level programming, performance, tooling, migrations |
 | [security](security/SKILL.md) | Full-stack | OWASP Top 10:2025, auth, injection, uploads, secrets |
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
+
+`engineering-insights` is authored in this repo. Every other skill is vendored from
+GitHub and pinned by hash in `../../skills-lock.json` — locally-authored skills have no
+upstream and do not belong in that lockfile.
 
 ## What Are Skills?
 

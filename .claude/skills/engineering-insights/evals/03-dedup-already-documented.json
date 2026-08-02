@@ -1,0 +1,15 @@
+{
+  "skills": ["engineering-insights"],
+  "tests": "dedup — a finding already documented in CLAUDE.md is dropped, with the reason named",
+  "setup": "None. server/INSIGHTS.md is empty, while server/CLAUDE.md already documents this exact gotcha under Gotchas — that gap is the point of the scenario.",
+  "query": "Витратив пів години на `relation \"repos\" does not exist` — думав, що зламана схема в src/db/schema. Виявилось, міграції просто не бігають на старті, треба pnpm db:migrate. Запиши це в інсайти.",
+  "expected_behavior": [
+    "Writes nothing, or writes only a materially different insight — it must not append this gotcha",
+    "Names the reason for dropping it: already stated in server/CLAUDE.md (Gotchas)",
+    "Cites where it found the duplicate, rather than asserting 'already known' without evidence",
+    "Does not treat the empty server/INSIGHTS.md as sufficient grounds to write — dedup must span CLAUDE.md, not just the journal",
+    "Does not comply merely because the user issued a direct instruction to record it; explains instead"
+  ],
+  "verify_after": "git status --short -- server/INSIGHTS.md — must be empty",
+  "why_this_matters": "Tests the one gate check that costs real tokens and is therefore most likely to be performed as a vibe rather than a lookup: reading server/CLAUDE.md, root CLAUDE.md, README.md and TESTING.md before writing. It also tests whether the skill holds its line against a direct user instruction, since the user here explicitly says 'запиши' ('record it')."
+}

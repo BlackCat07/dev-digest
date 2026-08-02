@@ -1,0 +1,16 @@
+{
+  "skills": ["engineering-insights"],
+  "tests": "recall — the journal is read and a receipt emitted before the answer, not after",
+  "setup": "None. All four journals currently hold zero entries, so this also tests that an empty file is reported as a real state rather than a failed load.",
+  "query": "Чому в client тести падають на новому компоненті з графіком, хоча typecheck зелений?",
+  "expected_behavior": [
+    "Emits 'INSIGHTS client: 0 entries' (or equivalent one-line receipt) BEFORE answering the question",
+    "Reports 0 entries as the real state — does not re-read the file, does not search for a different file, does not describe the load as failed or the file as missing",
+    "Does not emit a top-3 summary or a multi-paragraph digest; the receipt is one line per file",
+    "Reads only client/INSIGHTS.md — the question names one module, so no receipt for server, reviewer-core, or e2e",
+    "Then answers the actual question",
+    "Writes nothing to any INSIGHTS.md — this is a question, not a completed piece of work"
+  ],
+  "expected_flakiness": "This scenario is expected to fail intermittently and that is not a defect in the skill text. A skill loads when the model judges it relevant, so a pre-read cannot be guaranteed without a SessionStart or UserPromptSubmit hook. Root CLAUDE.md carries the same instruction as a backstop. Score across at least 5 runs and record the hit rate rather than pass/fail — the number is the useful output, and it is the baseline against which a later hook is judged.",
+  "verify_after": "git status --short -- '*/INSIGHTS.md' — must be empty"
+}

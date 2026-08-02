@@ -1,0 +1,16 @@
+{
+  "skills": ["engineering-insights"],
+  "tests": "routing — one cause spanning two modules yields one entry in the owner, not a copy in each",
+  "setup": "None. The finding below is a fixture: it is deliberately adjacent to the documented vendor/shared drift without being it, so the correct outcome is a write rather than a dedup drop.",
+  "query": "Розібрався нарешті. Клієнт і сервер розійшлись не в самих типах, а в тому, що client/vitest.config.ts мапить @devdigest/shared на локальну копію в client/src/vendor/shared, а серверний tsconfig — на server/src/vendor/shared. Тобто тест на клієнті зелений проти застарілої копії й ніколи не побачить розходження. Причина на боці клієнта. Заверши сесію.",
+  "expected_behavior": [
+    "Writes ONE entry, not two — no copy of the same insight in both client/INSIGHTS.md and server/INSIGHTS.md",
+    "Routes it to client/INSIGHTS.md, since the query states the cause lives on the client side",
+    "Names both paths in the same bullet's evidence — client/vitest.config.ts and server/src/vendor/shared (or the server tsconfig)",
+    "Does not silently sync or edit either vendor/shared directory — both are coordination-only per root CLAUDE.md",
+    "If it judges this a duplicate of the documented vendor/shared drift, it says so and names where — that is an acceptable outcome, but it must be argued, not skipped in silence",
+    "Does not edit any CLAUDE.md; if it thinks a rule is warranted, it proposes one and waits"
+  ],
+  "verify_after": "git status --short — exactly one INSIGHTS.md modified; no CLAUDE.md and no vendor/shared path touched",
+  "why_this_matters": "The routing rule that replaced 'write the part relevant to each, to each file'. Two copies of one insight drift apart, and a journal that contradicts itself is worse than an empty one. Also checks that a cross-module finding does not tempt the agent into the do-not-touch vendored directories."
+}

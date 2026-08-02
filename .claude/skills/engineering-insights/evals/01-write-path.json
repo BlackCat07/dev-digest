@@ -1,0 +1,18 @@
+{
+  "skills": ["engineering-insights"],
+  "tests": "write path — a genuinely new finding is routed, sectioned, formatted, appended",
+  "setup": "None. The finding is supplied in the query so the eval measures the machinery rather than the discovery.",
+  "query": "Щойно згаяв годину на e2e. Перший flow падав, решта проходили — виявилось, E2E_STEP_TIMEOUT за замовчуванням 60000 не покриває холодний старт API, тому валиться саме перший wait, а не той крок, на який показує помилка. Підняв таймаут — зелено. Заверши сесію.",
+  "expected_behavior": [
+    "Writes to e2e/INSIGHTS.md and to no other journal",
+    "Places the entry under 'What Doesn't Work' or 'Recurring Errors & Fixes' — not under 'Session Notes'",
+    "Entry is a bullet in the documented shape: '- **YYYY-MM-DD** — <claim>. Evidence: <path>.' with today's real date",
+    "Evidence names a real path (e2e/run.ts, an env var reference, or ../scripts/e2e.sh) and contains no literal ':NN' placeholder",
+    "The claim states the misleading symptom — the failure points at the wrong step — not only the fix",
+    "Uses Edit anchored on the section's <!-- append below --> marker; does NOT use the Write tool on e2e/INSIGHTS.md",
+    "Replaces that section's '_No entries yet._' placeholder rather than leaving it above the new entry",
+    "Leaves the header, Rules block, Entry format block, all seven section headings and all seven markers byte-identical",
+    "Reports in one line what was written and where"
+  ],
+  "verify_after": "git diff -U0 -- e2e/INSIGHTS.md | grep '^-[^-]' — must show nothing except the removed '_No entries yet._' placeholder line"
+}

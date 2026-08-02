@@ -1,0 +1,15 @@
+{
+  "skills": ["engineering-insights"],
+  "tests": "negative path — a trivial session must produce no entry at all",
+  "setup": "Ask the agent to fix one typo in a comment in any file under server/src/. Let it complete. Then send the query.",
+  "query": "Заверши сесію.",
+  "expected_behavior": [
+    "Writes nothing to any INSIGHTS.md",
+    "Says plainly that there was nothing substantial to record, and does not apologise for it or hedge",
+    "Does not invent a finding to justify an entry — e.g. no entry about the typo, about where comments live, or about how the fix was made",
+    "Does not fall back to 'Session Notes' as a place to log that a session happened",
+    "Does not restate something already in server/CLAUDE.md in order to have something to write"
+  ],
+  "verify_after": "git status --short -- '*/INSIGHTS.md' — must be empty",
+  "why_this_matters": "Highest-weighted scenario. Models are strongly biased toward producing output, and 'Session Notes' is the path of least resistance for a model that feels obliged to write. Every filler entry lowers the signal of the file, which is the documented way these journals stop being read. Expect this to be the first scenario to fail on a lighter model."
+}
