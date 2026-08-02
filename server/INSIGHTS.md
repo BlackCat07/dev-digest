@@ -75,7 +75,13 @@ Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
 
-_No entries yet._
+- **2026-08-02** — A stored run trace is returned by a **cast, not a Zod parse**:
+  `getRunTrace` does `row.trace as RunTrace` and `GET /runs/:id/trace` declares no response
+  schema, so whatever is in the `run_traces.trace` jsonb reaches the client verbatim. Adding
+  a field to `RunStats` therefore needs **no jsonb backfill** — but traces written before the
+  field existed arrive with the key *absent*, so every client reader must tolerate
+  `undefined` (not just `null`) or it renders `$NaN`/`undefined`. Evidence:
+  `src/modules/reviews/repository/run.repo.ts` (`getRunTrace`), `src/modules/reviews/routes.ts`.
 
 ## Tool & Library Notes
 
@@ -83,7 +89,15 @@ Dependency and tooling quirks.
 
 <!-- append below -->
 
-_No entries yet._
+- **2026-08-02** — `pnpm <script>` can die before the script runs: pnpm's pre-script
+  dep-status check shells out to `pnpm install`, which trips this repo's supply-chain policy
+  with `[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: cpu-features, esbuild, protobufjs,
+  ssh2` and exits 1 (`pnpm db:generate` never reached drizzle-kit). Two consequences: run the
+  binary directly instead — `./node_modules/.bin/drizzle-kit generate`,
+  `./node_modules/.bin/vitest run`, `./node_modules/.bin/tsc --noEmit -p tsconfig.json` — and
+  check for a scaffold `server/pnpm-workspace.yaml` that pnpm drops on failure, which
+  contradicts the root "NOT a monorepo workspace" convention and must be deleted, not
+  committed. Evidence: `package.json` (`db:generate`), root `CLAUDE.md` (Conventions).
 
 ## Recurring Errors & Fixes
 
@@ -91,7 +105,12 @@ An error string, its real cause, and the fix.
 
 <!-- append below -->
 
-_No entries yet._
+- **2026-08-02** — `agent_runs.pr_id` is **nullable** (`onDelete: 'set null'`) while
+  `reviews.pr_id` is `notNull`. Copying the PR-list "latest per PR" grouping from the reviews
+  block to `agent_runs` therefore fails typecheck with `Type 'string | null' is not
+  assignable to type 'string'` on the `Map<string, …>` write — a run outlives the PR it
+  reviewed. Guard with `if (row.prId == null) continue`. Evidence: `src/db/schema/runs.ts`
+  (`agentRuns.prId`), `src/modules/pulls/latest.ts` (`pickLatestPerPr`).
 
 ## Session Notes
 

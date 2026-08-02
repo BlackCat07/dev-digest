@@ -45,6 +45,14 @@ export function FindingsTab({
     liveRunIds.forEach((id) => cancelMutation.mutate(id));
   }, [liveRunIds, cancelMutation]);
 
+  // A ReviewRecord carries the verdict/findings but no usage; the matching
+  // RunSummary carries tokens + cost. Both arrays are already here, and
+  // `review.run_id` is the join key — cheaper than widening the review contract.
+  const runByRunId = React.useMemo(
+    () => new Map((prRuns ?? []).map((r) => [r.run_id, r])),
+    [prRuns],
+  );
+
   const handleOpenFirstTrace = useCallback(() => {
     if (liveRunIds[0]) onOpenTrace(liveRunIds[0]);
   }, [liveRunIds, onOpenTrace]);
@@ -158,6 +166,7 @@ export function FindingsTab({
           <ReviewRunAccordion
             key={review.id}
             review={review}
+            run={review.run_id ? runByRunId.get(review.run_id) ?? null : null}
             prId={prId}
             defaultOpen={i === 0}
             repoFullName={repoFullName}

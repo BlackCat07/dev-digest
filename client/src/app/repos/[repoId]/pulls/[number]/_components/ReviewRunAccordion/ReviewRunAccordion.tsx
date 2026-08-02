@@ -7,7 +7,7 @@
 
 import React from "react";
 import { Icon, Badge } from "@devdigest/ui";
-import type { ReviewRecord, Verdict } from "@devdigest/shared";
+import type { ReviewRecord, RunSummary, Verdict } from "@devdigest/shared";
 import { FindingsPanel } from "../FindingsPanel";
 import { VerdictBanner } from "../VerdictBanner";
 import { useDeleteReview } from "../../../../../../../lib/hooks/reviews";
@@ -25,6 +25,7 @@ function formatWhen(iso: string): string {
 
 export function ReviewRunAccordion({
   review,
+  run = null,
   prId,
   defaultOpen = false,
   repoFullName,
@@ -33,6 +34,9 @@ export function ReviewRunAccordion({
   targetNonce = 0,
 }: {
   review: ReviewRecord;
+  /** The agent run that produced this review, joined on `run_id` by the parent.
+   *  Carries the usage (tokens + cost) that `ReviewRecord` itself doesn't. */
+  run?: RunSummary | null;
   prId: string;
   defaultOpen?: boolean;
   repoFullName?: string | null;
@@ -144,6 +148,9 @@ export function ReviewRunAccordion({
                 findingsCount={findings.length}
                 blockers={blockers}
                 agentName={review.agent_name}
+                costUsd={run?.cost_usd ?? null}
+                tokensIn={run?.tokens_in ?? null}
+                tokensOut={run?.tokens_out ?? null}
               />
             </div>
           )}

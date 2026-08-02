@@ -75,7 +75,24 @@ Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
 
-_No entries yet._
+- **2026-08-02** — The PR-list table has a **three-way hand-synced invariant**: the track
+  count in `GRID` ↔ `COLUMN_KEYS.length` ↔ the number of top-level `<div>`s `PRRow` returns.
+  Nothing in the type system ties them, and a mismatch doesn't error — it silently shifts
+  every column after the offending one. Adding a column means exactly those three plus the
+  `list.columns.<key>` message; `pulls/styles.ts` and `page.tsx` need no edit because
+  `s.row`/`s.headRow` read `GRID` and the (inline) header maps `COLUMN_KEYS`. Note
+  `s.headCell(alignRight)` models only "is the last column", so right-aligning a middle
+  column needs a signature change. Evidence:
+  `src/app/repos/[repoId]/pulls/constants.ts` (`GRID`, `COLUMN_KEYS`),
+  `_components/PRRow/PRRow.tsx`.
+- **2026-08-02** — A feature unit shared by the PR **list** and PR **detail** must live in
+  `pulls/_components/`, not `pulls/[number]/_components/` — the latter sits below the list
+  route and can only be reached from it by an upward cross-route import. Such a unit also
+  needs its own `styles.ts` rather than borrowing the page-level `pulls/styles.ts` its
+  siblings (`PRRow`, `FilterBar`) use, since it belongs to no single page. Correspondingly,
+  formatters more than one route subtree needs go in `src/lib/` (see `src/lib/format.ts`), not
+  a unit's `helpers.ts` — that file is unit-private under the barrel convention. Evidence:
+  `src/app/repos/[repoId]/pulls/_components/RunCostBadge/`.
 
 ## Tool & Library Notes
 
