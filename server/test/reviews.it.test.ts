@@ -180,7 +180,11 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
 
     // runReview is fire-and-forget: wait for the background run, then read the
     // persisted reviews (the POST returns runIds, not the reviews themselves).
-    await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+    const agentRuns = await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+    // Cost survives the whole write path: MockLLMProvider reports costUsd 0.001
+    // per call and a single-pass review makes exactly one call.
+    expect(agentRuns[0]!.costUsd).toBe(0.001);
+
     const reviews = (
       await app.inject({ method: 'GET', url: `/pulls/${pr.id}/reviews` })
     ).json();
@@ -201,6 +205,7 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     const trace = (await app.inject({ method: 'GET', url: `/runs/${runId}/trace` })).json();
     expect(trace.config.model).toBe('gpt-4.1');
     expect(trace.stats.grounding).toBe('1/2 passed');
+    expect(trace.stats.cost_usd).toBe(0.001);
     expect(trace.log.length).toBeGreaterThan(0);
 
     // agent_runs row populated for A5 to aggregate

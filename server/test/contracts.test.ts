@@ -12,6 +12,8 @@ import {
   EvalRun,
   MemoryItem,
   RunTrace,
+  RunStats,
+  RunSummary,
   Settings,
   Repo,
   PrDetail,
@@ -157,7 +159,7 @@ describe('AI contracts parse fixtures', () => {
   it('RunTrace (data2.jsx TRACE single-document)', () => {
     const trace = RunTrace.parse({
       config: { agent: 'Security Reviewer', version: 'v7', model: 'gpt-4.1', pr: 482, source: 'local' },
-      stats: { duration_ms: 8200, tokens_in: 14820, tokens_out: 1240, findings: 3, grounding: '3/3 passed' },
+      stats: { duration_ms: 8200, tokens_in: 14820, tokens_out: 1240, cost_usd: 0.06, findings: 3, grounding: '3/3 passed' },
       prompt_assembly: { system: 's', user: 'u' },
       tool_calls: [{ tool: 'read_file', args: "'src/config.ts'", meta: '1,240 bytes', ms: 120 }],
       raw_output: '{}',
@@ -166,6 +168,40 @@ describe('AI contracts parse fixtures', () => {
       log: [{ t: '00.00', kind: 'info', msg: 'started' }],
     });
     expect(trace.tool_calls).toHaveLength(1);
+  });
+
+  // cost_usd is a REQUIRED key with a nullable value, not an optional one. That
+  // is load-bearing: it forces every failure path in run-executor.ts to state
+  // `cost_usd: null` rather than silently omitting cost, so "no data" is always
+  // explicit in the stored trace.
+  it('RunStats requires cost_usd to be present, even as null', () => {
+    const base = { duration_ms: 8200, tokens_in: 14820, tokens_out: 1240, findings: 3, grounding: '3/3 passed' };
+    expect(RunStats.safeParse(base).success).toBe(false);
+    expect(RunStats.parse({ ...base, cost_usd: null }).cost_usd).toBeNull();
+    expect(RunStats.parse({ ...base, cost_usd: 0 }).cost_usd).toBe(0);
+  });
+
+  it('RunSummary carries a nullable cost_usd', () => {
+    const base = {
+      run_id: 'r1',
+      agent_id: 'a1',
+      agent_name: 'Security Reviewer',
+      provider: 'openrouter',
+      model: 'deepseek/deepseek-v4-flash',
+      status: 'done',
+      error: null,
+      duration_ms: 8200,
+      tokens_in: 8200,
+      tokens_out: 919,
+      findings_count: 3,
+      grounding: '3/3 passed',
+      ran_at: '2026-06-01T09:14:02.000Z',
+      score: 38,
+      blockers: 2,
+    };
+    expect(RunSummary.parse({ ...base, cost_usd: 0.0013 }).cost_usd).toBe(0.0013);
+    expect(RunSummary.parse({ ...base, cost_usd: null }).cost_usd).toBeNull();
+    expect(RunSummary.safeParse(base).success).toBe(false);
   });
 });
 

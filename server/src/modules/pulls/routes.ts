@@ -8,6 +8,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
+import { pickLatestPerPr } from './latest.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -116,17 +117,28 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
     // grouping is cheap. (The per-severity FINDINGS breakdown is intentionally
     // not surfaced on the list — findings live on the PR detail page.)
     const prIds = rows.map((r) => r.id);
-    const latestReviewByPr = new Map<string, { score: number | null }>();
+    let latestReviewByPr = new Map<string, { score: number | null }>();
+    let latestRunByPr = new Map<string, { costUsd: number | null }>();
     if (prIds.length > 0) {
       const reviewRows = await container.db
         .select({ prId: t.reviews.prId, score: t.reviews.score })
         .from(t.reviews)
         .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')))
         .orderBy(desc(t.reviews.createdAt));
-      // Rows are newest-first → first seen per PR is the latest review.
-      for (const rv of reviewRows) {
-        if (!latestReviewByPr.has(rv.prId)) latestReviewByPr.set(rv.prId, { score: rv.score });
-      }
+      latestReviewByPr = pickLatestPerPr(reviewRows);
+
+      // Latest COMPLETED run's cost, for the list's COST column. Deliberately
+      // status='done': failed/cancelled/running runs persist cost_usd=null and
+      // zeroed tokens, so taking the latest run outright would blank the column
+      // right after a quota error and throw away the last real figure. It also
+      // keeps COST row-aligned with SCORE above, which likewise only ever sees
+      // successful runs.
+      const runRows = await container.db
+        .select({ prId: t.agentRuns.prId, costUsd: t.agentRuns.costUsd })
+        .from(t.agentRuns)
+        .where(and(inArray(t.agentRuns.prId, prIds), eq(t.agentRuns.status, 'done')))
+        .orderBy(desc(t.agentRuns.ranAt));
+      latestRunByPr = pickLatestPerPr(runRows);
     }
 
     const now = Date.now();
@@ -153,6 +165,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         opened_at: r.openedAt?.toISOString() ?? null,
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
+        cost_usd: latestRunByPr.get(r.id)?.costUsd ?? null,
       };
     });
   });

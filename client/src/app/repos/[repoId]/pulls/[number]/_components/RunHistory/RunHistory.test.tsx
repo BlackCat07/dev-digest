@@ -25,6 +25,7 @@ function run(o: Partial<RunSummary>): RunSummary {
     duration_ms: 1000,
     tokens_in: 100,
     tokens_out: 50,
+    cost_usd: null,
     findings_count: 0,
     grounding: "0/0 passed",
     ran_at: "2026-06-11T18:44:34.000Z",
@@ -71,5 +72,32 @@ describe("RunHistory — outcome badge", () => {
   it("a running run reads 'running'", () => {
     renderRuns([run({ status: "running", score: null, blockers: null })]);
     expect(screen.getByText("running")).toBeInTheDocument();
+  });
+});
+
+describe("RunHistory — cost badge", () => {
+  it("a settled run shows its token total and cost", () => {
+    renderRuns([
+      run({ status: "done", cost_usd: 0.0013, tokens_in: 8200, tokens_out: 919, blockers: 0 }),
+    ]);
+    expect(screen.getByText("9,119 tok")).toBeInTheDocument();
+    expect(screen.getByText("$0.0013")).toBeInTheDocument();
+  });
+
+  it('a settled run with no cost data shows "—", not "$0.00"', () => {
+    renderRuns([
+      run({ status: "done", cost_usd: null, tokens_in: 8200, tokens_out: 919, blockers: 0 }),
+    ]);
+    expect(screen.getByText("9,119 tok")).toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
+  });
+
+  it("an unsettled run shows no cost badge at all", () => {
+    // failed/running rows carry zeroed tokens and no cost — a badge there would
+    // read "— · —" beside the error text.
+    renderRuns([run({ status: "failed", error: "429 quota exceeded", cost_usd: null })]);
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+    expect(screen.queryByText(/tok/)).not.toBeInTheDocument();
   });
 });

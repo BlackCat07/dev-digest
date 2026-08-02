@@ -30,4 +30,37 @@ describe("VerdictBanner (smoke)", () => {
     expect(screen.getByText("42")).toBeInTheDocument();
     expect(screen.getByText(/1 findings · 1 blockers/)).toBeInTheDocument();
   });
+
+  it("shows the run's cost + token flow when usage is supplied", () => {
+    renderWithIntl(
+      <VerdictBanner
+        verdict="request_changes"
+        summary="Hardcoded secret introduced."
+        score={42}
+        findingsCount={1}
+        blockers={1}
+        costUsd={0.014}
+        tokensIn={8200}
+        tokensOut={1300}
+      />,
+    );
+    expect(screen.getByText("$0.014")).toBeInTheDocument();
+    expect(screen.getByText("8.2K→1.3K")).toBeInTheDocument();
+  });
+
+  it("omits the cost row entirely when there is no cost", () => {
+    // The banner is also rendered for reviews whose run row is gone (deleted or
+    // pre-dating cost), and an empty "— · —" line there is just noise.
+    renderWithIntl(
+      <VerdictBanner
+        verdict="approve"
+        summary={null}
+        score={95}
+        findingsCount={0}
+        blockers={0}
+        costUsd={null}
+      />,
+    );
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+  });
 });
