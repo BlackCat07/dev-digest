@@ -1,0 +1,13 @@
+# pnpm >= 10 settings file. NOT a workspace declaration — there is deliberately
+# no `packages:` key (see root CLAUDE.md: this repo is not a pnpm workspace).
+# Without this, every `pnpm <script>` here dies on ERR_PNPM_IGNORED_BUILDS before
+# the script runs, because pnpm's pre-script dep check shells out to `pnpm install`.
+allowBuilds:
+  esbuild: true
+  sharp: true
+
+# `onlyBuiltDependencies` is the pnpm 10 spelling of the same setting; kept so the
+# repo also works for anyone still on 10.
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
