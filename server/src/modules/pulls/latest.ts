@@ -3,7 +3,7 @@
  * are testable without a live database.
  *
  * A review fans out over N agents and writes one `agent_runs` row + one
- * `reviews` row PER AGENT, so neither list column is a single row's value:
+ * `reviews` row PER AGENT, so neither COST nor SCORE is a single row's value:
  * COST is the sum of what every agent spent, SCORE is the worst agent's verdict.
  * Both aggregate over each agent's LATEST row — re-running one agent replaces
  * that agent's figure instead of double-counting it.
@@ -12,6 +12,11 @@
  * one `IN`-query apiece. Postgres has no portable per-group `LIMIT 1` in
  * Drizzle's builder, so both queries over-fetch ordered newest-first and
  * collapse in JS here.
+ *
+ * The list's third aggregate, the per-severity FINDINGS breakdown, deliberately
+ * does NOT belong here: it sums EVERY run rather than each agent's latest, so it
+ * needs no per-group `LIMIT 1` and is counted in SQL instead. It lives in
+ * `./status.ts` (`countFindingsBySeverity`).
  */
 
 /**

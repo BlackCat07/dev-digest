@@ -27,8 +27,19 @@ function pr(o: Partial<PrMeta> = {}): PrMeta {
     updated_at: "2026-06-01T09:14:02.000Z",
     score: 61,
     cost_usd: 0.014,
+    findings_by_severity: { CRITICAL: 2, WARNING: 2, SUGGESTION: 2 },
     ...o,
   };
+}
+
+/**
+ * Text of one grid cell, located by its `COLUMN_KEYS` name. The row is a CSS
+ * grid of top-level cells in column order, so the key's index is the cell's.
+ */
+function cellText(container: HTMLElement, column: string): string {
+  const i = COLUMN_KEYS.indexOf(column);
+  expect(i).toBeGreaterThanOrEqual(0);
+  return container.firstElementChild!.children[i]!.textContent!.trim();
 }
 
 function renderRow(meta: PrMeta) {
@@ -48,9 +59,14 @@ describe("PRRow — cost column", () => {
   });
 
   it('renders "—" for a PR with no completed run', () => {
-    renderRow(pr({ cost_usd: null, score: null }));
-    // Both the score cell and the cost cell fall back to a dash.
-    expect(screen.getAllByText("—")).toHaveLength(2);
+    const { container } = renderRow(
+      pr({ cost_usd: null, score: null, findings_by_severity: null }),
+    );
+    // Asserted PER CELL rather than by counting dashes across the row: several
+    // columns fall back to a dash, so a row-wide count silently re-breaks every
+    // time a column is added.
+    expect(cellText(container, "cost")).toBe("—");
+    expect(cellText(container, "score")).toBe("—");
     expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
   });
 });
@@ -64,6 +80,29 @@ describe("PRRow — score column", () => {
   it("carries no score tooltip on a never-reviewed PR", () => {
     const { container } = renderRow(pr({ score: null }));
     expect(container.querySelector(`[title="${messages.list.scoreTooltip}"]`)).toBeNull();
+  });
+});
+
+describe("PRRow — findings column", () => {
+  it("shows one counter per non-zero severity", () => {
+    const { container } = renderRow(
+      pr({ findings_by_severity: { CRITICAL: 2, WARNING: 0, SUGGESTION: 3 } }),
+    );
+    // A zero level is omitted entirely, so the cell reads "2 3", not "2 0 3".
+    expect(cellText(container, "findings")).toBe("23");
+  });
+
+  it('renders "—" when every severity is zero', () => {
+    const { container } = renderRow(
+      pr({ findings_by_severity: { CRITICAL: 0, WARNING: 0, SUGGESTION: 0 } }),
+    );
+    expect(cellText(container, "findings")).toBe("—");
+  });
+
+  it("renders without a QueryClientProvider — the hover fetch mounts only on hover", () => {
+    // Guards the mount-based laziness: putting the query in the always-rendered
+    // subtree would throw "No QueryClient set" here and in every case above.
+    expect(() => renderRow(pr())).not.toThrow();
   });
 });
 

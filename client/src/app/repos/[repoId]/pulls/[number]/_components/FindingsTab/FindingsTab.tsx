@@ -5,8 +5,15 @@ import { Icon, Badge, Button, SectionLabel, EmptyState } from "@devdigest/ui";
 import { RunStatus } from "../RunStatus";
 import { RunHistory } from "../RunHistory/RunHistory";
 import { ReviewRunAccordion } from "../ReviewRunAccordion";
+import { addCounts, countBySeverity } from "@/lib/severity";
 import { s } from "./styles";
-import type { FindingRecord, ReviewRecord, RunSummary, PrCommit } from "@devdigest/shared";
+import type {
+  FindingRecord,
+  FindingsBySeverity,
+  ReviewRecord,
+  RunSummary,
+  PrCommit,
+} from "@devdigest/shared";
 import type { UseMutationResult } from "@tanstack/react-query";
 
 interface FindingsTabProps {
@@ -52,6 +59,22 @@ export function FindingsTab({
     () => new Map((prRuns ?? []).map((r) => [r.run_id, r])),
     [prRuns],
   );
+
+  // Per-severity counts for the timeline, keyed by run. `RunSummary` carries only
+  // a total, so the split is joined in from the reviews by `run_id` — the same
+  // key `runByRunId` uses, in the other direction. Reviews with a null `run_id`
+  // (the seeded review, and any pre-run_id row) simply contribute no entry, so
+  // the timeline renders no counters for them.
+  const severityByRunId = React.useMemo(() => {
+    const m = new Map<string, FindingsBySeverity>();
+    for (const review of runs) {
+      if (!review.run_id || review.kind !== "review") continue;
+      const counts = countBySeverity(review.findings);
+      const prev = m.get(review.run_id);
+      m.set(review.run_id, prev ? addCounts(prev, counts) : counts);
+    }
+    return m;
+  }, [runs]);
 
   const handleOpenFirstTrace = useCallback(() => {
     if (liveRunIds[0]) onOpenTrace(liveRunIds[0]);
@@ -139,6 +162,7 @@ export function FindingsTab({
           <RunHistory
             runs={prRuns ?? []}
             commits={prCommits}
+            severityByRunId={severityByRunId}
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
             onDelete={handleDelete}

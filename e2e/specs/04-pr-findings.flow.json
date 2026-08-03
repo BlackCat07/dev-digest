@@ -1,6 +1,6 @@
 {
-  "name": "PR detail shows the seeded review run, verdict, and findings",
-  "description": "From PR #482, open the Agent runs tab and confirm the seeded review run renders (verdict 'request changes', 2 findings) in its accordion header. The newest run's accordion is open by default (FindingsTab passes defaultOpen to the first run), so the VerdictBanner and the seeded FindingCard ('Hardcoded Stripe secret key in commit') are revealed without an extra click. Exercises the refactored ReviewRunAccordion / VerdictBanner / FindingsPanel / FindingCard. Read-only seeded data (no model call). Assumes a freshly-seeded DB where acme/payments-api (PR #482) is the first repo — guaranteed by e2e-web.yml; run locally via the hermetic stack (see e2e/README.md).",
+  "name": "PR detail shows the seeded review run, verdict, findings, and the severity filter",
+  "description": "From PR #482, open the Agent runs tab and confirm the seeded review run renders (verdict 'request changes', 2 findings) in its accordion header. The newest run's accordion is open by default (FindingsTab passes defaultOpen to the first run), so the VerdictBanner, the SeverityFilter chip row and the seeded FindingCard ('Hardcoded Stripe secret key in commit') are revealed without an extra click. Then exercises the severity ISOLATE filter, which lives in that run's FindingsPanel toolbar (one chip row per review run, local state — there is deliberately NO filter above TIMELINE): the seed has exactly 1 CRITICAL + 1 WARNING, so the chips read 'Critical 1 / Warning 1' and 'Suggestion 0' is dimmed and unclickable. Clicking Critical leaves the CRITICAL finding visible. This asserts the MECHANICS only — the harness has positive locators, so the WARNING card's disappearance is not expressible here; the filtering semantics are covered by FindingsPanel.test.tsx. Exercises ReviewRunAccordion / VerdictBanner / FindingsPanel / FindingCard / SeverityFilter. Read-only seeded data (no model call). NOTE: the seeded review has run_id = null, so it produces no timeline row — the per-run timeline counters are not reachable here and are covered by client unit tests instead. Assumes a freshly-seeded DB where acme/payments-api (PR #482) is the first repo — guaranteed by e2e-web.yml; run locally via the hermetic stack (see e2e/README.md).",
   "steps": [
     { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
     { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
@@ -11,6 +11,12 @@
     { "cmd": ["wait", "--url", "tab=findings"], "label": "findings tab is active in the URL" },
     { "cmd": ["wait", "--text", "request changes"], "label": "seeded run accordion shows its verdict" },
     { "cmd": ["wait", "--text", "2 findings"], "label": "accordion header shows the seeded finding count" },
-    { "cmd": ["wait", "--text", "Hardcoded Stripe secret key in commit"], "label": "seeded FindingCard is visible (newest run is open by default)" }
+    { "cmd": ["wait", "--text", "Hardcoded Stripe secret key in commit"], "label": "seeded FindingCard is visible (newest run is open by default)" },
+    { "cmd": ["wait", "--text", "N+1 query in user list endpoint"], "label": "the WARNING finding is visible before filtering" },
+    { "cmd": ["wait", "--text", "Critical"], "label": "the severity chip row renders inside the open run's panel" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Critical"], "label": "isolate CRITICAL via this run's severity chip" },
+    { "cmd": ["wait", "--text", "Hardcoded Stripe secret key in commit"], "label": "the CRITICAL finding survives the filter" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Critical"], "label": "click the active chip again to clear the filter" },
+    { "cmd": ["wait", "--text", "N+1 query in user list endpoint"], "label": "the WARNING finding returns once the filter is cleared" }
   ]
 }

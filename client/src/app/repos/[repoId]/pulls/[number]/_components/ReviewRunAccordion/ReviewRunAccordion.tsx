@@ -10,6 +10,9 @@ import { Icon, Badge } from "@devdigest/ui";
 import type { ReviewRecord, RunSummary, Verdict } from "@devdigest/shared";
 import { FindingsPanel } from "../FindingsPanel";
 import { VerdictBanner } from "../VerdictBanner";
+import { SeverityCounters } from "../../../_components/SeverityCounters";
+import { FindingsHoverPanel, FindingsHoverTrigger } from "../../../_components/FindingsHoverCard";
+import { countBySeverity } from "@/lib/severity";
 import { useDeleteReview } from "../../../../../../../lib/hooks/reviews";
 
 const VERDICT_COLOR: Record<string, string> = {
@@ -58,6 +61,7 @@ export function ReviewRunAccordion({
   const del = useDeleteReview(prId);
   const findings = review.findings;
   const blockers = findings.filter((f) => f.severity === "CRITICAL" && !f.dismissed_at).length;
+  const counts = React.useMemo(() => countBySeverity(findings), [findings]);
   const verdictColor = review.verdict ? VERDICT_COLOR[review.verdict] ?? "var(--text-muted)" : "var(--text-muted)";
 
   return (
@@ -97,6 +101,14 @@ export function ReviewRunAccordion({
             {review.verdict.replace("_", " ")}
           </Badge>
         )}
+        {/* Counters are a SIBLING of the count text, never interleaved into it —
+            e2e flow 04 waits on the literal string "2 findings", and text
+            matching normalises within a single element. */}
+        <span onClick={(e) => e.stopPropagation()}>
+          <FindingsHoverTrigger panel={() => <FindingsHoverPanel findings={findings} />}>
+            <SeverityCounters counts={counts} zero="hide" dotted />
+          </FindingsHoverTrigger>
+        </span>
         <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
           {findings.length} finding{findings.length === 1 ? "" : "s"}
           {blockers > 0 ? ` · ${blockers} blocker${blockers === 1 ? "" : "s"}` : ""}
@@ -154,6 +166,7 @@ export function ReviewRunAccordion({
               />
             </div>
           )}
+          {/* The severity filter lives inside this panel — one chip row per run. */}
           <FindingsPanel
             findings={findings}
             prId={prId}

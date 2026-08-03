@@ -131,7 +131,7 @@ d('Testcontainers: DB-backed routes via app.inject', () => {
     await app.close();
   });
 
-  it('GET /repos/:id/pulls sums COST across agents and takes the MIN score', async () => {
+  it('GET /repos/:id/pulls sums COST + FINDINGS across agents and takes the MIN score', async () => {
     // A review fans out over N agents (one agent_runs + one reviews row each), so
     // the list's COST is a sum and its SCORE is the worst agent's — not whichever
     // agent finished last. Exercised here because the grouping is real SQL +
@@ -170,11 +170,56 @@ d('Testcontainers: DB-backed routes via app.inject', () => {
       // a later FAILED run must not blank a2's column contribution
       { workspaceId, prId: pr!.id, agentId: a2!.id, status: 'failed', costUsd: null, ranAt: at(120) },
     ]);
-    await db.insert(t.reviews).values([
-      { workspaceId, prId: pr!.id, agentId: a1!.id, kind: 'review', score: 72, createdAt: at(0) },
-      { workspaceId, prId: pr!.id, agentId: a1!.id, kind: 'review', score: 88, createdAt: at(90) },
-      { workspaceId, prId: pr!.id, agentId: a2!.id, kind: 'review', score: 64, createdAt: at(1) },
+    const reviewRows = await db
+      .insert(t.reviews)
+      .values([
+        { workspaceId, prId: pr!.id, agentId: a1!.id, kind: 'review', score: 72, createdAt: at(0) },
+        { workspaceId, prId: pr!.id, agentId: a1!.id, kind: 'review', score: 88, createdAt: at(90) },
+        { workspaceId, prId: pr!.id, agentId: a2!.id, kind: 'review', score: 64, createdAt: at(1) },
+        // A 'summary' row is excluded from every list aggregate.
+        { workspaceId, prId: pr!.id, agentId: a2!.id, kind: 'summary', score: 10, createdAt: at(2) },
+      ])
+      .returning();
+    const [r1Old, r1New, r2, rSummary] = reviewRows;
+
+    // FINDINGS sums EVERY run, so a1's SUPERSEDED review still contributes — the
+    // opposite of SCORE/COST above, which only see a1's newest row.
+    const finding = (reviewId: string, severity: string) => ({
+      reviewId,
+      file: 'src/a.ts',
+      startLine: 1,
+      endLine: 1,
+      severity,
+      category: 'bug',
+      title: `${severity} finding`,
+      rationale: 'because',
+      confidence: 0.9,
+    });
+    await db.insert(t.findings).values([
+      finding(r1Old!.id, 'CRITICAL'),
+      finding(r1Old!.id, 'WARNING'),
+      finding(r1New!.id, 'CRITICAL'),
+      finding(r1New!.id, 'WARNING'),
+      finding(r2!.id, 'WARNING'),
+      // `severity` is a plain text column, so a stray value is storable — it must
+      // land in no bucket rather than crashing or being guessed into one.
+      finding(r2!.id, 'WEIRD'),
+      // Belongs to the 'summary' review → excluded.
+      finding(rSummary!.id, 'CRITICAL'),
     ]);
+
+    // A second PR in the same repo, never reviewed: must report all-zero, not null.
+    await db.insert(t.pullRequests).values({
+      workspaceId,
+      repoId: repo!.id,
+      number: 4822,
+      title: 'Never reviewed',
+      author: 'dev',
+      branch: 'feat/none',
+      base: 'main',
+      headSha: 'aggr0002',
+      status: 'needs_review',
+    });
 
     const config = loadConfig({ ...process.env, NODE_ENV: 'test' } as NodeJS.ProcessEnv);
     const app = await buildApp({
@@ -184,8 +229,23 @@ d('Testcontainers: DB-backed routes via app.inject', () => {
     });
     const list = await app.inject({ method: 'GET', url: `/repos/${repo!.id}/pulls` });
     const row = list.json().find((p: { number: number }) => p.number === 4821);
+    // LATEST-per-agent basis:
     expect(row.cost_usd).toBeCloseTo(0.017, 10); // 0.006 (a1 latest) + 0.011 (a2)
     expect(row.score).toBe(64); // min(88, 64), NOT a1's newer 88
+    // ALL-runs basis — the two bases asserted side by side deliberately, because
+    // the divergence is the design decision most likely to look like a bug later.
+    expect(row.findings_by_severity).toEqual({
+      CRITICAL: 2, // BOTH of a1's runs, superseded one included
+      WARNING: 3, // a1 old + a1 new + a2 ('WEIRD' and the 'summary' row excluded)
+      SUGGESTION: 0,
+    });
+
+    const unreviewed = list.json().find((p: { number: number }) => p.number === 4822);
+    expect(unreviewed.findings_by_severity).toEqual({
+      CRITICAL: 0,
+      WARNING: 0,
+      SUGGESTION: 0,
+    });
     await app.close();
   });
 

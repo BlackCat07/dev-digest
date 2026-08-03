@@ -11,6 +11,23 @@ import { z } from 'zod';
 export const Severity = z.enum(['CRITICAL', 'WARNING', 'SUGGESTION']);
 export type Severity = z.infer<typeof Severity>;
 
+/**
+ * Per-severity finding counts. Keys mirror `Severity` EXACTLY (uppercase) so the
+ * UI can index its severity token registry with them directly, and so counts
+ * computed on the client from `FindingRecord[]` are the same type as counts
+ * rolled up by the server. Same shape as `AgentStats.findings_by_severity`.
+ *
+ * A finding whose stored severity is outside this enum (the DB column is plain
+ * `text`) lands in no bucket — so these three can sum to less than a total
+ * findings count.
+ */
+export const FindingsBySeverity = z.object({
+  CRITICAL: z.number().int(),
+  WARNING: z.number().int(),
+  SUGGESTION: z.number().int(),
+});
+export type FindingsBySeverity = z.infer<typeof FindingsBySeverity>;
+
 export const FindingCategory = z.enum(['bug', 'security', 'perf', 'style', 'test']);
 export type FindingCategory = z.infer<typeof FindingCategory>;
 

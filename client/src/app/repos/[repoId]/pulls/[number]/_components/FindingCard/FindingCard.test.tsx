@@ -57,4 +57,28 @@ describe("FindingCard (smoke, both themes)", () => {
     fireEvent.click(screen.getByText("Dismiss"));
     expect(onAction).toHaveBeenCalledWith("dismiss");
   });
+
+  it("logs no style shorthand/longhand warning when `focused` flips", () => {
+    // The card sets a per-side borderLeft*, so ANY border shorthand alongside it
+    // (`border`, but also `borderColor` / `borderWidth`) makes React warn
+    // "Updating a style property during rerender (borderColor) when a conflicting
+    // property is set (borderLeftColor)" as soon as the shorthand's value
+    // changes. `focused` changes on every severity-filter change and every j/k
+    // move, so this fired constantly in the console.
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { rerender } = renderWithIntl(<FindingCard f={FINDING} focused={false} />);
+    rerender(
+      <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
+        <FindingCard f={FINDING} focused />
+      </NextIntlClientProvider>,
+    );
+    rerender(
+      <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
+        <FindingCard f={FINDING} focused={false} />
+      </NextIntlClientProvider>,
+    );
+    const conflicts = err.mock.calls.filter((c) => String(c[0]).includes("conflicting property"));
+    expect(conflicts).toEqual([]);
+    err.mockRestore();
+  });
 });

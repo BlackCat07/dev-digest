@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Provider } from './knowledge.js';
+import { FindingsBySeverity } from './findings.js';
 
 /**
  * Platform / scaffolding DTOs owned by F1:
@@ -176,6 +177,14 @@ export const PrMeta = z.object({
   // completed run (list endpoint only; null/absent until a run finishes, and null
   // when no price is known for any of the models).
   cost_usd: z.number().nullish(),
+  // FINDINGS per severity, SUMMED OVER EVERY PERSISTED REVIEW RUN of this PR —
+  // deliberately NOT the latest-run-per-agent basis `score`/`cost_usd` use above,
+  // so re-running the same agent 3x triples these numbers. That is on purpose:
+  // the list column has to equal the "Agent runs" tab badge on the PR detail
+  // page, which is `reviews.flatMap(r => r.findings).length`. List endpoint only
+  // (absent from every other PrMeta producer); all-zero for a never-reviewed PR,
+  // which the UI renders the same as absent.
+  findings_by_severity: FindingsBySeverity.nullish(),
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 

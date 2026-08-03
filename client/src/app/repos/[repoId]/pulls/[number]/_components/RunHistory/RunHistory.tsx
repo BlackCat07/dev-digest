@@ -3,8 +3,9 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
-import type { RunSummary, PrCommit } from "@devdigest/shared";
+import type { FindingsBySeverity, RunSummary, PrCommit } from "@devdigest/shared";
 import { RunCostBadge } from "../../../_components/RunCostBadge";
+import { SeverityCounters } from "../../../_components/SeverityCounters";
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
@@ -88,12 +89,17 @@ function tsOf(s: string | null | undefined): number {
 export function RunHistory({
   runs,
   commits = [],
+  severityByRunId,
   onOpenTrace,
   onGoToReview,
   onDelete,
 }: {
   runs: RunSummary[];
   commits?: PrCommit[];
+  /** Per-severity split for a run, joined in by the parent from the reviews
+   *  (`RunSummary` carries only a total). Optional, and a MISS is normal: a
+   *  review with a null `run_id` has no timeline row to attach to. */
+  severityByRunId?: Map<string, FindingsBySeverity>;
   /** Open the trace + log drawer for a run (the logs icon). */
   onOpenTrace: (runId: string) => void;
   /** Jump to this run's inline review accordion below (clicking the agent name). */
@@ -190,9 +196,18 @@ export function RunHistory({
                 </div>
               )}
               {settled && (
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {t("runStatus.findings", { count: r.findings_count ?? 0 })}
-                  {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: "var(--text-muted)" }}>
+                  {/* `zero="hide"`, never a dash: an all-zero dash here would be a
+                      second "—" in the row beside the cost badge's own. */}
+                  <SeverityCounters counts={severityByRunId?.get(r.run_id)} zero="hide" />
+                  <span>
+                    {t("runStatus.findings", { count: r.findings_count ?? 0 })}
+                    {/* NOTE: `blockers` is gate-relative (counted server-side against
+                        the agent's `ciFailOn` at write time), so for an agent with
+                        ciFailOn='warning' it can exceed the CRITICAL counter beside
+                        it. Not a bug — the two numbers answer different questions. */}
+                    {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
+                  </span>
                 </div>
               )}
             </div>
