@@ -131,6 +131,64 @@ d('Testcontainers: DB-backed routes via app.inject', () => {
     await app.close();
   });
 
+  it('GET /repos/:id/pulls sums COST across agents and takes the MIN score', async () => {
+    // A review fans out over N agents (one agent_runs + one reviews row each), so
+    // the list's COST is a sum and its SCORE is the worst agent's — not whichever
+    // agent finished last. Exercised here because the grouping is real SQL +
+    // ordering; the pure reduction is covered hermetically in pulls-latest.test.ts.
+    const { db } = pg.handle;
+    const [ws] = await db.select().from(t.workspaces).where(eq(t.workspaces.name, 'default'));
+    const workspaceId = ws!.id;
+    const [repo] = await db
+      .insert(t.repos)
+      .values({ workspaceId, owner: 'agg', name: 'sums', fullName: 'agg/sums' })
+      .returning();
+    const [pr] = await db
+      .insert(t.pullRequests)
+      .values({
+        workspaceId,
+        repoId: repo!.id,
+        number: 4821,
+        title: 'Aggregate me',
+        author: 'dev',
+        branch: 'feat/agg',
+        base: 'main',
+        headSha: 'aggr0001',
+        status: 'needs_review',
+      })
+      .returning();
+    const agents = await db.select().from(t.agents).where(eq(t.agents.workspaceId, workspaceId));
+    const [a1, a2] = agents;
+    expect(a2).toBeDefined(); // the seed ships three built-in agents
+
+    const at = (minutes: number) => new Date(Date.UTC(2026, 0, 1, 0, minutes));
+    await db.insert(t.agentRuns).values([
+      { workspaceId, prId: pr!.id, agentId: a1!.id, status: 'done', costUsd: 0.004, ranAt: at(0) },
+      // newest for a1 — a re-run REPLACES its older figure rather than adding to it
+      { workspaceId, prId: pr!.id, agentId: a1!.id, status: 'done', costUsd: 0.006, ranAt: at(90) },
+      { workspaceId, prId: pr!.id, agentId: a2!.id, status: 'done', costUsd: 0.011, ranAt: at(1) },
+      // a later FAILED run must not blank a2's column contribution
+      { workspaceId, prId: pr!.id, agentId: a2!.id, status: 'failed', costUsd: null, ranAt: at(120) },
+    ]);
+    await db.insert(t.reviews).values([
+      { workspaceId, prId: pr!.id, agentId: a1!.id, kind: 'review', score: 72, createdAt: at(0) },
+      { workspaceId, prId: pr!.id, agentId: a1!.id, kind: 'review', score: 88, createdAt: at(90) },
+      { workspaceId, prId: pr!.id, agentId: a2!.id, kind: 'review', score: 64, createdAt: at(1) },
+    ]);
+
+    const config = loadConfig({ ...process.env, NODE_ENV: 'test' } as NodeJS.ProcessEnv);
+    const app = await buildApp({
+      config,
+      db,
+      overrides: { git: new MockGitClient(), github: new MockGitHubClient() },
+    });
+    const list = await app.inject({ method: 'GET', url: `/repos/${repo!.id}/pulls` });
+    const row = list.json().find((p: { number: number }) => p.number === 4821);
+    expect(row.cost_usd).toBeCloseTo(0.017, 10); // 0.006 (a1 latest) + 0.011 (a2)
+    expect(row.score).toBe(64); // min(88, 64), NOT a1's newer 88
+    await app.close();
+  });
+
   it('POST /repos/:id/poll syncs PR list and does NOT trigger a review', async () => {
     const config = loadConfig({ ...process.env, NODE_ENV: 'test' } as NodeJS.ProcessEnv);
     const app = await buildApp({

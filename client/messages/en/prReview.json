@@ -95,7 +95,8 @@
       "cost": "Cost",
       "updated": "Updated"
     },
-    "costTooltip": "Cost of the latest completed run",
+    "costTooltip": "Total cost of this PR's review (all agents)",
+    "scoreTooltip": "Lowest score across all agents",
     "filesCount": "{count} files",
     "errorTitle": "Couldn’t load pull requests",
     "errorBody": "The engine returned an error.",

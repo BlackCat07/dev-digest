@@ -8,7 +8,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
-import { pickLatestPerPr } from './latest.js';
+import { groupLatestPerAgent, minScore, sumCosts } from './latest.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -112,62 +112,76 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
-    // Latest-review SCORE per PR for the list's score ring. Computed on read
-    // from reviews (no FK denorm); the list is small, so one IN-query + JS
-    // grouping is cheap. (The per-severity FINDINGS breakdown is intentionally
-    // not surfaced on the list — findings live on the PR detail page.)
+    // SCORE + COST per PR, both aggregated ACROSS AGENTS: a review fans out over
+    // N agents, each writing its own reviews row and its own agent_runs row, so
+    // neither column is a single row's value. SCORE takes the WORST agent's
+    // score (one blocker must not be hidden by a sibling that approved), COST
+    // sums what every agent spent. Computed on read (no FK denorm); the list is
+    // small, so one IN-query + JS grouping apiece is cheap. (The per-severity
+    // FINDINGS breakdown is intentionally not surfaced on the list — findings
+    // live on the PR detail page.)
     const prIds = rows.map((r) => r.id);
-    let latestReviewByPr = new Map<string, { score: number | null }>();
-    let latestRunByPr = new Map<string, { costUsd: number | null }>();
+    let reviewsByPr = new Map<string, { score: number | null }[]>();
+    let runsByPr = new Map<string, { costUsd: number | null }[]>();
     if (prIds.length > 0) {
+      // reviews.score, not agent_runs.score: the latter was added later (migration
+      // 0006) with no backfill, so pre-0006 runs carry score=null while their
+      // reviews row still has the real figure.
       const reviewRows = await container.db
-        .select({ prId: t.reviews.prId, score: t.reviews.score })
+        .select({
+          prId: t.reviews.prId,
+          agentId: t.reviews.agentId,
+          id: t.reviews.id,
+          score: t.reviews.score,
+        })
         .from(t.reviews)
         .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')))
         .orderBy(desc(t.reviews.createdAt));
-      latestReviewByPr = pickLatestPerPr(reviewRows);
+      reviewsByPr = groupLatestPerAgent(reviewRows, (r) => r.id);
 
-      // Latest COMPLETED run's cost, for the list's COST column. Deliberately
+      // Each agent's latest COMPLETED run feeds the COST sum. Deliberately
       // status='done': failed/cancelled/running runs persist cost_usd=null and
-      // zeroed tokens, so taking the latest run outright would blank the column
-      // right after a quota error and throw away the last real figure. It also
-      // keeps COST row-aligned with SCORE above, which likewise only ever sees
-      // successful runs.
+      // zeroed tokens, so counting the newest run outright would drop an agent's
+      // last real figure right after a quota error. It also keeps COST
+      // aggregating over the same agent set as SCORE above, which likewise only
+      // ever sees successful runs.
       const runRows = await container.db
-        .select({ prId: t.agentRuns.prId, costUsd: t.agentRuns.costUsd })
+        .select({
+          prId: t.agentRuns.prId,
+          agentId: t.agentRuns.agentId,
+          id: t.agentRuns.id,
+          costUsd: t.agentRuns.costUsd,
+        })
         .from(t.agentRuns)
         .where(and(inArray(t.agentRuns.prId, prIds), eq(t.agentRuns.status, 'done')))
         .orderBy(desc(t.agentRuns.ranAt));
-      latestRunByPr = pickLatestPerPr(runRows);
+      runsByPr = groupLatestPerAgent(runRows, (r) => r.id);
     }
 
     const now = Date.now();
-    return rows.map((r) => {
-      const review = latestReviewByPr.get(r.id);
-      return {
-        id: r.id,
-        number: r.number,
-        title: r.title,
-        author: r.author,
-        branch: r.branch,
-        base: r.base,
-        head_sha: r.headSha,
-        additions: r.additions,
-        deletions: r.deletions,
-        files_count: r.filesCount,
-        status: deriveReviewStatus({
-          ghStatus: r.status,
-          lastReviewedSha: r.lastReviewedSha,
-          headSha: r.headSha,
-          updatedAt: r.updatedAt,
-          now,
-        }),
-        opened_at: r.openedAt?.toISOString() ?? null,
-        updated_at: r.updatedAt?.toISOString() ?? null,
-        score: review ? review.score : null,
-        cost_usd: latestRunByPr.get(r.id)?.costUsd ?? null,
-      };
-    });
+    return rows.map((r) => ({
+      id: r.id,
+      number: r.number,
+      title: r.title,
+      author: r.author,
+      branch: r.branch,
+      base: r.base,
+      head_sha: r.headSha,
+      additions: r.additions,
+      deletions: r.deletions,
+      files_count: r.filesCount,
+      status: deriveReviewStatus({
+        ghStatus: r.status,
+        lastReviewedSha: r.lastReviewedSha,
+        headSha: r.headSha,
+        updatedAt: r.updatedAt,
+        now,
+      }),
+      opened_at: r.openedAt?.toISOString() ?? null,
+      updated_at: r.updatedAt?.toISOString() ?? null,
+      score: minScore(reviewsByPr.get(r.id) ?? []),
+      cost_usd: sumCosts(runsByPr.get(r.id) ?? []),
+    }));
   });
 
   app.get('/pulls/:id', { schema: { params: IdParams } }, async (req): Promise<PrDetail> => {

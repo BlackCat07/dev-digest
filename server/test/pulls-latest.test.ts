@@ -1,46 +1,94 @@
 import { describe, it, expect } from 'vitest';
-import { pickLatestPerPr } from '../src/modules/pulls/latest.js';
+import { groupLatestPerAgent, minScore, sumCosts } from '../src/modules/pulls/latest.js';
 
 /**
- * Hermetic cover for the PR-list aggregates' newest-per-PR collapse. The route
- * over-fetches ordered newest-first and reduces in JS, so this is where the
- * reduction is actually verified — the route itself needs Postgres.
+ * Hermetic cover for the PR-list aggregates. The route over-fetches ordered
+ * newest-first and reduces in JS, so this is where the reduction is actually
+ * verified — the route itself needs Postgres.
  */
-describe('pickLatestPerPr', () => {
-  it('keeps the first row seen per PR (input is newest-first)', () => {
+describe('groupLatestPerAgent', () => {
+  it('keeps the newest row per (pr, agent), so a re-run replaces rather than doubles', () => {
     const rows = [
-      { prId: 'pr-1', costUsd: 0.014 }, // newest for pr-1
-      { prId: 'pr-2', costUsd: 0.041 },
-      { prId: 'pr-1', costUsd: 0.003 }, // older, must lose
+      { prId: 'pr-1', agentId: 'security', id: 'r4', costUsd: 0.006 }, // newest for security
+      { prId: 'pr-1', agentId: 'perf', id: 'r3', costUsd: 0.011 },
+      { prId: 'pr-1', agentId: 'security', id: 'r2', costUsd: 0.004 }, // older, must lose
+      { prId: 'pr-2', agentId: 'security', id: 'r1', costUsd: 0.041 },
     ];
-    const latest = pickLatestPerPr(rows);
-    expect(latest.get('pr-1')?.costUsd).toBe(0.014);
-    expect(latest.get('pr-2')?.costUsd).toBe(0.041);
-    expect(latest.size).toBe(2);
+    const byPr = groupLatestPerAgent(rows, (r) => r.id);
+    expect(byPr.get('pr-1')?.map((r) => r.id)).toEqual(['r4', 'r3']);
+    expect(sumCosts(byPr.get('pr-1')!)).toBeCloseTo(0.017, 10);
+    expect(sumCosts(byPr.get('pr-2')!)).toBe(0.041);
+    expect(byPr.size).toBe(2);
   });
 
   it('skips rows with a null prId', () => {
     // agent_runs.pr_id is nullable (onDelete: 'set null'), so a run outlives the
     // PR it reviewed and has nothing to be attributed to.
-    const latest = pickLatestPerPr([
-      { prId: null, costUsd: 9.99 },
-      { prId: 'pr-1', costUsd: 0.014 },
-    ]);
-    expect(latest.size).toBe(1);
-    expect(latest.get('pr-1')?.costUsd).toBe(0.014);
+    const byPr = groupLatestPerAgent(
+      [
+        { prId: null, agentId: 'security', id: 'r1', costUsd: 9.99 },
+        { prId: 'pr-1', agentId: 'security', id: 'r2', costUsd: 0.014 },
+      ],
+      (r) => r.id,
+    );
+    expect(byPr.size).toBe(1);
+    expect(sumCosts(byPr.get('pr-1')!)).toBe(0.014);
   });
 
-  it('preserves a null value on the winning row', () => {
-    // A "no cost data" run must still win its slot, so the column reads "—"
-    // rather than falling through to an older run's figure.
-    const latest = pickLatestPerPr([
-      { prId: 'pr-1', costUsd: null },
-      { prId: 'pr-1', costUsd: 0.02 },
-    ]);
-    expect(latest.get('pr-1')?.costUsd).toBeNull();
+  it('does NOT collapse rows with a null agentId into one bucket', () => {
+    // agent_runs.agent_id is nullable too, so runs whose agent was deleted must
+    // each keep their own slot — otherwise all but one drop out of the sum.
+    const byPr = groupLatestPerAgent(
+      [
+        { prId: 'pr-1', agentId: null, id: 'r1', costUsd: 0.01 },
+        { prId: 'pr-1', agentId: null, id: 'r2', costUsd: 0.02 },
+      ],
+      (r) => r.id,
+    );
+    expect(byPr.get('pr-1')).toHaveLength(2);
+    expect(sumCosts(byPr.get('pr-1')!)).toBeCloseTo(0.03, 10);
   });
 
   it('returns an empty map for no rows', () => {
-    expect(pickLatestPerPr([]).size).toBe(0);
+    expect(groupLatestPerAgent([], () => 'x').size).toBe(0);
+  });
+});
+
+describe('sumCosts', () => {
+  it('sums the non-null costs and ignores the nulls', () => {
+    expect(sumCosts([{ costUsd: 0.006 }, { costUsd: null }, { costUsd: 0.011 }])).toBeCloseTo(
+      0.017,
+      10,
+    );
+  });
+
+  it('returns null when every run lacks cost data', () => {
+    // "No data" must stay null so the column reads "—", never "$0.00".
+    expect(sumCosts([{ costUsd: null }, { costUsd: null }])).toBeNull();
+    expect(sumCosts([])).toBeNull();
+  });
+
+  it('keeps a free run at 0 rather than folding it into null', () => {
+    // 0 = a genuinely free model (renders "$0"); it is not absent data.
+    expect(sumCosts([{ costUsd: null }, { costUsd: 0 }])).toBe(0);
+  });
+});
+
+describe('minScore', () => {
+  it('takes the worst agent score, not the newest', () => {
+    expect(minScore([{ score: 88 }, { score: 64 }, { score: 91 }])).toBe(64);
+  });
+
+  it('ignores null scores', () => {
+    expect(minScore([{ score: null }, { score: 72 }])).toBe(72);
+  });
+
+  it('returns null when nothing has a score', () => {
+    expect(minScore([{ score: null }])).toBeNull();
+    expect(minScore([])).toBeNull();
+  });
+
+  it('keeps a zero score, which is a real verdict', () => {
+    expect(minScore([{ score: 0 }, { score: 50 }])).toBe(0);
   });
 });

@@ -40,9 +40,11 @@ function renderRow(meta: PrMeta) {
 }
 
 describe("PRRow — cost column", () => {
-  it("renders the latest completed run's cost", () => {
+  it("renders the review's total cost across agents", () => {
     renderRow(pr({ cost_usd: 0.014 }));
-    expect(screen.getByText("$0.014")).toBeInTheDocument();
+    const cost = screen.getByText("$0.014");
+    expect(cost).toBeInTheDocument();
+    expect(cost).toHaveAttribute("title", messages.list.costTooltip);
   });
 
   it('renders "—" for a PR with no completed run', () => {
@@ -50,6 +52,18 @@ describe("PRRow — cost column", () => {
     // Both the score cell and the cost cell fall back to a dash.
     expect(screen.getAllByText("—")).toHaveLength(2);
     expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
+  });
+});
+
+describe("PRRow — score column", () => {
+  it("labels the score as the lowest across agents", () => {
+    const { container } = renderRow(pr({ score: 61 }));
+    expect(container.querySelector(`[title="${messages.list.scoreTooltip}"]`)).not.toBeNull();
+  });
+
+  it("carries no score tooltip on a never-reviewed PR", () => {
+    const { container } = renderRow(pr({ score: null }));
+    expect(container.querySelector(`[title="${messages.list.scoreTooltip}"]`)).toBeNull();
   });
 });
 

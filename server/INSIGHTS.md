@@ -67,7 +67,16 @@ valuable one — the code does not record what was tried and abandoned.
 
 <!-- append below -->
 
-_No entries yet._
+- **2026-08-03** — Deriving a **PR-level** figure from the newest **single** row per PR is
+  wrong by construction on this schema: one review fans out over N agents and `runOneAgent`
+  writes one `agent_runs` row *and* one `reviews` row **per agent**, so the PR list's
+  "latest review's score / latest done run's cost" only ever showed whichever agent finished
+  last (on real dev data, PR #1 had 6 done runs and the COST column reported $0.00064 of
+  $0.0051). Aggregate across agents instead — sum cost, take the **min** score — over each
+  agent's newest row, so re-running one agent replaces its figure instead of doubling it.
+  `pickLatestPerPr` (see 2026-08-02, Recurring Errors) no longer exists;
+  `groupLatestPerAgent` / `sumCosts` / `minScore` replace it in the same file. Evidence:
+  `src/modules/pulls/latest.ts`, `src/modules/reviews/run-executor.ts` (`runOneAgent`).
 
 ## Codebase Patterns
 
@@ -82,6 +91,21 @@ Conventions and architectural decisions, each with the reason behind it.
   field existed arrive with the key *absent*, so every client reader must tolerate
   `undefined` (not just `null`) or it renders `$NaN`/`undefined`. Evidence:
   `src/modules/reviews/repository/run.repo.ts` (`getRunTrace`), `src/modules/reviews/routes.ts`.
+- **2026-08-03** — Grouping rows **by agent** needs a fallback key: `agent_runs.agent_id` is
+  nullable (`onDelete: 'set null'`) and `reviews.agent_id` carries **no FK and no `notNull`**
+  at all, so keying a per-agent `Map` on the raw value silently collapses every
+  agent-deleted row into one bucket and a COST sum then drops all but one of them — no error,
+  just a quietly smaller number. Key on `agentId ?? row.id`, prefixed so a row id can never
+  collide with an agent id. Unlike the `pr_id` case (2026-08-02, Recurring Errors) this does
+  **not** fail typecheck, because the key is assembled by hand. Evidence:
+  `src/db/schema/reviews.ts` (`reviews.agentId`), `src/modules/pulls/latest.ts`
+  (`groupLatestPerAgent`).
+- **2026-08-03** — `agent_runs.score` and `reviews.score` are **not interchangeable**: the run
+  column arrived in migration `0006_sharp_mordo.sql` with **no backfill**, so every run created
+  before it carries `score = null` while its `reviews` row still holds the real figure. A
+  PR-level score aggregate must therefore read `reviews.score` (present since `0000_init.sql`),
+  even though reading score off `agent_runs` would fold the PR list's two `IN`-queries into
+  one. Evidence: `src/db/migrations/0006_sharp_mordo.sql`, `src/modules/pulls/routes.ts`.
 
 ## Tool & Library Notes
 

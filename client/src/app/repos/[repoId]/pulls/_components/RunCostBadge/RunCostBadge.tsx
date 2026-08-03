@@ -1,9 +1,9 @@
-/* RunCostBadge — the dollar cost of ONE agent run.
+/* RunCostBadge — a dollar cost of agent work, one run's or a whole review's.
 
    Rendered in three places, hence the three variants:
-     compact  the PR list's COST column          "$0.014"
-     detail   a PR-detail timeline row           "9,119 tok · $0.0013"
-     inline   the verdict banner on PR detail    "$0.014 · 8.2K→1.3K"
+     compact  the PR list's COST column          "$0.019"  (SUM over agents)
+     detail   a PR-detail timeline row           "9,119 tok · $0.0013"  (one run)
+     inline   the verdict banner on PR detail    "$0.014 · 8.2K→1.3K"   (one run)
 
    A missing cost renders "—", never "$0.00": a provider that reported no cost is
    not the same as a free run (which renders "$0"). No i18n inside — this renders
@@ -24,12 +24,13 @@ export function RunCostBadge({
   variant = "compact",
   title,
 }: {
-  /** `agent_runs.cost_usd`. null = no cost data; undefined = a pre-cost trace. */
+  /** One `agent_runs.cost_usd`, or a sum of them (the PR list's COST column).
+   *  null = no cost data; undefined = a pre-cost trace. */
   costUsd: number | null | undefined;
   tokensIn?: number | null;
   tokensOut?: number | null;
   variant?: RunCostVariant;
-  /** Native tooltip, e.g. "Cost of the latest completed run". */
+  /** Native tooltip, e.g. "Total cost of this PR's review (all agents)". */
   title?: string;
 }) {
   const cost = formatCost(costUsd);

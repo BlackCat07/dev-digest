@@ -47,7 +47,7 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
           {size} · {lines}
         </Badge>
       </div>
-      <div style={s.scoreCell}>
+      <div style={s.scoreCell} title={reviewed ? t("list.scoreTooltip") : undefined}>
         {reviewed ? (
           <CircularScore score={pr.score!} size={34} stroke={3} />
         ) : (
