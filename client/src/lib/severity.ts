@@ -19,13 +19,6 @@ import type { FindingsBySeverity, Severity } from "@devdigest/shared";
  */
 export const SEVERITY_LEVELS: readonly Severity[] = ["CRITICAL", "WARNING", "SUGGESTION"];
 
-/** All-zero counts — what a PR or run with no findings reports. */
-export const EMPTY_SEVERITY_COUNTS: FindingsBySeverity = Object.freeze({
-  CRITICAL: 0,
-  WARNING: 0,
-  SUGGESTION: 0,
-});
-
 /**
  * Tally findings by severity. Mirrors the server's `countFindingsBySeverity`
  * (`server/src/modules/pulls/status.ts`) including its blind spot: a severity
@@ -46,16 +39,4 @@ export function countBySeverity(findings: { severity: string }[]): FindingsBySev
 export function totalOf(counts: FindingsBySeverity | null | undefined): number {
   if (!counts) return 0;
   return counts.CRITICAL + counts.WARNING + counts.SUGGESTION;
-}
-
-/** Sum two count objects (e.g. rolling every run of a PR into one total). */
-export function addCounts(
-  a: FindingsBySeverity,
-  b: FindingsBySeverity,
-): FindingsBySeverity {
-  return {
-    CRITICAL: a.CRITICAL + b.CRITICAL,
-    WARNING: a.WARNING + b.WARNING,
-    SUGGESTION: a.SUGGESTION + b.SUGGESTION,
-  };
 }

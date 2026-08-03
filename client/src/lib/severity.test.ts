@@ -1,11 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  addCounts,
-  countBySeverity,
-  EMPTY_SEVERITY_COUNTS,
-  SEVERITY_LEVELS,
-  totalOf,
-} from "./severity";
+import { countBySeverity, SEVERITY_LEVELS, totalOf } from "./severity";
 
 describe("countBySeverity", () => {
   it("tallies the three contract levels", () => {
@@ -30,10 +24,12 @@ describe("countBySeverity", () => {
     });
   });
 
-  it("returns a fresh object, never an alias of the shared empty constant", () => {
-    const counts = countBySeverity([]);
-    counts.CRITICAL += 1;
-    expect(EMPTY_SEVERITY_COUNTS.CRITICAL).toBe(0);
+  it("returns a fresh object per call, never a shared one", () => {
+    // Callers hold these per run/per PR; a shared object would let one row's
+    // mutation leak into every other.
+    const first = countBySeverity([]);
+    first.CRITICAL += 1;
+    expect(countBySeverity([]).CRITICAL).toBe(0);
   });
 });
 
@@ -45,16 +41,6 @@ describe("totalOf", () => {
   it("reads absent counts as zero", () => {
     expect(totalOf(null)).toBe(0);
     expect(totalOf(undefined)).toBe(0);
-  });
-});
-
-describe("addCounts", () => {
-  it("sums two count objects without mutating either", () => {
-    const a = { CRITICAL: 1, WARNING: 0, SUGGESTION: 2 };
-    const b = { CRITICAL: 2, WARNING: 3, SUGGESTION: 0 };
-    expect(addCounts(a, b)).toEqual({ CRITICAL: 3, WARNING: 3, SUGGESTION: 2 });
-    expect(a).toEqual({ CRITICAL: 1, WARNING: 0, SUGGESTION: 2 });
-    expect(b).toEqual({ CRITICAL: 2, WARNING: 3, SUGGESTION: 0 });
   });
 });
 

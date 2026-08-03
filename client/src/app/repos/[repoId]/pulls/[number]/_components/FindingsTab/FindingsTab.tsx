@@ -5,15 +5,8 @@ import { Icon, Badge, Button, SectionLabel, EmptyState } from "@devdigest/ui";
 import { RunStatus } from "../RunStatus";
 import { RunHistory } from "../RunHistory/RunHistory";
 import { ReviewRunAccordion } from "../ReviewRunAccordion";
-import { addCounts, countBySeverity } from "@/lib/severity";
 import { s } from "./styles";
-import type {
-  FindingRecord,
-  FindingsBySeverity,
-  ReviewRecord,
-  RunSummary,
-  PrCommit,
-} from "@devdigest/shared";
+import type { FindingRecord, ReviewRecord, RunSummary, PrCommit } from "@devdigest/shared";
 import type { UseMutationResult } from "@tanstack/react-query";
 
 interface FindingsTabProps {
@@ -60,18 +53,22 @@ export function FindingsTab({
     [prRuns],
   );
 
-  // Per-severity counts for the timeline, keyed by run. `RunSummary` carries only
-  // a total, so the split is joined in from the reviews by `run_id` — the same
-  // key `runByRunId` uses, in the other direction. Reviews with a null `run_id`
-  // (the seeded review, and any pre-run_id row) simply contribute no entry, so
-  // the timeline renders no counters for them.
-  const severityByRunId = React.useMemo(() => {
-    const m = new Map<string, FindingsBySeverity>();
+  // The timeline's findings, keyed by run. `RunSummary` carries only a total, so
+  // the findings are joined in from the reviews by `run_id` — the same key
+  // `runByRunId` uses, in the other direction. Reviews with a null `run_id` (the
+  // seeded review, and any pre-run_id row) simply contribute no entry, so the
+  // timeline renders no counters and no hover target for them.
+  //
+  // Passing the findings rather than pre-aggregated counts keeps one source of
+  // truth: `RunHistory` derives the counters from them AND feeds the same array
+  // to the hover panel, so the two can never disagree.
+  const findingsByRunId = React.useMemo(() => {
+    const m = new Map<string, FindingRecord[]>();
     for (const review of runs) {
       if (!review.run_id || review.kind !== "review") continue;
-      const counts = countBySeverity(review.findings);
       const prev = m.get(review.run_id);
-      m.set(review.run_id, prev ? addCounts(prev, counts) : counts);
+      if (prev) prev.push(...review.findings);
+      else m.set(review.run_id, [...review.findings]);
     }
     return m;
   }, [runs]);
@@ -162,7 +159,7 @@ export function FindingsTab({
           <RunHistory
             runs={prRuns ?? []}
             commits={prCommits}
-            severityByRunId={severityByRunId}
+            findingsByRunId={findingsByRunId}
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
             onDelete={handleDelete}

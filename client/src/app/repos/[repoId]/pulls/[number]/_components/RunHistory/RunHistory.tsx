@@ -3,9 +3,11 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
-import type { FindingsBySeverity, RunSummary, PrCommit } from "@devdigest/shared";
+import type { FindingRecord, RunSummary, PrCommit } from "@devdigest/shared";
 import { RunCostBadge } from "../../../_components/RunCostBadge";
 import { SeverityCounters } from "../../../_components/SeverityCounters";
+import { FindingsHoverPanel, FindingsHoverTrigger } from "../../../_components/FindingsHoverCard";
+import { countBySeverity, totalOf } from "@/lib/severity";
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
@@ -89,17 +91,18 @@ function tsOf(s: string | null | undefined): number {
 export function RunHistory({
   runs,
   commits = [],
-  severityByRunId,
+  findingsByRunId,
   onOpenTrace,
   onGoToReview,
   onDelete,
 }: {
   runs: RunSummary[];
   commits?: PrCommit[];
-  /** Per-severity split for a run, joined in by the parent from the reviews
-   *  (`RunSummary` carries only a total). Optional, and a MISS is normal: a
-   *  review with a null `run_id` has no timeline row to attach to. */
-  severityByRunId?: Map<string, FindingsBySeverity>;
+  /** A run's findings, joined in by the parent from the reviews (`RunSummary`
+   *  carries only a total). Feeds both the counters and the hover panel, so they
+   *  cannot disagree. Optional, and a MISS is normal: a review with a null
+   *  `run_id` has no timeline row to attach to. */
+  findingsByRunId?: Map<string, FindingRecord[]>;
   /** Open the trace + log drawer for a run (the logs icon). */
   onOpenTrace: (runId: string) => void;
   /** Jump to this run's inline review accordion below (clicking the agent name). */
@@ -156,6 +159,10 @@ export function RunHistory({
         const r = item.run;
         const o = outcomeOf(r);
         const settled = r.status === "done";
+        const findings = findingsByRunId?.get(r.run_id) ?? [];
+        const counts = countBySeverity(findings);
+        const hasCounters = totalOf(counts) > 0;
+        const blockers = r.blockers ?? 0;
         return (
           <div key={`run:${r.run_id}`} style={rowStyle}>
             <Badge color={o.color} bg={o.bg} icon={o.icon}>
@@ -195,19 +202,45 @@ export function RunHistory({
                   {r.error}
                 </div>
               )}
-              {settled && (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: "var(--text-muted)" }}>
+              {/* Counters carry the finding breakdown, so there is deliberately NO
+                  "N findings" text here — the total is the sum of the counters.
+                  The whole line is skipped when there is nothing to say, rather
+                  than emitting an empty flex row. */}
+              {/* gap 6, not 10: the separator is a lone "·" and a wide gap leaves
+                  it floating between the counters and the blockers. */}
+              {settled && (hasCounters || blockers > 0) && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)" }}>
                   {/* `zero="hide"`, never a dash: an all-zero dash here would be a
-                      second "—" in the row beside the cost badge's own. */}
-                  <SeverityCounters counts={severityByRunId?.get(r.run_id)} zero="hide" />
-                  <span>
-                    {t("runStatus.findings", { count: r.findings_count ?? 0 })}
-                    {/* NOTE: `blockers` is gate-relative (counted server-side against
-                        the agent's `ciFailOn` at write time), so for an agent with
-                        ciFailOn='warning' it can exceed the CRITICAL counter beside
-                        it. Not a bug — the two numbers answer different questions. */}
-                    {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
-                  </span>
+                      second "—" in the row beside the cost badge's own. `dotted`
+                      marks the hover target, same affordance as the PR list.
+                      Only the counters are wrapped — the panel lists findings,
+                      while `blockers` beside it is a different, gate-relative
+                      metric. */}
+                  {hasCounters && (
+                    <FindingsHoverTrigger
+                      panel={() => (
+                        <FindingsHoverPanel
+                          findings={findings}
+                          // The analogue of the PR list's "go to where the
+                          // findings live": open + scroll to this run's accordion.
+                          onFindingClick={() => onGoToReview?.(r.run_id)}
+                        />
+                      )}
+                    >
+                      <SeverityCounters counts={counts} zero="hide" dotted />
+                    </FindingsHoverTrigger>
+                  )}
+                  {/* Separator only between the two — a run with blockers but no
+                      severity split (review deleted, or run_id null) must not open
+                      with an orphan "·". */}
+                  {hasCounters && blockers > 0 && <span>·</span>}
+                  {blockers > 0 && (
+                    // NOTE: `blockers` is gate-relative (counted server-side against
+                    // the agent's `ciFailOn` at write time), so for an agent with
+                    // ciFailOn='warning' it can exceed the CRITICAL counter beside
+                    // it. Not a bug — the two numbers answer different questions.
+                    <span>{t("runStatus.blockers", { count: blockers })}</span>
+                  )}
                 </div>
               )}
             </div>
