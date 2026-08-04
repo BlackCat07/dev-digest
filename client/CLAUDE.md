@@ -76,3 +76,6 @@ src/test/setup.ts             jsdom shims
 
 - UI route map + which API each route leans on, error-UX taxonomy → `README.md`
 - Component/interaction test approach → `README.md#testing`, `../TESTING.md`
+- Where a component folder goes, and the list-column invariant → `docs/feature-unit.md`
+- Curated deep-dives → `docs/README.md`
+- What a feature must do → `specs/README.md`

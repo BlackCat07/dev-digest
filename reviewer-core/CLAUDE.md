@@ -63,3 +63,6 @@ test/                 prompt · run · to-review
 
 - Pipeline diagram, full public API list, what each lesson adds → `README.md`
 - How the server injects the provider and calls in → `../server/src/platform/container.ts`
+- The grounding gate and the injection guard, in depth → `docs/grounding.md`
+- Curated deep-dives → `docs/README.md`
+- What a feature must do, and how the `specs` prompt slot reads them → `specs/README.md`

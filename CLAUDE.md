@@ -5,10 +5,21 @@ adds one feature.
 
 ## Before answering
 
-Always search the relevant package's `docs/`, `specs/`, and `INSIGHTS.md` **that
-exist** for what the user asks about FIRST — these are curated and may already answer
-it — then read code. Not every package has a `docs/` or `specs/`; an absent one is the
-normal state, not a failed lookup. `INSIGHTS.md` is always present.
+Search the curated docs FIRST — they may already answer it — then read code. In each
+package (`client`, `server`, `reviewer-core`, `e2e`):
+
+- `INSIGHTS.md` — dated, file-grounded findings; always present
+- `docs/` — curated deep-dives; start at `docs/README.md`
+- `specs/` — one file per feature, what it must do (`specs/README.md`); every package but
+  `e2e` — see the exception below
+- `CLAUDE.md` + `README.md` — the rules and the tour
+
+Root: `README.md` · `TESTING.md` · `docs/agent-prompts/` · `docs/specs-convention.md`.
+One nested doc: `server/src/modules/repo-intel/README.md`.
+
+**One exception:** `e2e/specs/` holds **browser flows** (`NN-name.flow.json`), which
+`e2e/run.ts` loads — not feature specs. That package documents itself in `e2e/docs/`
+and has no specs directory.
 
 ## Session protocol (engineering-insights loop)
 
@@ -42,8 +53,19 @@ The `engineering-insights` skill carries the full procedure for both halves of t
 
 ## Do-not-touch
 
-`server/src/vendor/shared/` and `server/src/db/migrations/` — never hand-edit without
-coordination.
+Never hand-edit:
+
+- `server/src/vendor/shared/` and `client/src/vendor/shared/` — the cross-package contract
+  and its hand-made copy. Coordination only, and both change together or the types drift.
+  When a change is agreed, extend with a new file rather than reshaping an existing symbol.
+- `client/src/vendor/ui/` — vendored design system shared across every screen. Extend via a
+  new file; don't restyle a primitive to suit one feature.
+- `server/src/db/migrations/` — generated. Edit `src/db/schema/`, then `pnpm db:generate`.
+- **Lockfiles** — `server/pnpm-lock.yaml` and `client/pnpm-lock.yaml` (pnpm),
+  `reviewer-core/package-lock.json` and `e2e/package-lock.json` (npm), plus root
+  `skills-lock.json`. Change a dependency in that package's `package.json` and let that
+  package's own package manager regenerate the file. Never patch a lockfile by hand, and
+  never commit one an unrelated install churned.
 
 ## Use when
 
@@ -51,3 +73,4 @@ coordination.
 - Working inside a package → read that package's CLAUDE.md: `server/CLAUDE.md`,
   `client/CLAUDE.md`, `reviewer-core/CLAUDE.md`, `e2e/CLAUDE.md`
 - Agent prompt templates → read `docs/agent-prompts/`
+- Writing a feature spec → read `docs/specs-convention.md`
