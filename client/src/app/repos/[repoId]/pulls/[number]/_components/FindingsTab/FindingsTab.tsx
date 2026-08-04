@@ -53,6 +53,26 @@ export function FindingsTab({
     [prRuns],
   );
 
+  // The timeline's findings, keyed by run. `RunSummary` carries only a total, so
+  // the findings are joined in from the reviews by `run_id` — the same key
+  // `runByRunId` uses, in the other direction. Reviews with a null `run_id` (the
+  // seeded review, and any pre-run_id row) simply contribute no entry, so the
+  // timeline renders no counters and no hover target for them.
+  //
+  // Passing the findings rather than pre-aggregated counts keeps one source of
+  // truth: `RunHistory` derives the counters from them AND feeds the same array
+  // to the hover panel, so the two can never disagree.
+  const findingsByRunId = React.useMemo(() => {
+    const m = new Map<string, FindingRecord[]>();
+    for (const review of runs) {
+      if (!review.run_id || review.kind !== "review") continue;
+      const prev = m.get(review.run_id);
+      if (prev) prev.push(...review.findings);
+      else m.set(review.run_id, [...review.findings]);
+    }
+    return m;
+  }, [runs]);
+
   const handleOpenFirstTrace = useCallback(() => {
     if (liveRunIds[0]) onOpenTrace(liveRunIds[0]);
   }, [liveRunIds, onOpenTrace]);
@@ -139,6 +159,7 @@ export function FindingsTab({
           <RunHistory
             runs={prRuns ?? []}
             commits={prCommits}
+            findingsByRunId={findingsByRunId}
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
             onDelete={handleDelete}

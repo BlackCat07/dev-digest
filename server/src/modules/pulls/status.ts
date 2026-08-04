@@ -1,10 +1,12 @@
-import type { PrStatus } from '@devdigest/shared';
+import { Severity, type FindingsBySeverity, type PrStatus } from '@devdigest/shared';
 
 /**
  * PR-list rollup helpers (pure — no DB / `this`, so they unit-test cleanly).
  *
- * The Pull Requests list shows, per PR: the latest review's SCORE, a FINDINGS
- * severity breakdown, and a review STATUS. The DB `status` column holds
+ * The Pull Requests list shows, per PR: the worst agent's SCORE, a FINDINGS
+ * severity breakdown, and a review STATUS. The FINDINGS breakdown SUMS EVERY
+ * review run (see `countFindingsBySeverity`), unlike SCORE/COST which collapse
+ * to each agent's latest row in `./latest.ts`. The DB `status` column holds
  * GitHub's merge state (open/merged/closed); the review status
  * (needs_review / reviewed / stale) is DERIVED here for OPEN PRs from the
  * commit a review last ran against (`lastReviewedSha`) vs the PR head, plus age.
@@ -12,6 +14,13 @@ import type { PrStatus } from '@devdigest/shared';
 
 /** Open PRs whose current head was reviewed but untouched this long read "stale". */
 export const STALE_DAYS = 7;
+
+/**
+ * The severity strings that count. `findings.severity` is a plain `text` column
+ * (no pg enum, no CHECK), so anything outside the contract enum is storable and
+ * both rollups below deliberately IGNORE it rather than guessing a bucket.
+ */
+const KNOWN_SEVERITIES = new Set<string>(Severity.options);
 
 export interface SeverityCounts {
   critical: number;
@@ -23,11 +32,50 @@ export interface SeverityCounts {
 export function rollupSeverities(rows: { severity: string }[]): SeverityCounts {
   const c: SeverityCounts = { critical: 0, warning: 0, suggestion: 0 };
   for (const r of rows) {
+    if (!KNOWN_SEVERITIES.has(r.severity)) continue;
+    // Lowercase keys are this helper's own shape; the WIRE shape is uppercase
+    // (`FindingsBySeverity`). Don't "unify" them — see countFindingsBySeverity.
     if (r.severity === 'CRITICAL') c.critical += 1;
     else if (r.severity === 'WARNING') c.warning += 1;
-    else if (r.severity === 'SUGGESTION') c.suggestion += 1;
+    else c.suggestion += 1;
   }
   return c;
+}
+
+/** All-zero counts: what a PR with no persisted findings reports. */
+export const EMPTY_FINDINGS_BY_SEVERITY: FindingsBySeverity = Object.freeze({
+  CRITICAL: 0,
+  WARNING: 0,
+  SUGGESTION: 0,
+});
+
+/**
+ * Collapse pre-aggregated `GROUP BY (pr_id, severity)` count rows into one
+ * `FindingsBySeverity` per PR, for the list's FINDINGS column.
+ *
+ * SUMS EVERY REVIEW RUN — a re-run of the same agent ADDS to these numbers
+ * instead of replacing its earlier ones. That is the opposite of SCORE/COST
+ * (`./latest.ts`) and is deliberate: the column has to equal the "Agent runs"
+ * tab badge on the PR detail page. So this needs no per-agent collapse at all,
+ * which is why the counting happens in SQL rather than over fetched rows.
+ *
+ * A severity outside the contract enum lands in NO bucket, so the three numbers
+ * can sum to less than the PR's total finding count, and such a finding is
+ * unreachable by a severity filter.
+ */
+export function countFindingsBySeverity(
+  rows: { prId: string; severity: string; n: number }[],
+): Map<string, FindingsBySeverity> {
+  const out = new Map<string, FindingsBySeverity>();
+  for (const row of rows) {
+    if (!KNOWN_SEVERITIES.has(row.severity)) continue;
+    // A fresh object per PR — never an alias of EMPTY_FINDINGS_BY_SEVERITY,
+    // which is frozen and shared by every never-reviewed PR in the response.
+    const counts = out.get(row.prId) ?? { CRITICAL: 0, WARNING: 0, SUGGESTION: 0 };
+    out.set(row.prId, counts);
+    counts[row.severity as Severity] += row.n;
+  }
+  return out;
 }
 
 /**

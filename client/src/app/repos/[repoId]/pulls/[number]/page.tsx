@@ -69,8 +69,12 @@ export default function PRDetailPage() {
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
+  // Totals count kind==='review' rows ONLY, matching the PR list's FINDINGS
+  // rollup, which filters the same way. `reviewsForPull` does not filter `kind`,
+  // so without this the tab badge would drift from the list column the moment
+  // anything starts writing kind:'summary' reviews.
   const allFindings: FindingRecord[] = React.useMemo(
-    () => runs.flatMap((r) => r.findings),
+    () => (reviews ?? []).filter((r) => r.kind === "review").flatMap((r) => r.findings),
     [reviews],
   );
   const lethalTrifecta = allFindings.filter((f) => f.kind === "lethal_trifecta");

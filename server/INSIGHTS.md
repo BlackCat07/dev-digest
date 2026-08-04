@@ -106,6 +106,35 @@ Conventions and architectural decisions, each with the reason behind it.
   PR-level score aggregate must therefore read `reviews.score` (present since `0000_init.sql`),
   even though reading score off `agent_runs` would fold the PR list's two `IN`-queries into
   one. Evidence: `src/db/migrations/0006_sharp_mordo.sql`, `src/modules/pulls/routes.ts`.
+- **2026-08-03** — The PR list's three aggregates deliberately run on **two different bases**,
+  and the mismatch is load-bearing rather than an oversight: `score` (min) and `cost_usd` (sum)
+  collapse to each agent's *latest* row, while `findings_by_severity` sums **every** run — so
+  re-running one agent *replaces* its cost and score but *adds* to its findings. The reason is
+  an equality with another screen: the FINDINGS column has to match the PR-detail "Agent runs"
+  tab badge, which counts `reviews.flatMap(r => r.findings)`. That equality only holds because
+  both sides filter `kind === 'review'`, and `reviewsForPull` does **not** filter kind — so the
+  client page must, or the two numbers drift silently the first time anything writes a
+  `kind: 'summary'` review. Don't "harmonise" the bases without changing the badge too.
+  Evidence: `src/modules/pulls/routes.ts`, `src/modules/pulls/status.ts`
+  (`countFindingsBySeverity`), `src/modules/reviews/repository/review.repo.ts`
+  (`reviewsForPull`), `client/src/app/repos/[repoId]/pulls/[number]/page.tsx`.
+- **2026-08-03** — The seeded review carries **both** `agentId: null` and `runId: null` and has
+  no matching `agent_runs` row, so it shows up under "Review runs" but produces **no timeline
+  row at all**. Anything that joins a timeline run to its review by `run_id` therefore has zero
+  seeded coverage and cannot be asserted from `e2e/specs/` — cover it with client unit tests,
+  and expect `Map.get` misses in the join rather than treating them as a bug. Relatedly,
+  `findings` has neither `pr_id` nor `run_id`, so every findings rollup must travel
+  `findings.review_id → reviews.id`. Evidence: `src/db/seed.ts`, `src/db/schema/reviews.ts`
+  (`findings`), `e2e/specs/04-pr-findings.flow.json`.
+- **2026-08-04** — Source comments here cite package docs by **bare filename**, not by path,
+  and nothing resolves those citations: the PR-list aggregate block in `routes.ts` said "see
+  the PrMeta doc-comment and `scores-and-costs.md`" while that file did not exist for two
+  commits (no link check in CI, and a bare filename is not a path any tool would follow). So
+  before naming a new file under `docs/`, grep the source for a filename the code already
+  promises — `grep -rn '[a-z-]*\.md' src/` — and reuse it verbatim; inventing a synonym
+  leaves the citation dangling and creates a second doc for the same topic. Evidence:
+  `src/modules/pulls/routes.ts` (the SCORE/COST/FINDINGS comment block),
+  `docs/scores-and-costs.md`.
 
 ## Tool & Library Notes
 
@@ -122,6 +151,15 @@ Dependency and tooling quirks.
   check for a scaffold `server/pnpm-workspace.yaml` that pnpm drops on failure, which
   contradicts the root "NOT a monorepo workspace" convention and must be deleted, not
   committed. Evidence: `package.json` (`db:generate`), root `CLAUDE.md` (Conventions).
+- **2026-08-03** — Drizzle 0.38's `count()` is `sql\`count(...)\`.mapWith(Number)`, so a
+  `GROUP BY` aggregate yields a real `number` with no bigint-as-string coercion needed. Worth
+  stating because `src/modules/pulls/latest.ts` documents the opposite habit — over-fetch
+  ordered rows and reduce in JS — and its stated reason is narrow: Drizzle has no portable
+  per-group `LIMIT 1`. An aggregate that needs no per-group latest row (a plain sum or count)
+  should use `.groupBy()` in SQL rather than copy that precedent; the JS path would otherwise
+  pull every finding of every historical run in the repo to produce three numbers per PR.
+  Evidence: `src/modules/pulls/routes.ts`, `src/modules/pulls/latest.ts`,
+  `node_modules/drizzle-orm/sql/functions/aggregate.js`.
 
 ## Recurring Errors & Fixes
 

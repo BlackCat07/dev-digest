@@ -17,6 +17,7 @@ import {
   Settings,
   Repo,
   PrDetail,
+  PrMeta,
 } from '@devdigest/shared';
 
 /**
@@ -242,5 +243,34 @@ describe('platform DTOs', () => {
         commits: [],
       }),
     ).not.toThrow();
+  });
+
+  it('PrMeta.findings_by_severity is optional, and uppercase-keyed when present', () => {
+    // `.nullish()` is forced: PrDetail extends PrMeta, and the GitHub adapters
+    // build PrMeta literals that carry no aggregate at all. Every non-list
+    // producer must keep parsing.
+    const base = {
+      number: 482,
+      title: 't',
+      author: 'a',
+      branch: 'b',
+      base: 'main',
+      head_sha: 'sha',
+      additions: 1,
+      deletions: 0,
+      files_count: 1,
+      status: 'open' as const,
+    };
+    expect(PrMeta.parse(base).findings_by_severity).toBeUndefined();
+    expect(PrMeta.parse({ ...base, findings_by_severity: null }).findings_by_severity).toBeNull();
+    expect(
+      PrMeta.parse({ ...base, findings_by_severity: { CRITICAL: 1, WARNING: 2, SUGGESTION: 0 } })
+        .findings_by_severity,
+    ).toEqual({ CRITICAL: 1, WARNING: 2, SUGGESTION: 0 });
+    // Lowercase keys are the SERVER-INTERNAL shape (`rollupSeverities`) and must
+    // not be accepted on the wire.
+    expect(() =>
+      PrMeta.parse({ ...base, findings_by_severity: { critical: 1, warning: 2, suggestion: 0 } }),
+    ).toThrow();
   });
 });

@@ -1,13 +1,23 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { and, desc, eq, inArray } from 'drizzle-orm';
-import type { PrMeta, PrDetail, GitHubClient, PrReviewComment } from '@devdigest/shared';
+import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import type {
+  PrMeta,
+  PrDetail,
+  FindingsBySeverity,
+  GitHubClient,
+  PrReviewComment,
+} from '@devdigest/shared';
 import { PrCommentInput } from '@devdigest/shared';
 import * as t from '../../db/schema.js';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
-import { deriveReviewStatus } from './status.js';
+import {
+  countFindingsBySeverity,
+  deriveReviewStatus,
+  EMPTY_FINDINGS_BY_SEVERITY,
+} from './status.js';
 import { groupLatestPerAgent, minScore, sumCosts } from './latest.js';
 
 /**
@@ -112,17 +122,25 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
-    // SCORE + COST per PR, both aggregated ACROSS AGENTS: a review fans out over
-    // N agents, each writing its own reviews row and its own agent_runs row, so
-    // neither column is a single row's value. SCORE takes the WORST agent's
-    // score (one blocker must not be hidden by a sibling that approved), COST
-    // sums what every agent spent. Computed on read (no FK denorm); the list is
-    // small, so one IN-query + JS grouping apiece is cheap. (The per-severity
-    // FINDINGS breakdown is intentionally not surfaced on the list — findings
-    // live on the PR detail page.)
+    // SCORE + COST + FINDINGS per PR, all aggregated ACROSS AGENTS: a review fans
+    // out over N agents, each writing its own reviews row and its own agent_runs
+    // row, so no column is a single row's value. Computed on read (no FK denorm).
+    //
+    // The three do NOT share a basis, on purpose:
+    //   SCORE    — WORST score over each agent's LATEST row (one blocker must not
+    //              be hidden by a sibling that approved)
+    //   COST     — SUM over each agent's LATEST completed run (a re-run REPLACES
+    //              that agent's figure)
+    //   FINDINGS — SUM over EVERY run, latest or not (a re-run ADDS to it)
+    //
+    // FINDINGS diverges because it has to equal the "Agent runs" tab badge on the
+    // PR detail page, which counts every persisted review's findings. Keep that
+    // equality in mind before "harmonising" it with the two columns beside it —
+    // see the PrMeta doc-comment and `scores-and-costs.md`.
     const prIds = rows.map((r) => r.id);
     let reviewsByPr = new Map<string, { score: number | null }[]>();
     let runsByPr = new Map<string, { costUsd: number | null }[]>();
+    let severityByPr = new Map<string, FindingsBySeverity>();
     if (prIds.length > 0) {
       // reviews.score, not agent_runs.score: the latter was added later (migration
       // 0006) with no backfill, so pre-0006 runs carry score=null while their
@@ -156,6 +174,24 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         .where(and(inArray(t.agentRuns.prId, prIds), eq(t.agentRuns.status, 'done')))
         .orderBy(desc(t.agentRuns.ranAt));
       runsByPr = groupLatestPerAgent(runRows, (r) => r.id);
+
+      // FINDINGS per severity. Because this sums EVERY run there is no
+      // per-agent latest-row collapse to do, so unlike the two queries above it
+      // does NOT over-fetch and reduce in JS — Postgres groups it in one pass
+      // and returns at most 3 rows per PR instead of every finding ever written.
+      // `findings` has neither pr_id nor run_id: findings.review_id → reviews.id
+      // is the only path to a PR, so the PR filter lives on the joined table.
+      const severityRows = await container.db
+        .select({
+          prId: t.reviews.prId,
+          severity: t.findings.severity,
+          n: count(),
+        })
+        .from(t.findings)
+        .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
+        .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')))
+        .groupBy(t.reviews.prId, t.findings.severity);
+      severityByPr = countFindingsBySeverity(severityRows);
     }
 
     const now = Date.now();
@@ -181,6 +217,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       updated_at: r.updatedAt?.toISOString() ?? null,
       score: minScore(reviewsByPr.get(r.id) ?? []),
       cost_usd: sumCosts(runsByPr.get(r.id) ?? []),
+      findings_by_severity: severityByPr.get(r.id) ?? EMPTY_FINDINGS_BY_SEVERITY,
     }));
   });
 

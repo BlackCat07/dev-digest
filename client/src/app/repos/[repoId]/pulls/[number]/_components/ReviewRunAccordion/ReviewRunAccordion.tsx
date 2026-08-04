@@ -10,6 +10,7 @@ import { Icon, Badge } from "@devdigest/ui";
 import type { ReviewRecord, RunSummary, Verdict } from "@devdigest/shared";
 import { FindingsPanel } from "../FindingsPanel";
 import { VerdictBanner } from "../VerdictBanner";
+import { RunCostBadge } from "../../../_components/RunCostBadge";
 import { useDeleteReview } from "../../../../../../../lib/hooks/reviews";
 
 const VERDICT_COLOR: Record<string, string> = {
@@ -97,6 +98,9 @@ export function ReviewRunAccordion({
             {review.verdict.replace("_", " ")}
           </Badge>
         )}
+        {/* Deliberately text only — no severity counters here. The coloured
+            icons live on the TIMELINE rows; this header is the textual summary.
+            e2e flow 04 waits on the literal string "2 findings". */}
         <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
           {findings.length} finding{findings.length === 1 ? "" : "s"}
           {blockers > 0 ? ` · ${blockers} blocker${blockers === 1 ? "" : "s"}` : ""}
@@ -107,6 +111,11 @@ export function ReviewRunAccordion({
             {review.score}
           </Badge>
         )}
+        {/* Only when the run row was joined in: a review with a null `run_id`
+            (the seeded one) has no usage, and a bare "—" here would read as
+            "this run was free". A run with cost_usd = null DOES show "—", which
+            is the documented null-is-not-zero behaviour. */}
+        {run && <RunCostBadge costUsd={run.cost_usd} />}
         <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
           {formatWhen(review.created_at)}
         </span>
@@ -154,6 +163,7 @@ export function ReviewRunAccordion({
               />
             </div>
           )}
+          {/* The severity filter lives inside this panel — one chip row per run. */}
           <FindingsPanel
             findings={findings}
             prId={prId}

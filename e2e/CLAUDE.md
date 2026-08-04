@@ -63,3 +63,6 @@ test-results/            generated output
 
 - Flow anatomy, locator reference, seeded-data preconditions → `README.md`
 - Where this suite sits in the CI matrix → `../TESTING.md`
+- Writing a new flow, and what this harness cannot assert → `docs/adding-a-flow.md`
+- Curated deep-dives → `docs/README.md`
+- No `specs/` of feature specs here — see the blockquote above and `docs/README.md`

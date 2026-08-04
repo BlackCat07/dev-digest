@@ -75,3 +75,6 @@ test/                 tests live here, not colocated next to source
 - Route map, request/DI flow diagram, error envelope → `README.md`
 - Test philosophy, suite/CI matrix, what each suite covers → `../TESTING.md`
 - `repo-intel` indexing pipeline internals → `src/modules/repo-intel/README.md`
+- PR-level aggregates (score, cost, findings) and their traps → `docs/scores-and-costs.md`
+- Curated deep-dives → `docs/README.md`
+- What a feature must do → `specs/README.md`
