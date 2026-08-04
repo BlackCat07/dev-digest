@@ -1,10 +1,12 @@
 /* SeverityCounters — "⊙2 ⚠1 ⚡3", one icon+number per severity.
 
-   Rendered on three surfaces, all read-only (the FILTER control is
+   Rendered on two surfaces, both read-only (the FILTER control is
    `SeverityFilter` on the PR detail page, not these):
      the PR list's FINDINGS column      (zero="dash")
      a PR-detail timeline row           (zero="hide")
-     a review-run accordion header      (zero="hide")
+
+   NOT the review-run accordion header — that stays text only, by design; see
+   `ReviewRunAccordion.tsx` and its test.
 
    Only NON-ZERO levels render, always worst-first, so the strip stays short and
    a PR with three criticals reads as red at a glance.
