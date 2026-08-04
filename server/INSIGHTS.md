@@ -126,6 +126,15 @@ Conventions and architectural decisions, each with the reason behind it.
   `findings` has neither `pr_id` nor `run_id`, so every findings rollup must travel
   `findings.review_id → reviews.id`. Evidence: `src/db/seed.ts`, `src/db/schema/reviews.ts`
   (`findings`), `e2e/specs/04-pr-findings.flow.json`.
+- **2026-08-04** — Source comments here cite package docs by **bare filename**, not by path,
+  and nothing resolves those citations: the PR-list aggregate block in `routes.ts` said "see
+  the PrMeta doc-comment and `scores-and-costs.md`" while that file did not exist for two
+  commits (no link check in CI, and a bare filename is not a path any tool would follow). So
+  before naming a new file under `docs/`, grep the source for a filename the code already
+  promises — `grep -rn '[a-z-]*\.md' src/` — and reuse it verbatim; inventing a synonym
+  leaves the citation dangling and creates a second doc for the same topic. Evidence:
+  `src/modules/pulls/routes.ts` (the SCORE/COST/FINDINGS comment block),
+  `docs/scores-and-costs.md`.
 
 ## Tool & Library Notes
 
