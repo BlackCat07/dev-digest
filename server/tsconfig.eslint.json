@@ -1,0 +1,5 @@
+{
+  "// why": "ESLint's type-aware rules need every linted file in a TS project. The main tsconfig deliberately includes only src/** (that is what `pnpm typecheck` and the build compile), so tests would otherwise fail to parse. This config widens the include for linting ONLY — it emits nothing and is not part of the build.",
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*.ts", "test/**/*.ts", "*.ts", "*.js", "*.cjs"]
+}

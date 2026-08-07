@@ -54,7 +54,8 @@ export function ReviewRunAccordion({
       setOpen(true);
       rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // targetNonce is intentionally a dependency with no use in the body: it is
+    // bumped to re-trigger this effect for the same run_id.
   }, [targetRunId, targetNonce, review.run_id]);
   const del = useDeleteReview(prId);
   const findings = review.findings;

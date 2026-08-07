@@ -113,7 +113,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   // Structured error handler. Registered BEFORE modules so encapsulated
   // module plugins inherit it. Validation → 422; AppError → its status.
-  app.setErrorHandler((err: unknown, _req, reply) => {
+  app.setErrorHandler((err: unknown, req, reply) => {
     // Request validation failure from the zod type provider (schema.body/params).
     if (hasZodFastifySchemaValidationErrors(err)) {
       reply.status(422).send({
@@ -156,9 +156,26 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       });
       return;
     }
-    app.log.error(err);
+    app.log.error({ err, reqId: req.id }, 'unhandled error');
     const e = err as { statusCode?: number; message?: string };
-    reply.status(e.statusCode ?? 500).send({
+    const status = e.statusCode ?? 500;
+    // 5xx messages come from wherever the throw happened — the Postgres driver,
+    // an LLM SDK, node internals — and can carry connection strings, file paths
+    // or prompt fragments. Log the real one, return a fixed string plus the
+    // request id so a user report maps to a log line.
+    if (status >= 500) {
+      reply.status(status).send({
+        error: {
+          code: 'internal_error',
+          message: 'Internal error',
+          details: { requestId: req.id },
+        },
+      });
+      return;
+    }
+    // 4xx raised by Fastify itself (malformed JSON, unsupported media type,
+    // unknown route) carries a safe generic message the client renders inline.
+    reply.status(status).send({
       error: { code: 'internal_error', message: e.message ?? 'Internal error' },
     });
   });

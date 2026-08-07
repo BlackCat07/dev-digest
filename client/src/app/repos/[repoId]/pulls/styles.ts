@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { GRID } from "./constants";
+import { CONTROL_HEIGHT, GRID } from "./constants";
 
 /** Co-located styles for the PR list page (extracted from inline styles). */
 export const s = {
@@ -54,12 +54,34 @@ export const s = {
     borderBottom: "1px solid var(--border)",
     flexWrap: "wrap",
   } satisfies CSSProperties,
-  filterChips: { display: "flex", gap: 8 } satisfies CSSProperties,
+  filterChips: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
   filterActions: {
     marginLeft: "auto",
     display: "flex",
     alignItems: "center",
     gap: 12,
+  } satisfies CSSProperties,
+
+  /**
+   * Forces one control to CONTROL_HEIGHT from the outside.
+   *
+   * `grid`, not `flex`: a lone grid item stretches on BOTH axes by default, so
+   * the control fills the wrapper's width as well as its height. A flex wrapper
+   * would stretch it vertically but leave it content-width, which silently
+   * collapses the 240px search box. Padding is absorbed because
+   * `vendor/ui/styles.css` sets `box-sizing: border-box` globally.
+   *
+   * The row track is set explicitly rather than with `height`: `height` sizes the
+   * container, but the implicit row stays `auto` and grows to the child, so a
+   * tall control overflows the wrapper instead of being constrained by it.
+   */
+  control: { display: "grid", gridTemplateRows: `${CONTROL_HEIGHT}px` } satisfies CSSProperties,
+
+  /** The search box is the one control with a fixed width. */
+  searchControl: {
+    display: "grid",
+    gridTemplateRows: `${CONTROL_HEIGHT}px`,
+    width: 240,
   } satisfies CSSProperties,
   pageHeader: {
     padding: "24px 32px 10px",

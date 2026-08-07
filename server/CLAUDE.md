@@ -73,6 +73,7 @@ test/                 tests live here, not colocated next to source
 ## Deeper context
 
 - Route map, request/DI flow diagram, error envelope → `README.md`
+- Which ring owns a file, and which way its imports may point → `onion-architecture` skill
 - Test philosophy, suite/CI matrix, what each suite covers → `../TESTING.md`
 - `repo-intel` indexing pipeline internals → `src/modules/repo-intel/README.md`
 - PR-level aggregates (score, cost, findings) and their traps → `docs/scores-and-costs.md`

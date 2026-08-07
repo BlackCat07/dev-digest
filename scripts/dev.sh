@@ -94,10 +94,29 @@ if [ "$DB_ONLY" -eq 1 ]; then
 fi
 
 # --- dev servers -------------------------------------------------------------
+API_PORT=3001
+
+# A leaked API from an earlier run is worse than a failure to start: it answers
+# on the port, so this script happily brings the web app up against it — but it
+# cached the workspace id at ITS boot, so after any re-seed every list comes
+# back empty and every write 500s on a foreign key with no clue why
+# (server/INSIGHTS.md, 2026-08-06). Refuse to start over one.
+if lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN -t >/dev/null 2>&1; then
+  warn "something is already listening on :$API_PORT — most likely a leaked API from an earlier run"
+  warn "stop it with:  lsof -nP -iTCP:$API_PORT -sTCP:LISTEN -t | xargs kill"
+  exit 1
+fi
+
 SERVER_PID=""
 cleanup() {
   log "shutting down dev servers (Postgres stays up; stop it with: docker compose down)"
   [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true
+  # `$!` is only the SUBSHELL. The API itself is a grandchild —
+  # subshell → pnpm → tsx watch → node — and survives that kill, keeping the
+  # port and re-parenting to init. Sweeping the port is what actually stops it.
+  # `-sTCP:LISTEN` matters: a plain `lsof -ti :3001` also matches the browser's
+  # open connections, and killing those would take the user's tabs with it.
+  lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN -t 2>/dev/null | xargs kill 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 

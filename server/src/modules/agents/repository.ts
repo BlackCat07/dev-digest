@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
@@ -195,7 +195,13 @@ export class AgentsRepository {
       .from(t.agentSkills)
       .innerJoin(t.skills, eq(t.agentSkills.skillId, t.skills.id))
       .where(eq(t.agentSkills.agentId, agentId))
-      .orderBy(asc(t.agentSkills.order));
+      // Name breaks ties. `agent_skills` has a PK on (agent_id, skill_id) but
+      // nothing stopping two rows sharing an `order`, and `setSkills` is not the
+      // only writer — `linkSkill` takes an explicit order, and the seed inserts
+      // at fixed indices. Ordering by `order` alone would then leave the sequence
+      // of those rows up to Postgres, i.e. the SKILL BLOCK IN THE PROMPT could
+      // differ between two runs of the same agent with no change to anything.
+      .orderBy(asc(t.agentSkills.order), asc(t.skills.name));
     return rows.map((r) => ({ skill: r.skill, order: r.order }));
   }
 
@@ -225,12 +231,36 @@ export class AgentsRepository {
    * Replace the full set of linked skills for an agent with `skillIds`, assigning
    * order = index. Used by the "Skills" editor tab (attach/reorder). Skills not in
    * the list are unlinked.
+   *
+   * Transactional: without it, a failing insert leaves the agent with NO skills
+   * at all rather than its previous set — the delete has already committed. A
+   * reorder is the most frequent call here, so a silent wipe is the worst
+   * plausible outcome.
    */
   async setSkills(agentId: string, skillIds: string[]): Promise<void> {
-    await this.db.delete(t.agentSkills).where(eq(t.agentSkills.agentId, agentId));
-    if (skillIds.length === 0) return;
-    await this.db
-      .insert(t.agentSkills)
-      .values(skillIds.map((skillId, i) => ({ agentId, skillId, order: i })));
+    await this.db.transaction(async (tx) => {
+      await tx.delete(t.agentSkills).where(eq(t.agentSkills.agentId, agentId));
+      if (skillIds.length === 0) return;
+      await tx
+        .insert(t.agentSkills)
+        .values(skillIds.map((skillId, i) => ({ agentId, skillId, order: i })));
+    });
+  }
+
+  /**
+   * Of `skillIds`, those that exist in `workspaceId`.
+   *
+   * `agent_skills` has an FK to `skills` but no workspace column of its own, so
+   * the database will happily link an agent to another tenant's skill — whose
+   * body would then be injected into this workspace's prompts. The service
+   * checks this before every link/reorder write.
+   */
+  async skillIdsInWorkspace(workspaceId: string, skillIds: string[]): Promise<Set<string>> {
+    if (skillIds.length === 0) return new Set();
+    const rows = await this.db
+      .select({ id: t.skills.id })
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), inArray(t.skills.id, skillIds)));
+    return new Set(rows.map((r) => r.id));
   }
 }

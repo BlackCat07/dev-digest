@@ -1,0 +1,220 @@
+{
+  "name": "Conventions lists the extracted candidates with verified evidence and honest counters",
+  "description": "Walks the read-only half of L02 on seeded data: the sidebar entry (the only nav item whose href carries :repoId besides Pull Requests, so it also proves repo-token resolution), the scan meta line, the two counters that make the list credible, and one card of each kind. The point of the flow is the pair of assertions on confidence: one card says '312 of 343 places follow this' (a counted adherence) and another says the model's own estimate is all there is (no matcher) — that distinction is the product claim of the whole feature, and nothing else in the suite covers it. Also asserted: the dropped-candidates line, because a list of three with no context reads as 'this repo has three conventions' rather than 'seven were proposed and four could not be substantiated'; and the not-cloned warning shown ALONGSIDE the candidates, since the seeded demo repo has clonePath: null — a repo that cannot be scanned right now must still show the triage it already has. Evidence locations are asserted as `path:start-end` because those line numbers are the ones the verifier corrected, and they are what the GitHub deep-link is built from. Accept and Deselect all ARE exercised, because they are the only writes on this screen that leave no trace once undone: the flow accepts one candidate, checks the counter, then clears the triage and checks it is back to zero — so the seeded stack ends as it started. Deliberately NOT asserted: running a scan (it would need a clone, an index and a model call) and skill generation (a write that would persist) — all of those live in the server integration tests and the client unit tests. Precondition: a freshly seeded DB (npm run e2e:hermetic), which seeds one finished scan over acme/payments-api with three candidates.",
+  "steps": [
+    {
+      "cmd": [
+        "open",
+        "{BASE}"
+      ],
+      "label": "load the app"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--url",
+        "/pulls"
+      ],
+      "label": "redirected to the seeded repo"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--load",
+        "networkidle"
+      ],
+      "label": "shell settles with an active repo"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "Conventions"
+      ],
+      "label": "the sidebar of the redirected-to page has painted — `find` does not wait, so this is what retries"
+    },
+    {
+      "cmd": [
+        "find",
+        "text",
+        "Conventions",
+        "click"
+      ],
+      "label": "open Conventions from the sidebar"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--url",
+        "/conventions"
+      ],
+      "label": "conventions route reached"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--load",
+        "networkidle"
+      ],
+      "label": "payload fetch settles"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "acme/payments-api"
+      ],
+      "label": "the heading names the repo the scan ran against"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "Detected from 84 sample files"
+      ],
+      "label": "the scan meta says how much was actually looked at"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "4 candidates were dropped"
+      ],
+      "label": "and how many never reached the list"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "3 without verifiable evidence"
+      ],
+      "label": "broken down by why they were dropped"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "This repository has not been cloned yet"
+      ],
+      "label": "the uncloned repo is flagged without hiding the candidates it already has"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "0 of 3 accepted"
+      ],
+      "label": "the triage counter starts at zero"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "Always use async/await instead of .then() chains"
+      ],
+      "label": "the first candidate's rule is on screen"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "src/api/users.ts:23-24"
+      ],
+      "label": "cited at the corrected line range the GitHub link is built from"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "312 of 343 places follow this"
+      ],
+      "label": "its confidence is a counted adherence, not a model self-report"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "Redis access goes through the src/lib/redis.ts singleton"
+      ],
+      "label": "the structural candidate is listed too"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "Not mechanically checkable"
+      ],
+      "label": "and is marked as unmeasured rather than dressed up as counted"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "All public route handlers return typed Result"
+      ],
+      "label": "the third seeded candidate is present"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "Deselect all"
+      ],
+      "label": "the actions row offers bulk triage"
+    },
+    {
+      "cmd": [
+        "find",
+        "role",
+        "button",
+        "click",
+        "--name",
+        "Accept"
+      ],
+      "label": "accept the first candidate"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--load",
+        "networkidle"
+      ],
+      "label": "the triage write settles"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "1 of 3 accepted"
+      ],
+      "label": "the counter tracks it"
+    },
+    {
+      "cmd": [
+        "find",
+        "role",
+        "button",
+        "click",
+        "--name",
+        "Deselect all"
+      ],
+      "label": "clear the triage again"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--load",
+        "networkidle"
+      ],
+      "label": "the reset settles"
+    },
+    {
+      "cmd": [
+        "wait",
+        "--text",
+        "0 of 3 accepted"
+      ],
+      "label": "and every candidate is untriaged once more"
+    }
+  ]
+}

@@ -34,6 +34,13 @@ export interface OpenRouterProviderOptions {
   maxRetries?: number;
   /** Injected cost estimator; returns USD or null when the model is unknown. */
   estimateCost?: (model: string, tokensIn: number, tokensOut: number) => number | null;
+  /**
+   * Injected `fetch`, used only by `listModels` (see there for why the OpenAI SDK
+   * cannot serve it). Defaults to the global. It exists so the engine's ONE
+   * remaining direct network call can be exercised without a live network —
+   * everything else in this package already takes its I/O as a parameter.
+   */
+  fetchImpl?: typeof fetch;
 }
 
 export class OpenRouterProvider implements LLMProvider {
@@ -42,12 +49,16 @@ export class OpenRouterProvider implements LLMProvider {
   private baseURL: string;
   private apiKey: string;
   private estimateCost?: OpenRouterProviderOptions['estimateCost'];
+  private fetchImpl: typeof fetch;
 
   constructor(apiKey: string, opts: OpenRouterProviderOptions = {}) {
     this.id = opts.id ?? 'openrouter';
     this.apiKey = apiKey;
     this.baseURL = opts.baseURL ?? 'https://openrouter.ai/api/v1';
     this.estimateCost = opts.estimateCost;
+    // Bound to globalThis: an unbound `fetch` reference throws "Illegal invocation"
+    // in some runtimes.
+    this.fetchImpl = opts.fetchImpl ?? fetch.bind(globalThis);
     this.client = new OpenAI({
       apiKey,
       baseURL: this.baseURL,
@@ -121,7 +132,7 @@ export class OpenRouterProvider implements LLMProvider {
    * converted from per-token to USD per 1M tokens; cheapest output first.
    */
   async listModels(): Promise<ModelInfo[]> {
-    const res = await fetch(`${this.baseURL}/models`, {
+    const res = await this.fetchImpl(`${this.baseURL}/models`, {
       headers: { Authorization: `Bearer ${this.apiKey}` },
     });
     if (!res.ok) throw new Error(`OpenRouter /models returned ${res.status}`);

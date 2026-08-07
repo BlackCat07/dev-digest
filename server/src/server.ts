@@ -10,19 +10,22 @@ async function main() {
   // onClose hooks (drains in-flight requests/SSE, closes the postgres pool).
   // Guarded so a second signal during shutdown doesn't double-close.
   let closing = false;
+  const shutdown = async (signal: string) => {
+    if (closing) return;
+    closing = true;
+    app.log.info(`${signal} received — shutting down`);
+    try {
+      await app.close();
+      process.exit(0);
+    } catch (err) {
+      app.log.error(err, 'error during shutdown');
+      process.exit(1);
+    }
+  };
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-    process.once(signal, async () => {
-      if (closing) return;
-      closing = true;
-      app.log.info(`${signal} received — shutting down`);
-      try {
-        await app.close();
-        process.exit(0);
-      } catch (err) {
-        app.log.error(err, 'error during shutdown');
-        process.exit(1);
-      }
-    });
+    // `void`: a signal listener must return void, and shutdown() handles its own
+    // errors then exits — there is nothing for a caller to await.
+    process.once(signal, () => void shutdown(signal));
   }
 
   try {
@@ -34,4 +37,10 @@ async function main() {
   }
 }
 
-main();
+// A rejection before `app.listen` (bad config, unreachable DB handle) would
+// otherwise surface as an unhandled rejection with no log line and a bare
+// non-zero exit. Log it, then exit deliberately.
+main().catch((err) => {
+  console.error('fatal: API failed to start', err);
+  process.exit(1);
+});

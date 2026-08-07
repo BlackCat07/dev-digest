@@ -23,3 +23,6 @@ test-results/
 
 # emdash worktree config (local)
 .emdash.json
+
+# pr-self-review verdict + report + runs log (per-machine, per-branch state)
+.claude/.pr-self-review/

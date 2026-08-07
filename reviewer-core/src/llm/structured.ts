@@ -18,7 +18,47 @@ export interface JsonSchema {
 
 export function toJsonSchema<T>(schema: z.ZodType<T>, name: string): JsonSchema {
   const rf = zodResponseFormat(schema as z.ZodTypeAny, name);
-  return { schema: rf.json_schema.schema as Record<string, unknown>, name };
+  const json = rf.json_schema.schema as Record<string, unknown>;
+  stripNumericRangeKeywords(json);
+  return { schema: json, name };
+}
+
+/**
+ * Anthropic's structured outputs (direct, Bedrock and Azure alike) reject
+ * `minimum`/`maximum` and friends on numeric types with a 400, while DeepSeek
+ * and OpenAI accept them — so a zod `.min()/.max()` breaks the whole request on
+ * some providers only. Dropping the keywords from the wire schema loses no
+ * validation: `parseWithRepair` re-checks every response against the original
+ * zod schema and reprompts on violation. The bound is folded into the
+ * property's `description` so the model still sees it.
+ */
+const NUMERIC_RANGE_KEYWORDS = [
+  'minimum',
+  'maximum',
+  'exclusiveMinimum',
+  'exclusiveMaximum',
+  'multipleOf',
+] as const;
+
+function stripNumericRangeKeywords(node: unknown): void {
+  if (Array.isArray(node)) {
+    for (const item of node) stripNumericRangeKeywords(item);
+    return;
+  }
+  if (node === null || typeof node !== 'object') return;
+  const obj = node as Record<string, unknown>;
+  const bounds: string[] = [];
+  for (const key of NUMERIC_RANGE_KEYWORDS) {
+    if (key in obj) {
+      bounds.push(`${key} ${String(obj[key])}`);
+      delete obj[key];
+    }
+  }
+  if (bounds.length > 0) {
+    const hint = `Constraint: ${bounds.join(', ')}.`;
+    obj.description = typeof obj.description === 'string' ? `${obj.description} ${hint}` : hint;
+  }
+  for (const value of Object.values(obj)) stripNumericRangeKeywords(value);
 }
 
 /** Best-effort extraction of a JSON object/array from a model's text output. */

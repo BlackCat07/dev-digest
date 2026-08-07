@@ -42,9 +42,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 11.x to match the "packageManager" field in the package.json this job
+      # installs. A pnpm MAJOR mismatch is not cosmetic: node_modules written by
+      # one major makes the other's pre-script dep-status check try to purge it,
+      # which aborts with no TTY (server/INSIGHTS.md, 2026-08-04). action-setup
+      # cannot read packageManager itself here — there is no root package.json.
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 11
 
       - uses: actions/setup-node@v4
         with:
@@ -65,6 +70,12 @@ jobs:
 
       - run: pnpm typecheck
 
+      - run: pnpm lint
+
+      # Onion boundary gate (.dependency-cruiser.cjs). A `warn` is drift with a
+      # burn-down list; an `error` is a boundary that held until this change.
+      - run: pnpm lint:arch
+
   unit:
     name: tests
     runs-on: ubuntu-latest
@@ -76,7 +87,7 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 11
 
       - uses: actions/setup-node@v4
         with:

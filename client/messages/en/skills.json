@@ -3,28 +3,24 @@
     "crumbLab": "Skills Lab",
     "crumbSkills": "Skills",
     "heading": "Skills",
+    "subtitle": "Reusable blocks of markdown. Attach one to an agent and it is injected into that agent’s review prompt.",
     "addSkill": "Add Skill",
     "searchPlaceholder": "Search skills…",
     "loadError": "Could not load skills.",
     "menu": {
       "fromFile": "Import from file",
       "fromUrl": "Import from URL",
-      "community": "Search community skills…"
+      "community": "Search community skills…",
+      "create": "Create from scratch"
     },
     "empty": {
       "title": "No skills yet",
       "body": "Import a skill from a file, a URL, or the community catalog.",
-      "cta": "Import from file"
-    },
-    "selectPrompt": {
-      "title": "Select a skill",
-      "body": "Pick a skill on the left to preview its body."
+      "ctaCreate": "Create from scratch"
     }
   },
   "detail": {
-    "crumbSkill": "Skill",
     "back": "← All skills",
-    "loadError": "Could not load this skill.",
     "notFound": {
       "title": "Skill not found",
       "body": "It may have been deleted."
@@ -88,14 +84,78 @@
     }
   },
   "preview": {
-    "untrustedBadge": "untrusted source",
-    "enabled": "Enabled",
     "disabled": "Disabled",
-    "save": "Save",
-    "edit": "Edit",
-    "untrustedNotice": "This skill came from an untrusted source. Its body is stored as data (delimiter-wrapped) and must be vetted before it is enabled for an agent.",
-    "bodyLabel": "Skill body (Markdown)",
-    "bodyHint": "Saving a changed body creates a new immutable version.",
-    "version": "v{version}"
+    "untrustedNotice": "This skill came from an untrusted source. Its body is stored as data (delimiter-wrapped) and must be vetted before it is enabled for an agent."
+  },
+  "card": {
+    "agents": "{count, plural, =1 {# agent} other {# agents}}",
+    "pull": "{percent}% pull",
+    "accept": "{percent}% accept",
+    "noData": "—"
+  },
+  "tabs": {
+    "config": "Config",
+    "preview": "Preview",
+    "stats": "Stats",
+    "versions": "Versions"
+  },
+  "config": {
+    "title": "Configuration",
+    "enabled": "Enabled",
+    "name": "Name",
+    "description": "Description",
+    "descriptionHint": "The skill’s interface — write it as a directive, so an agent can tell from this line alone when the rule applies.",
+    "type": "Type",
+    "bodyLabel": "Skill body",
+    "bodyCaption": "The only text sent to the model. Editing the body is the entire skill — everything else is metadata.",
+    "tokens": "{count} tokens",
+    "unsaved": "unsaved",
+    "save": "Save skill",
+    "saving": "Saving…",
+    "saved": "Saved (v{version})",
+    "savedToast": "Saved “{name}” (v{version})",
+    "cancel": "Cancel",
+    "snapshotHint": "Saving snapshots the body as v{version}",
+    "dangerTitle": "Delete skill",
+    "dangerBody": "Removes it from all agents. This can’t be undone.",
+    "dangerButton": "Delete",
+    "deleteConfirm": "Delete “{name}”? It will be unlinked from every agent."
+  },
+  "previewTab": {
+    "title": "Preview",
+    "subtitle": "Rendered as the reviewing agent receives it.",
+    "empty": "This skill has no body yet."
+  },
+  "stats": {
+    "usedBy": "USED BY",
+    "usedByUnit": "{count, plural, =1 {agent} other {agents}}",
+    "pullFrequency": "PULL FREQUENCY",
+    "acceptRate": "ACCEPT RATE",
+    "findings": "FINDINGS (30D)",
+    "agentsUsing": "AGENTS USING THIS SKILL",
+    "open": "Open",
+    "noAgents": "No agent uses this skill yet.",
+    "byCategory": "FINDINGS BY CATEGORY",
+    "noFindings": "No run has carried this skill yet.",
+    "loadError": "Could not load stats for this skill."
+  },
+  "versions": {
+    "title": "Version history",
+    "count": "{count, plural, =1 {# version} other {# versions}}",
+    "subtitle": "Every save snapshots the body, so a past run stays readable against the exact text it used.",
+    "current": "Current",
+    "restore": "Restore",
+    "restoreConfirm": "Restore v{version}? This saves it as a new version on top.",
+    "restored": "Restored v{from} as v{to}",
+    "loadError": "Could not load version history.",
+    "label": "v{version}"
+  },
+  "create": {
+    "title": "Create a skill",
+    "subtitle": "A named block of markdown an agent can be given.",
+    "defaultName": "new-skill",
+    "create": "Create skill",
+    "creating": "Creating…",
+    "cancel": "Cancel"
   }
 }
