@@ -32,6 +32,37 @@ import {
 
 const exec = promisify(execFile);
 
+/** What `execFile` rejects with: the message, plus whatever the child printed. */
+type ExecError = Error & { stderr?: string; stdout?: string; killed?: boolean };
+
+/**
+ * Why a step failed, in one line — agent-browser's own words where it has any.
+ *
+ * `execFile`'s `Error.message` starts with `Command failed: <the whole argv>` and
+ * puts the child's stderr on the lines AFTER it, so taking `message` alone (or
+ * its first line) reports the command back to the reader and throws away the
+ * reason. That is not a cosmetic loss: a CI log then says `Command failed:
+ * agent-browser find role link click --name Conventions` for a missing element,
+ * an element covered by another, a strict-mode multiple match and a 25s
+ * internal timeout alike — four different bugs, one indistinguishable line, and
+ * the only way to tell them apart is to reproduce locally.
+ *
+ * Note that agent-browser applies its OWN 25s wait timeout regardless of
+ * `E2E_STEP_TIMEOUT`; that ceiling shows up here as "Wait timed out after
+ * 25000ms" rather than as a killed process.
+ */
+function failureDetail(error: ExecError): string {
+  const fromChild = [error.stderr, error.stdout]
+    .map((s) => (s ?? "").trim())
+    .filter(Boolean)
+    .join(" · ")
+    .replace(/\s*\n\s*/g, " ");
+  if (fromChild) return fromChild.slice(0, 400);
+  // Nothing on either stream: a timeout kill, or the binary is missing.
+  const first = error.message.split("\n")[0] ?? error.message;
+  return error.killed ? `${first} (killed after ${STEP_TIMEOUT}ms)` : first;
+}
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SPECS_DIR = join(HERE, "specs");
 const RESULTS_DIR = join(HERE, "test-results");
@@ -78,7 +109,7 @@ async function runFlow(file: string, flow: Flow): Promise<FlowResult> {
       steps.push({ label, ok: true });
       console.log(`   ✓ ${label}`);
     } catch (e) {
-      const msg = (e as Error).message.split("\n")[0];
+      const msg = failureDetail(e as ExecError);
       steps.push({ label, ok: false, detail: msg });
       console.log(`   ✗ ${label} — ${msg}`);
       // Best-effort failure screenshot for the artifact upload.

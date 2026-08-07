@@ -70,12 +70,17 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     defaultProvider: 'openai',
     defaultModel: 'gpt-4.1',
   },
+  // A convention scan is many calls over a lot of source, and the deterministic
+  // miner has already done the counting — the model only phrases the rule and
+  // picks the evidence, which a cheap model does well. It also has to be an
+  // OpenRouter default: Settings → Feature Models writes `provider: 'openrouter'`
+  // for every pick, so an OpenAI default is one the UI can never restore.
   {
     id: 'conventions',
     label: 'Conventions',
     description: 'Extracts coding conventions from the repo.',
-    defaultProvider: 'openai',
-    defaultModel: 'gpt-5.4',
+    defaultProvider: 'openrouter',
+    defaultModel: 'deepseek/deepseek-v4-flash',
   },
 ];
 

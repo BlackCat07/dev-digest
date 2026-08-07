@@ -14,7 +14,8 @@ package (`client`, `server`, `reviewer-core`, `e2e`):
   `e2e` — see the exception below
 - `CLAUDE.md` + `README.md` — the rules and the tour
 
-Root: `README.md` · `TESTING.md` · `docs/agent-prompts/` · `docs/specs-convention.md`.
+Root: `README.md` · `TESTING.md` · `docs/agent-prompts/` · `docs/skills/` ·
+`docs/specs-convention.md`.
 One nested doc: `server/src/modules/repo-intel/README.md`.
 
 **One exception:** `e2e/specs/` holds **browser flows** (`NN-name.flow.json`), which
@@ -73,4 +74,9 @@ Never hand-edit:
 - Working inside a package → read that package's CLAUDE.md: `server/CLAUDE.md`,
   `client/CLAUDE.md`, `reviewer-core/CLAUDE.md`, `e2e/CLAUDE.md`
 - Agent prompt templates → read `docs/agent-prompts/`
+- Skill bodies meant to be **imported** rather than seeded → read `docs/skills/`
 - Writing a feature spec → read `docs/specs-convention.md`
+- **About to open a PR** → run `/pr-self-review`. It reviews the open local diff
+  (committed **and** uncommitted), routes each changed file to the skills that own it, and
+  records a verdict. A `PreToolUse` hook denies `gh pr create` / `gh pr merge` until that
+  verdict is fresh and free of CRITICAL findings — see `.claude/skills/pr-self-review/`.

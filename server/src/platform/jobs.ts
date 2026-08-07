@@ -97,6 +97,13 @@ export class JobRunner {
       }
     }) as Promise<void>;
 
+    // Callers may legitimately discard `done` (fire-and-forget: clone, index,
+    // refresh all do). Without a rejection subscriber that discard turns every
+    // failed job into an unhandled rejection, which kills the whole process.
+    // This side branch marks the rejection handled; callers that DO await
+    // `done` (or attach their own `.catch`) still observe the failure.
+    done.catch(() => undefined);
+
     return { id: jobId, done };
   }
 

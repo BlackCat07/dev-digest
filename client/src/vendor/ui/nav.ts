@@ -18,12 +18,38 @@ export interface NavGroup {
   items: NavItemDef[];
 }
 
+/**
+ * Sidebar groups.
+ *
+ * This is ROUTE CONFIG, and it is the one thing in `vendor/ui` that has to change
+ * when the app gains a screen: `Sidebar.tsx` imports `NAV` directly, with no prop
+ * and no override hook, so a nav entry cannot be composed at the app level. The
+ * do-not-touch rule on this folder exists to stop feature work from restyling
+ * shared primitives — adding a route here is not that. Adding an entry is fine;
+ * changing how `NavItem` looks is not.
+ *
+ * Only routes that EXIST belong here. Conventions, Eval Dashboard, Memory and the
+ * rest arrive with their lessons; listing them early would ship dead links.
+ */
 export const NAV: NavGroup[] = [
   {
     section: "WORKSPACE",
     items: [
       { key: "pulls", label: "Pull Requests", icon: "GitPullRequest", href: "/repos/:repoId/pulls", gKey: "p" },
+    ],
+  },
+  {
+    section: "SKILLS LAB",
+    items: [
+      { key: "skills", label: "Skills", icon: "Sparkles", href: "/skills", gKey: "s" },
       { key: "agents", label: "Agents", icon: "Cpu", href: "/agents", gKey: "a" },
+      {
+        key: "conventions",
+        label: "Conventions",
+        icon: "ListChecks",
+        href: "/repos/:repoId/conventions",
+        gKey: "c",
+      },
     ],
   },
 ];
@@ -52,7 +78,9 @@ export const SHORTCUTS: ShortcutDef[] = [
   { keys: "⌘K", label: "Open command palette", group: "Global" },
   { keys: "?", label: "Show keyboard shortcuts", group: "Global" },
   { keys: "g p", label: "Go to Pull Requests", group: "Navigation" },
+  { keys: "g s", label: "Go to Skills", group: "Navigation" },
   { keys: "g a", label: "Go to Agents", group: "Navigation" },
+  { keys: "g c", label: "Go to Conventions", group: "Navigation" },
   { keys: "j / k", label: "Next / previous finding", group: "Findings" },
   { keys: "a", label: "Accept finding", group: "Findings" },
   { keys: "d", label: "Dismiss finding", group: "Findings" },

@@ -8,6 +8,7 @@ import type {
   Provider,
   ReviewStrategy,
 } from '@devdigest/shared';
+import { ValidationError } from '../../platform/errors.js';
 import { AgentsRepository } from './repository.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
 
@@ -144,6 +145,11 @@ export class AgentsService {
   /**
    * Set / reorder the agent's linked skills. If `skillIds` is provided, replaces
    * the whole set in that order. Returns the resulting ordered links.
+   *
+   * Every id is checked against the caller's workspace first: the ids arrive
+   * straight from a request body, and `agent_skills` carries no workspace of its
+   * own, so an unchecked write would link — and later inject the body of —
+   * another tenant's skill.
    */
   async setSkills(
     workspaceId: string,
@@ -152,6 +158,7 @@ export class AgentsService {
   ): Promise<AgentSkillLink[] | undefined> {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
+    await this.assertSkillsInWorkspace(workspaceId, skillIds);
     await this.repo.setSkills(agentId, skillIds);
     return this.skillLinks(agentId);
   }
@@ -165,10 +172,26 @@ export class AgentsService {
   ): Promise<AgentSkillLink[] | undefined> {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
+    await this.assertSkillsInWorkspace(workspaceId, [skillId]);
     const existing = await this.repo.linkedSkills(agentId);
     const resolvedOrder = order ?? existing.length;
     await this.repo.linkSkill(agentId, skillId, resolvedOrder);
     return this.skillLinks(agentId);
+  }
+
+  /**
+   * Throw unless every id is a skill in this workspace.
+   *
+   * A 422 rather than a 404: the agent in the path exists and is the caller's,
+   * so the request is not "not found" — the body is invalid. It also does not
+   * disclose whether the id names a real skill in some other workspace.
+   */
+  private async assertSkillsInWorkspace(workspaceId: string, skillIds: string[]): Promise<void> {
+    const known = await this.repo.skillIdsInWorkspace(workspaceId, skillIds);
+    const unknown = skillIds.filter((id) => !known.has(id));
+    if (unknown.length > 0) {
+      throw new ValidationError('Unknown skill id', { skill_ids: unknown });
+    }
   }
 
   /**

@@ -10,6 +10,8 @@ Format, naming and required sections: [`../../docs/specs-convention.md`](../../d
 | Spec | Covers |
 |---|---|
 | [`findings-severity.md`](findings-severity.md) | Per-severity finding counts on the PR list payload, and the reviews endpoint the hover panel reads. |
+| [`skills.md`](skills.md) | Skills CRUD, versioning and import; per-run skill attribution and the usage figures derived from it. |
+| [`conventions-extractor.md`](conventions-extractor.md) | Scanning a cloned repo for house rules, the evidence gate and adherence count that filter them, and composing the accepted ones into a skill. |
 
 ## Scope of a server spec
 

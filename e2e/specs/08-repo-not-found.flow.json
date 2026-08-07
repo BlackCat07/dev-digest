@@ -1,0 +1,24 @@
+{
+  "name": "An unknown :repoId renders the repo-scoped 404 boundary",
+  "description": "Covers the path that has no other coverage: a repo id in the URL that matches no repo in the workspace. Both repo-scoped screens (PR list, PR detail) call notFound() when `useRepoNotFound` turns true, and Next renders app/repos/[repoId]/not-found.tsx — one boundary owning the copy that the two screens each used to render inline. Asserted through the visible copy from messages/en/common.json (`repoNotFound.title` = 'No repo selected'), which is what a user actually sees. The uuid below is well-formed but absent from the seed, so the server answers and the CLIENT decides: this also proves the boundary fires after the repos list resolves rather than on a loading flash. What this flow deliberately does NOT assert: that the nav/breadcrumb is still present (positive locators only — see docs/adding-a-flow.md), and the timing rule that `useRepoNotFound` stays false while repos load, which is unit-test territory.",
+  "steps": [
+    {
+      "cmd": ["open", "{BASE}/repos/00000000-0000-4000-8000-000000000000/pulls"],
+      "label": "open the PR list for a repo id that does not exist"
+    },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "the repos list resolves" },
+    {
+      "cmd": ["wait", "--text", "No repo selected"],
+      "label": "the repo-scoped 404 boundary renders instead of the PR table"
+    },
+    {
+      "cmd": ["open", "{BASE}/repos/00000000-0000-4000-8000-000000000000/pulls/1"],
+      "label": "the same unknown repo, one level deeper (PR detail)"
+    },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "the repos list resolves" },
+    {
+      "cmd": ["wait", "--text", "No repo selected"],
+      "label": "the PR detail screen reaches the same boundary"
+    }
+  ]
+}

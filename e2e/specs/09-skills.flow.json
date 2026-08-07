@@ -1,0 +1,96 @@
+{
+  "name": "Skills Lab lists seeded skills, opens one, and reaches the agent it is attached to",
+  "description": "Walks the read-only half of L02 end to end on seeded data: the Skills Lab landing grid (GET /skills, the only screen carrying the per-skill usage aggregates), the rail that replaces it once a skill is open, a skill's Preview tab (?tab= routing, and the body rendered as markdown rather than as source), its Versions tab (the skill_versions read path), then a second skill's Stats tab and the 'Open' link that lands on the agent editor's Skills tab. That last hop is the point of the flow: agent_skills is invisible everywhere else in the UI, and this closes the loop from 'a skill exists' to 'this agent will send it'. api-contract-guard is used for the Stats hop because it is the one seeded skill linked to exactly ONE agent, which keeps the 'Open' locator unambiguous. Tabs are addressed as `role button` because the sidebar nav item is also called 'Skills' and is an anchor — role is what separates them. Deliberately NOT asserted: toggling, saving, importing and drag-reorder are writes that would mutate the shared seeded stack, and 'the disabled skill is hidden' is unexpressible with only positive locators — both live in the client unit tests and server integration tests. Precondition: a freshly seeded DB (npm run e2e:hermetic), which seeds thirteen skills (L02 added three API-contract ones, unlinked) and links api-contract-guard to the API Contract agent. The count in the badge below tracks that total — a new seeded skill moves it.",
+  "steps": [
+    { "cmd": ["open", "{BASE}/skills"], "label": "load the Skills Lab" },
+    { "cmd": ["wait", "--url", "/skills"], "label": "skills route reached" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "skills fetch settles" },
+    {
+      "cmd": ["wait", "--text", "pr-quality-rubric"],
+      "label": "a seeded skill card is visible in the rail"
+    },
+    {
+      "cmd": ["wait", "--text", "Reusable blocks of markdown"],
+      "label": "the landing screen is the card grid, not an editor pane"
+    },
+    {
+      "cmd": ["find", "placeholder", "Search skills…", "fill", "pr-quality"],
+      "label": "filter the grid down to the target card"
+    },
+    {
+      "cmd": ["wait", "--fn", "!document.body.innerText.includes('api-contract-guard')"],
+      "label": "the grid re-rendered from that keystroke — React is hydrated, so the card's onClick will fire"
+    },
+    {
+      "cmd": ["find", "text", "pr-quality-rubric", "click"],
+      "label": "open that skill"
+    },
+    { "cmd": ["wait", "--url", "/skills/"], "label": "navigated to the skill editor" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "editor settles" },
+    {
+      "cmd": ["wait", "--text", "Configuration"],
+      "label": "the editor opens on the Config tab"
+    },
+    {
+      "cmd": ["wait", "--text", "pr-quality-rubric.md"],
+      "label": "the body editor names the skill file"
+    },
+    {
+      "cmd": ["find", "role", "button", "click", "--name", "Preview"],
+      "label": "switch to the Preview tab"
+    },
+    { "cmd": ["wait", "--url", "tab=preview"], "label": "the tab is reflected in the URL" },
+    {
+      "cmd": ["wait", "--text", "Rendered as the reviewing agent receives it."],
+      "label": "the preview tab renders"
+    },
+    {
+      "cmd": ["wait", "--text", "PR Quality Rubric"],
+      "label": "the markdown body is rendered as a heading, not shown as source"
+    },
+    {
+      "cmd": ["find", "role", "button", "click", "--name", "Versions"],
+      "label": "switch to the Versions tab"
+    },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "version history fetch settles" },
+    { "cmd": ["wait", "--text", "Version history"], "label": "the version history loads" },
+    {
+      "cmd": ["wait", "--text", "Current"],
+      "label": "the seeded skill's v1 is marked current"
+    },
+    {
+      "cmd": ["find", "text", "api-contract-guard", "click"],
+      "label": "switch to the skill that only one agent uses"
+    },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "that skill loads" },
+    {
+      "cmd": ["find", "role", "button", "click", "--name", "Stats"],
+      "label": "switch to its Stats tab"
+    },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "stats fetch settles" },
+    {
+      "cmd": ["wait", "--text", "AGENTS USING THIS SKILL"],
+      "label": "the stats panel lists the agents that link it"
+    },
+    { "cmd": ["wait", "--text", "API Contract"], "label": "the seeded L02 agent is listed" },
+    {
+      "cmd": ["find", "role", "button", "click", "--name", "Open"],
+      "label": "follow the link to that agent's Skills tab"
+    },
+    { "cmd": ["wait", "--url", "/agents/"], "label": "agent editor reached" },
+    { "cmd": ["wait", "--url", "tab=skills"], "label": "landed directly on the Skills tab" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "skills + links fetch settles" },
+    {
+      "cmd": ["wait", "--text", "Order matters"],
+      "label": "the ordering hint explains what the list controls"
+    },
+    {
+      "cmd": ["wait", "--text", "api-contract-guard"],
+      "label": "the skill seeded onto this agent is listed"
+    },
+    {
+      "cmd": ["wait", "--text", "1 of 13 enabled"],
+      "label": "the badge counts this agent's linked skills against the workspace total"
+    }
+  ]
+}

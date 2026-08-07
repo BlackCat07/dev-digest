@@ -5,16 +5,22 @@ services:
     image: pgvector/pgvector:pg16
     container_name: devdigest-postgres
     restart: unless-stopped
+    # Credentials default to devdigest/devdigest — fine for a local-only stack on
+    # your own machine, which is what this file is for. Override via the shell or
+    # a root .env if this ever runs anywhere shared. Change them together with
+    # `DATABASE_URL` in server/.env, or the API will keep dialling the old ones.
     environment:
-      POSTGRES_USER: devdigest
-      POSTGRES_PASSWORD: devdigest
-      POSTGRES_DB: devdigest
+      POSTGRES_USER: ${POSTGRES_USER:-devdigest}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devdigest}
+      POSTGRES_DB: ${POSTGRES_DB:-devdigest}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - devdigest_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U devdigest -d devdigest"]
+      # $$ so compose passes the variable through to the container's shell, where
+      # POSTGRES_USER/DB are set, instead of interpolating it here.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10

@@ -45,7 +45,16 @@ export function RepoProvider({ children }: { children: React.ReactNode }) {
 
   const list = repos ?? [];
   const fromPath = repoIdFromPath(pathname);
-  const repoId = fromPath ?? stored ?? list[0]?.id ?? null;
+
+  // A REMEMBERED repo that no longer exists is dropped; a repo id in the URL is
+  // not. The two are different kinds of claim: the URL is where the user asked
+  // to be, and a stale one there is answered by the repo-scoped 404 boundary,
+  // while `stored` is only a preference — honouring one that points at a deleted
+  // repo aims every nav link in the sidebar at a 404 until the user picks a repo
+  // by hand. Only applied once the list has actually loaded, so a slow fetch
+  // does not look like a deleted repo.
+  const remembered = !reposLoaded || list.some((r) => r.id === stored) ? stored : null;
+  const repoId = fromPath ?? remembered ?? list[0]?.id ?? null;
   const activeRepo = list.find((r) => r.id === repoId) ?? null;
 
   return (

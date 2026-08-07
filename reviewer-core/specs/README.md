@@ -7,7 +7,11 @@ Format, naming and required sections: [`../../docs/specs-convention.md`](../../d
 
 ## Specs
 
-_No feature specs yet._ The engine's current behaviour is documented as mechanism in
+| Spec | Covers |
+|---|---|
+| [`skills-in-prompt.md`](skills-in-prompt.md) | The `## Skills / rules` slot: where it renders, how bodies are ordered and joined, and why the engine wraps nothing. |
+
+The rest of the engine's behaviour is documented as mechanism in
 [`../docs/grounding.md`](../docs/grounding.md); a spec lands here when a lesson changes what
 the engine must **do**, rather than how it does it.
 

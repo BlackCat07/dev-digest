@@ -64,3 +64,58 @@ describe('assemblePrompt — ## PR description', () => {
     expect((assembly.pr_description as string).length).toBe(4000);
   });
 });
+
+describe('assemblePrompt — ## Skills / rules', () => {
+  it('renders the section between the PR description and the diff', () => {
+    const user = userOf({
+      system: 'sys',
+      diff: 'DIFF',
+      prDescription: 'PRBODY',
+      skills: ['SKILL ONE'],
+    });
+    expect(user).toContain('## Skills / rules');
+    expect(user).toContain('SKILL ONE');
+    // Order is the contract: rules land before the material they judge, so the
+    // model reads the rubric first and the diff second.
+    expect(user.indexOf('## PR description')).toBeLessThan(user.indexOf('## Skills / rules'));
+    expect(user.indexOf('## Skills / rules')).toBeLessThan(user.indexOf('## Diff to review'));
+  });
+
+  it('joins several skills with a blank line, in the order given', () => {
+    const user = userOf({ system: 'sys', diff: 'DIFF', skills: ['FIRST', 'SECOND', 'THIRD'] });
+    expect(user).toContain('FIRST\n\nSECOND\n\nTHIRD');
+    // Link order is the whole point of the reorder UI — it must survive here.
+    expect(user.indexOf('FIRST')).toBeLessThan(user.indexOf('SECOND'));
+    expect(user.indexOf('SECOND')).toBeLessThan(user.indexOf('THIRD'));
+  });
+
+  it('omits the section entirely when there are no skills', () => {
+    for (const parts of [
+      { system: 'sys', diff: 'DIFF' },
+      { system: 'sys', diff: 'DIFF', skills: [] },
+    ]) {
+      const { messages, assembly } = assemblePrompt(parts);
+      // An agent with no enabled skills must get a byte-identical prompt to the
+      // pre-L02 one — not an empty heading.
+      expect(messages[1]!.content).not.toContain('## Skills / rules');
+      expect(assembly.skills).toBeNull();
+    }
+    expect(userOf({ system: 'sys', diff: 'DIFF' })).toBe(
+      userOf({ system: 'sys', diff: 'DIFF', skills: [] }),
+    );
+  });
+
+  it('does NOT wrap skill bodies — the caller decides what is trusted', () => {
+    // A skill body arrives already wrapped when its source is untrusted (the
+    // server does that in the skills service). Wrapping again here would
+    // double-wrap a manual skill and make trusted rules read as data.
+    const user = userOf({ system: 'sys', diff: 'DIFF', skills: ['PLAIN RULE'] });
+    expect(user).toContain('## Skills / rules\nPLAIN RULE');
+    expect(user).not.toContain('<untrusted source="skill');
+  });
+
+  it('records the assembled block in the trace for per-slot attribution', () => {
+    const { assembly } = assemblePrompt({ system: 'sys', diff: 'DIFF', skills: ['A', 'B'] });
+    expect(assembly.skills).toBe('A\n\nB');
+  });
+});
