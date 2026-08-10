@@ -86,7 +86,23 @@ Dependency and tooling quirks.
 
 <!-- append below -->
 
-_No entries yet._
+- **2026-08-07** — **Anthropic models via OpenRouter reject a `json_schema` response format
+  that carries numeric range keywords**, and the engine surfaces it only as
+  `400 Provider returned error`. All three routes OpenRouter tried (Anthropic, Bedrock,
+  Azure) returned `output_config.format.schema: For 'integer' type, properties maximum,
+  minimum are not supported`, while DeepSeek accepts the identical schema — so a zod
+  `.min()/.max()` in a shared contract (`Review.score` is `.int().min(0).max(100)`) breaks
+  reviews **only after an agent switches to a Claude model**, which reads as a model
+  problem rather than a schema problem. The real message lives in OpenRouter's
+  `error.metadata.raw` and is only visible by replaying the request directly against
+  `/chat/completions`; the OpenAI SDK error string truncates it. This is live API
+  behaviour: the server consumes this package as source, so the fix applies with no build
+  step. Fixed in `toJsonSchema` (`stripNumericRangeKeywords`): the wire schema drops
+  `minimum`/`maximum`/`exclusiveMinimum`/`exclusiveMaximum`/`multipleOf` and folds each
+  bound into the property's `description`; nothing is lost because `parseWithRepair`
+  re-validates every response against the original zod schema and reprompts on violation.
+  Evidence: `src/llm/structured.ts` (`toJsonSchema`, `stripNumericRangeKeywords`),
+  `../server/src/vendor/shared/contracts/findings.ts` (`Review.score`).
 
 ## Recurring Errors & Fixes
 

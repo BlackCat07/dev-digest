@@ -8,6 +8,7 @@ for `README.md`.
 | Document | Read it when |
 |---|---|
 | [`scores-and-costs.md`](scores-and-costs.md) | Touching any PR-level aggregate — score, cost, findings counts. Explains why a "latest row" is never the answer on this schema. `src/modules/pulls/routes.ts` cites this file by name. |
+| [`conventions-quality.md`](conventions-quality.md) | Changing anything in the conventions extractor, or asking why its candidates are worth trusting. The four filters between a model's answer and a stored candidate, what each catches, what is deliberately not built, and two approaches that were measured and abandoned. |
 
 ## What is NOT here
 

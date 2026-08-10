@@ -39,11 +39,16 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     defaultProvider: "openai",
     defaultModel: "gpt-4.1",
   },
+  // Cheap by design: the deterministic miner does the counting before the model
+  // is asked anything, so the model only phrases the rule and picks evidence.
+  // It also has to be an OpenRouter default — `SettingsModels` writes
+  // `provider: "openrouter"` for every pick, so an OpenAI default is one this
+  // screen could never restore once changed.
   {
     id: "conventions",
     label: "Conventions",
     description: "Extracts coding conventions from the repo.",
-    defaultProvider: "openai",
-    defaultModel: "gpt-5.4",
+    defaultProvider: "openrouter",
+    defaultModel: "deepseek/deepseek-v4-flash",
   },
 ];

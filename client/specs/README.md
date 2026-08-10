@@ -10,6 +10,8 @@ Format, naming and required sections: [`../../docs/specs-convention.md`](../../d
 | Spec | Covers |
 |---|---|
 | [`findings-severity.md`](findings-severity.md) | Severity counters in the PR list, the findings hover panel, and the per-severity filter on the PR detail page. |
+| [`skills.md`](skills.md) | The Skills Lab screen, the skill editor's four tabs, file import, and the agent editor's Skills tab. |
+| [`conventions-extractor.md`](conventions-extractor.md) | The Conventions screen: triaging extracted candidates, their GitHub-linked evidence, and the create-skill modal. |
 
 ## Scope of a client spec
 

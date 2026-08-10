@@ -4,7 +4,6 @@
     "crumbConventions": "Conventions",
     "headingPrefix": "Conventions in ",
     "repoFallback": "repo",
-    "subtitle": "Scan the cloned repo to surface house-rules — each backed by evidence you can turn into a Skill.",
     "scanning": "Scanning…",
     "rescan": "Re-scan",
     "runExtraction": "Run extraction",
@@ -15,12 +14,113 @@
       "body": "Scan the repo to surface house-rules — naming, error handling, structure — each backed by evidence you can turn into a Skill.",
       "cta": "Run extraction"
     },
-    "candidateCount": "{count, plural, one {# candidate} other {# candidates}} · grounded against sampled files"
+    "candidateCount": "{count, plural, one {# candidate} other {# candidates}} · grounded against sampled files",
+    "allCategories": "All categories",
+    "triage": "{accepted} of {total} accepted",
+    "deselectAll": "Deselect all",
+    "noMatch": {
+      "title": "No candidate in that category",
+      "body": "Pick another category, or show all of them."
+    },
+    "allDropped": {
+      "title": "Nothing survived verification",
+      "body": "The model proposed {proposed, plural, one {# rule} other {# rules}}, and none could be backed by real code in this repository. That is a result, not a failure — try a wider sample or a different subtree."
+    }
+  },
+  "blocked": {
+    "not_cloned": {
+      "title": "This repository has not been cloned yet",
+      "body": "DevDigest scans a local clone. Add the repo and wait for the clone to finish, then run the extraction."
+    },
+    "not_indexed": {
+      "title": "This repository has not been indexed yet",
+      "body": "The scan picks files by how central they are, which comes from the index. Re-analyze the repo, then run the extraction."
+    },
+    "scan_running": {
+      "title": "A scan is already running",
+      "body": "One scan per repository at a time. This screen updates itself when it finishes."
+    }
+  },
+  "scan": {
+    "detectedFrom": "Detected from {count, plural, one {# sample file} other {# sample files}}",
+    "lastScan": "last scan {when}",
+    "never": "never scanned",
+    "justNow": "just now",
+    "minutesAgo": "{count}m ago",
+    "hoursAgo": "{count}h ago",
+    "daysAgo": "{count}d ago",
+    "partial": "Sampled {sampled} of {eligible} files — the highest-ranked ones. Narrow the scan to a subtree for full coverage.",
+    "dropped": "{dropped, plural, one {# candidate was dropped} other {# candidates were dropped}} before reaching this list",
+    "droppedDetail": "{unverified} without verifiable evidence · {lowAdherence} below the adherence floor",
+    "failed": "The last scan failed: {error}",
+    "cost": "cost {cost}"
+  },
+  "budget": {
+    "title": "This scan will read",
+    "files": "{count, plural, one {# file} other {# files}}",
+    "tokens": "≈{count} tokens",
+    "calls": "{count, plural, one {# model call} other {# model calls}}",
+    "cost": "≈{cost}",
+    "costUnknown": "cost unknown",
+    "cappedFiles": "Capped at the file ceiling — the top-ranked files are used.",
+    "cappedTokens": "Capped at the token ceiling — the largest files are left out.",
+    "confirm": "Run the scan",
+    "cancel": "Cancel",
+    "large": "This is a large repository. Review the estimate before running."
   },
   "card": {
     "confidence": "Confidence",
     "accepted": "Accepted",
     "accepting": "Accepting…",
-    "acceptAsSkill": "Accept as Skill"
+    "acceptAsSkill": "Accept as Skill",
+    "accept": "Accept",
+    "reject": "Reject",
+    "rejected": "Rejected",
+    "measured": "{conforming} of {total} places follow this",
+    "unmeasured": "Not mechanically checkable — the model's own estimate",
+    "openOnGitHub": "Open on GitHub",
+    "copyPath": "Copy path",
+    "copySnippet": "Copy snippet",
+    "copied": "Copied",
+    "moreEvidence": "{count, plural, one {# more citation} other {# more citations}}",
+    "matchShifted": "line corrected",
+    "matchMoved": "found elsewhere in the file",
+    "edit": "Edit",
+    "editedNote": "edited",
+    "ruleLabel": "Rule",
+    "rationaleLabel": "Rationale",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "create": {
+    "title": "Create skill from conventions",
+    "open": "Create skill",
+    "mergedFrom": "Merged from <strong>{count, plural, one {# accepted convention} other {# accepted conventions}}</strong> in <repoName>{repo}</repoName>. Everything below is editable before you save.",
+    "name": "Name",
+    "description": "Description",
+    "type": "Type",
+    "enabled": "Enabled",
+    "enabledHint": "Whether this block is added to agents' prompts.",
+    "body": "Skill body",
+    "tokens": "{count} tokens",
+    "unsaved": "unsaved",
+    "savedNote": "Saved as v1 · added to Skills Lab",
+    "submit": "Create skill",
+    "cancel": "Cancel",
+    "none": "Accept at least one candidate to create a skill.",
+    "created": "{count, plural, one {Skill created} other {# skills created}}",
+    "openInLab": "Open in Skills Lab"
+  },
+  "category": {
+    "naming": "Naming",
+    "structure": "Structure",
+    "error-handling": "Error handling",
+    "api-contract": "API contract",
+    "testing": "Testing",
+    "imports": "Imports",
+    "async": "Async",
+    "logging": "Logging",
+    "typing": "Typing",
+    "security": "Security"
   }
 }

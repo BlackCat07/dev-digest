@@ -74,6 +74,12 @@ export class ReviewRunExecutor {
     // mark the rows failed and persist the buffered log so it survives a reload.
     const failAll = async (msg: string) => {
       for (const { runId, agent } of jobs) {
+        // Trace BEFORE the terminal status: readers poll agent_runs.status and
+        // fetch the trace the moment it turns terminal, so the trace row must
+        // already be committed by then.
+        await this.repo
+          .saveRunTrace(runId, this.traceFromBuffer(runId, pull, agent, '0/0 passed'))
+          .catch(() => undefined);
         await this.repo
           .completeAgentRun(runId, {
             status: 'failed',
@@ -85,9 +91,6 @@ export class ReviewRunExecutor {
             grounding: '0/0 passed',
             error: msg,
           })
-          .catch(() => undefined);
-        await this.repo
-          .saveRunTrace(runId, this.traceFromBuffer(runId, pull, agent, '0/0 passed'))
           .catch(() => undefined);
         this.container.runBus.complete(runId);
       }
@@ -184,6 +187,11 @@ export class ReviewRunExecutor {
 
       const task = taskLine(pull) + rankNote;
 
+      // L02 — the agent's enabled skills, in link order. Resolution (enabled
+      // filter + untrusted-source wrapping) belongs to the skills service; this
+      // module only decides that a run wants them.
+      const skills = await this.resolveSkills(agent.id, runLog);
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -204,6 +212,11 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // L02 — linked skill bodies, same omit-when-empty contract. An agent
+        // with no enabled skills therefore produces a byte-identical prompt to
+        // the pre-L02 one: assemblePrompt drops the whole "## Skills / rules"
+        // section rather than emitting an empty heading.
+        ...(skills.bodies.length ? { skills: skills.bodies } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -230,6 +243,11 @@ export class ReviewRunExecutor {
       const findingRows = await this.repo.insertFindings(review.id, keptFindings);
       runLog.result(`Persisted review ${review.id} with ${findingRows.length} finding(s)`);
 
+      // L02 — record which skills this run actually carried, so per-skill stats
+      // read from what happened rather than from today's links. Written on the
+      // success path only: a run that never reached the model carried nothing.
+      await this.container.skills.recordRunSkills(runId, skills.used);
+
       // Mark the commit this review ran against so the PR list can tell
       // reviewed / needs-review (head moved) / stale apart.
       await this.repo.markReviewed(pull.id, pull.headSha);
@@ -240,20 +258,7 @@ export class ReviewRunExecutor {
       // the timeline colors on, NOT the model's self-reported verdict.
       const blockers = countBlockers(keptFindings, agent.ciFailOn);
 
-      // ---- Observability: agent_runs + ONE run_traces document --------------
-      await this.repo.completeAgentRun(runId, {
-        status: 'done',
-        durationMs,
-        tokensIn,
-        tokensOut,
-        costUsd,
-        findingsCount: findingRows.length,
-        grounding,
-        score: outcome.review.score,
-        blockers,
-        error: null,
-      });
-
+      // ---- Observability: ONE run_traces document + agent_runs --------------
       const trace: RunTrace = {
         config: {
           agent: agent.name,
@@ -286,7 +291,22 @@ export class ReviewRunExecutor {
         log: runLog.logFor(runId),
       };
       runLog.info('Run complete; trace persisted');
+      // Trace first, terminal status second: anything polling agent_runs.status
+      // (the UI, the integration tests) fetches the trace as soon as the run
+      // reads `done`, so the trace row must already be committed at that point.
       await this.repo.saveRunTrace(runId, trace);
+      await this.repo.completeAgentRun(runId, {
+        status: 'done',
+        durationMs,
+        tokensIn,
+        tokensOut,
+        costUsd,
+        findingsCount: findingRows.length,
+        grounding,
+        score: outcome.review.score,
+        blockers,
+        error: null,
+      });
       this.container.runBus.complete(runId);
 
       return { review, findings: findingRows, grounding, raw: outcome.review };
@@ -297,6 +317,10 @@ export class ReviewRunExecutor {
       const status = cancelled ? 'cancelled' : 'failed';
       const msg = cancelled ? 'Cancelled by user' : (err as Error).message;
       runLog.error(cancelled ? 'Run cancelled by user' : `Run failed: ${msg}`);
+      // Same ordering rule as the success path: trace before terminal status.
+      await this.repo
+        .saveRunTrace(runId, this.traceFromBuffer(runId, pull, agent, '0/0 passed', Date.now() - start))
+        .catch(() => undefined);
       await this.repo
         .completeAgentRun(runId, {
           status,
@@ -308,9 +332,6 @@ export class ReviewRunExecutor {
           grounding: '0/0 passed',
           error: msg,
         })
-        .catch(() => undefined);
-      await this.repo
-        .saveRunTrace(runId, this.traceFromBuffer(runId, pull, agent, '0/0 passed', Date.now() - start))
         .catch(() => undefined);
       this.container.runBus.complete(runId);
       throw err;
@@ -365,6 +386,31 @@ export class ReviewRunExecutor {
    * slot. Returns `undefined` when repo-intel is off / the repo isn't indexed
    * (the facade degrades), so the prompt stays identical to the pre-T3 shape.
    */
+  /**
+   * L02 — the agent's enabled skill bodies, in link order, plus the provenance
+   * to record against the run.
+   *
+   * Best-effort like its repo-intel siblings: a skills lookup that fails must not
+   * fail the review. Degrading to no skills reproduces the pre-L02 prompt exactly,
+   * which is a strictly worse review, not a broken one — and it is visible,
+   * because the run trace then shows no "## Skills / rules" block.
+   */
+  private async resolveSkills(
+    agentId: string,
+    runLog: RunLogger,
+  ): Promise<{ bodies: string[]; used: Array<{ skillId: string; version: number; order: number }> }> {
+    try {
+      const resolved = await this.container.skills.resolveBodiesForAgent(agentId);
+      if (resolved.bodies.length > 0) {
+        runLog.info(`skills: ${resolved.bodies.length} enabled skill(s) attached to the prompt`);
+      }
+      return resolved;
+    } catch (err) {
+      runLog.info(`skills: resolution failed — ${(err as Error).message}`);
+      return { bodies: [], used: [] };
+    }
+  }
+
   private async buildRepoMapDigest(
     repoId: string,
     runLog: RunLogger,

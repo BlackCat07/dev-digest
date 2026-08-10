@@ -33,27 +33,37 @@ export function FilterBar({
   ];
   return (
     <div style={s.filterBar}>
+      {/* Every control is wrapped in `s.control`, which is the only thing giving
+          this row a single height — the kit's Chip, Button, TextInput and
+          SelectInput are all naturally different sizes and none takes a style
+          prop. See CONTROL_HEIGHT in ../../constants. */}
       <div style={s.filterChips}>
-        <div style={{ width: 240 }}>
+        <div style={s.searchControl}>
           <TextInput value={query} onChange={onQuery} placeholder={t("list.filterPlaceholder")} />
         </div>
         {STATUS_FILTERS.map(({ key, labelKey }) => (
-          <Chip key={key} active={active === key} onClick={() => onActive(key)}>
-            {t(`list.filter.${labelKey}`)}
-          </Chip>
+          <div key={key} style={s.control}>
+            <Chip active={active === key} onClick={() => onActive(key)}>
+              {t(`list.filter.${labelKey}`)}
+            </Chip>
+          </div>
         ))}
       </div>
       <div style={s.filterActions}>
-        <SelectInput value={sort} onChange={onSort} options={sortOptions} mono={false} />
-        <Button
-          kind="secondary"
-          size="sm"
-          icon="RefreshCw"
-          onClick={onRefresh}
-          disabled={refreshing}
-        >
-          {refreshing ? t("list.refreshing") : t("list.refresh")}
-        </Button>
+        <div style={s.control}>
+          <SelectInput value={sort} onChange={onSort} options={sortOptions} mono={false} />
+        </div>
+        <div style={s.control}>
+          <Button
+            kind="secondary"
+            size="sm"
+            icon="RefreshCw"
+            onClick={onRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? t("list.refreshing") : t("list.refresh")}
+          </Button>
+        </div>
       </div>
     </div>
   );

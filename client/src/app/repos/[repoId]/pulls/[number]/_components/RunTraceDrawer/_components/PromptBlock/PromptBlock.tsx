@@ -5,6 +5,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Button, Icon, Modal } from "@devdigest/ui";
+import { estimateTokens } from "@/lib/skill";
 import { s } from "../../styles";
 import { PromptModalBody } from "../PromptModalBody";
 
@@ -35,6 +36,10 @@ export function PromptBlock({ label, text, color }: { label: string; text: strin
       <div onClick={() => setOpen((o) => !o)} style={s.promptHead}>
         <span style={s.promptDot(color)} />
         <span style={s.promptLabel}>{label}</span>
+        {/* What this slot costs the context window. The trace stores each slot's
+            raw text precisely so it can be attributed per-slot; counting here
+            keeps it out of the contract and off the server. */}
+        <span style={s.promptTokens}>{t("trace.prompt.tokens", { count: estimateTokens(text) })}</span>
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           <button
             type="button"

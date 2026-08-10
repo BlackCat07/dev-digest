@@ -304,4 +304,118 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     expect(body.runs.length).toBeGreaterThanOrEqual(2);
     await app.close();
   });
+
+  /**
+   * L02 — a run carries its agent's enabled skills all the way into the
+   * persisted trace, and records what it carried.
+   *
+   * This is the one link the unit tests cannot cover: reviewer-core proves
+   * `assemblePrompt` renders the slot, and `skills.it.test.ts` proves the service
+   * resolves the right bodies, but only a full run proves the executor actually
+   * passes one to the other and writes `run_skills`.
+   */
+  it('injects an agent’s enabled skills into the prompt and records them on the run', async () => {
+    const app = await appWith(REVIEW_FIXTURE);
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Skilled', provider: 'openai', model: 'gpt-4.1', system_prompt: 'sys' },
+      })
+    ).json();
+
+    const first = (
+      await app.inject({
+        method: 'POST',
+        url: '/skills',
+        payload: { name: 'first-rule', type: 'rubric', body: 'FIRST RULE BODY' },
+      })
+    ).json();
+    const second = (
+      await app.inject({
+        method: 'POST',
+        url: '/skills',
+        payload: { name: 'second-rule', type: 'custom', body: 'SECOND RULE BODY' },
+      })
+    ).json();
+    // Linked but switched off — must reach neither the prompt nor run_skills.
+    const off = (
+      await app.inject({
+        method: 'POST',
+        url: '/skills',
+        payload: { name: 'off-rule', type: 'custom', body: 'OFF RULE BODY', enabled: false },
+      })
+    ).json();
+
+    await app.inject({
+      method: 'POST',
+      url: `/agents/${agent.id}/skills`,
+      payload: { skill_ids: [second.id, first.id, off.id] },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/pulls/${pr.id}/review`,
+      payload: { agentId: agent.id },
+    });
+    const runId = res.json().runs[0].run_id as string;
+    await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+
+    const trace = (await app.inject({ method: 'GET', url: `/runs/${runId}/trace` })).json();
+
+    // The block exists, holds both enabled bodies, and holds them in LINK order
+    // (second, then first) — not creation order, not alphabetical.
+    expect(trace.prompt_assembly.skills).toBe('SECOND RULE BODY\n\nFIRST RULE BODY');
+    expect(trace.prompt_assembly.skills).not.toContain('OFF RULE BODY');
+    // And it reached the actual user message, ahead of the diff.
+    const user = trace.prompt_assembly.user as string;
+    expect(user).toContain('## Skills / rules');
+    expect(user.indexOf('SECOND RULE BODY')).toBeLessThan(user.indexOf('## Diff to review'));
+
+    // run_skills records exactly what was carried, with the version used.
+    const carried = await pg.handle.db
+      .select()
+      .from(t.runSkills)
+      .where(eq(t.runSkills.runId, runId));
+    expect(carried.map((r) => r.skillId).sort()).toEqual([first.id, second.id].sort());
+    expect(carried.every((r) => r.version === 1)).toBe(true);
+
+    await app.close();
+  });
+
+  /** The other half: no skills ⇒ the section is absent, not empty. */
+  it('omits the skills block entirely for an agent with none', async () => {
+    const app = await appWith(REVIEW_FIXTURE);
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Bare', provider: 'openai', model: 'gpt-4.1', system_prompt: 'sys' },
+      })
+    ).json();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/pulls/${pr.id}/review`,
+      payload: { agentId: agent.id },
+    });
+    const runId = res.json().runs[0].run_id as string;
+    await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+
+    const trace = (await app.inject({ method: 'GET', url: `/runs/${runId}/trace` })).json();
+    expect(trace.prompt_assembly.skills).toBeNull();
+    expect(trace.prompt_assembly.user).not.toContain('## Skills / rules');
+
+    const carried = await pg.handle.db
+      .select()
+      .from(t.runSkills)
+      .where(eq(t.runSkills.runId, runId));
+    expect(carried).toHaveLength(0);
+
+    await app.close();
+  });
+
 });

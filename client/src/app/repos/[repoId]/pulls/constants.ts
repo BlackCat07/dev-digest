@@ -58,6 +58,22 @@ export const COLUMN_KEYS: string[] = [
 /** Number of skeleton rows shown while loading. */
 export const SKELETON_ROWS = 4;
 
+/**
+ * One height for every control in the filter bar.
+ *
+ * The vendored kit gives its controls three different natural heights — a Chip is
+ * ~28px (5px padding), a small Button ~27px, and TextInput/SelectInput ~39px
+ * (10px padding) — so a row of them steps up and down. None of them accepts a
+ * style prop, and restyling a shared primitive to suit this one row is exactly
+ * what the `vendor/ui` rule forbids, so the row imposes the height from outside
+ * instead (see `s.control` in ./styles.ts).
+ *
+ * 40 is close to the natural height of the TALLEST of them (the text input, at
+ * ~43px) on purpose: growing the short controls looks deliberate, whereas
+ * shrinking the input to the height of a chip squeezes its 21px line box.
+ */
+export const CONTROL_HEIGHT = 40;
+
 export type PrSize = "S" | "M" | "L";
 export type SizeInfo = { size: PrSize; lines: number };
 

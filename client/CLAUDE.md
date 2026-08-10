@@ -29,7 +29,23 @@ src/test/setup.ts             jsdom shims
 
 ## Conventions
 
-- **Routes are thin.** `page.tsx` renders one view from `_components/`; no logic there.
+- **Routes are thin.** `page.tsx` awaits `params`, renders one view from `_components/`,
+  and nothing else — every entry is 7–17 lines.
+- **Do NOT wrap a view in `<Suspense>` just because it reads `useSearchParams()`.** That
+  bailout rule applies to *statically* prerendered routes; every route here that reads search
+  params is dynamic (`ƒ`, because of `[repoId]`/`[id]`), so the hook is free. Adding the
+  boundary makes the server emit the fallback **instead of** the screen — a blank first paint.
+  If a static route ever needs the hook, `next build` fails loudly and the boundary goes
+  there.
+- **Error and 404 boundaries are files, not page branches.** `app/error.tsx` catches render
+  throws below the root layout, `app/global-error.tsx` catches the root layout itself (it
+  replaces the layout, so it ships its own `<html>`/`<body>` and hard-coded colours — the one
+  place the token/`styles.ts` rule cannot apply). A repo-scoped screen that finds no repo for
+  `:repoId` calls `notFound()` and `app/repos/[repoId]/not-found.tsx` renders the copy for
+  every screen below `/repos`. There are deliberately **no** per-segment `error.tsx` or
+  `loading.tsx` files: with one root layout a segment boundary preserves nothing extra, and
+  screen data is client-side (TanStack Query), so a `loading.tsx` would flash a second
+  loader in front of the view's own skeleton.
 - **Colocated feature unit** — every non-trivial component is a folder:
   `<Name>/{<Name>.tsx, index.ts, styles.ts, constants.ts, helpers.ts, <Name>.test.tsx}`.
   Import through the `index.ts` barrel, never the inner file. Nest deeper with a
@@ -39,6 +55,13 @@ src/test/setup.ts             jsdom shims
   properties — `var(--border)`, `var(--bg-elevated)`, `var(--accent)`. Tailwind 4 *is*
   loaded (via `@import "tailwindcss"` + `@theme` in `src/vendor/ui/styles.css`), but
   feature components use these style objects. Don't convert either way.
+  **Where inline `style={{…}}` is still fine** — the tree has ~85 of them and they are not
+  85 violations: a one-off token pass-through on a vendor primitive
+  (`<Icon.Shield style={{ color: "var(--crit)" }} />`), or a single throwaway property on a
+  wrapper that owns no other styling. It stops being fine when the object describes
+  **layout** (padding/flex/grid/max-width), when the same literal appears twice, or when it
+  is passed to a memoised child — a new object every render defeats the memo. Those three
+  belong in `styles.ts`; `global-error.tsx` is the one exemption, and says why in the file.
 - **Never call `fetch` in a component.** Data goes through a hook in `src/lib/hooks/*`
   → `apiFetch`. `ApiError` carries `status`/`code` so the error UX can branch
   (toast vs inline vs full-screen); preserve that when adding endpoints.

@@ -1,0 +1,5 @@
+{
+  "// why": "ESLint's type-aware rules need every linted file inside a TS project. The main tsconfig includes only src/** (what `npm run typecheck` and the build compile), so test/** would not parse. Lint-only; emits nothing.",
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*.ts", "test/**/*.ts", "*.ts"]
+}

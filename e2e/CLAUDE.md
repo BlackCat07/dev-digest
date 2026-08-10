@@ -46,6 +46,18 @@ test-results/            generated output
 
 ## Gotchas
 
+- **`find` does not wait; `wait` is the only retry there is.** A `find` whose element is
+  not in the DOM *at that instant* fails in ~50ms — it never polls. So every `find` that
+  follows a navigation, a redirect or a data fetch needs a `wait` in front of it, and
+  `wait --load networkidle` is not enough: it can settle on the pre-redirect document.
+  Read the message to tell the two apart — `7 elements have role "link", but none match
+  name "X"` means the page was there and the locator was wrong, while a bare `Element not
+  found` means the page had no such role at all, i.e. you raced it.
+- **A click on a `<div onClick>` before hydration is swallowed silently** — no error, the
+  step passes, and the navigation never happens. Cards in the Skills grid are exactly
+  that shape. Prove hydration first by making the app re-render from a keystroke (type in
+  the filter, `wait --fn` for the list to shrink); `window.next` exists long before React
+  has attached its handlers, so it is not a hydration signal.
 - **Flows assume a freshly-seeded DB with exactly one repo.** Flow `02` follows the home
   redirect to the *first* repo, so against your dev DB (which has other imported repos)
   flows 02/04/05 land on the wrong repo and fail. That failure is the DB, not the UI —
