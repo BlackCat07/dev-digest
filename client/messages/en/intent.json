@@ -1,0 +1,18 @@
+{
+  "label": "Intent",
+  "unavailable": "Intent not derived yet.",
+  "unavailableHint": "Re-derive it to classify what this pull request is for.",
+  "card": {
+    "rederive": "Re-derive",
+    "deriving": "Deriving…",
+    "confidence": "Confidence",
+    "inScope": "In scope",
+    "outOfScope": "Out of scope",
+    "noneListed": "None listed.",
+    "missingContext": "Missing context",
+    "staleHeadSha": "Derived from an earlier commit — re-derive it for the current head.",
+    "failed": "Intent derivation failed.",
+    "error": "Couldn’t load the intent for this pull request.",
+    "riskAreas": "Risk areas"
+  }
+}

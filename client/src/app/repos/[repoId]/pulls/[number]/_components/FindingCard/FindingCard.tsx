@@ -61,6 +61,12 @@ export function FindingCard({
           <div style={s.titleRow}>
             <span style={s.title(muted, dismissed)}>{f.title}</span>
             <CategoryTag category={f.category as Category} />
+            {/* Only 'out_of_scope' is badged. In-scope needs no marker, and an
+                UNLABELLED finding (scope null — every finding written before the
+                Intent Layer) must look exactly as it did before. */}
+            {f.scope === "out_of_scope" && (
+              <span style={s.outOfScopeTag}>{t("finding.outOfScope")}</span>
+            )}
             {accepted && <span style={s.acceptedTag}>{t("finding.accepted")}</span>}
             {dismissed && <span style={s.dismissedTag}>{t("finding.dismissed")}</span>}
           </div>

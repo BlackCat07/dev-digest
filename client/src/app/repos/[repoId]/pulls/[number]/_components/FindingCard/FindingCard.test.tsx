@@ -82,3 +82,38 @@ describe("FindingCard (smoke, both themes)", () => {
     err.mockRestore();
   });
 });
+
+/**
+ * L03 — the scope badge (client spec Behaviour #13).
+ *
+ * The load-bearing half is the NEGATIVE case: an in-scope finding and an
+ * UNLABELLED one (every finding written before the Intent Layer, and every
+ * finding from a PR whose intent could not be derived) must render with no scope
+ * marker at all — visually identical to a pre-L03 card. A badge that appeared on
+ * those would relabel the entire existing findings history, and nothing else in
+ * the suite would notice.
+ */
+describe("FindingCard — out-of-scope badge", () => {
+  const OUT_OF_SCOPE = "out of scope";
+
+  it("badges a finding the reviewer labelled out_of_scope", () => {
+    renderWithIntl(<FindingCard f={{ ...FINDING, scope: "out_of_scope" }} onAction={() => {}} />);
+    expect(screen.getByText(OUT_OF_SCOPE)).toBeInTheDocument();
+  });
+
+  it("shows no scope marker for an in-scope finding", () => {
+    renderWithIntl(<FindingCard f={{ ...FINDING, scope: "in_scope" }} onAction={() => {}} />);
+    expect(screen.queryByText(OUT_OF_SCOPE)).not.toBeInTheDocument();
+  });
+
+  // Both spellings of "unlabelled": the column is nullish in the contract, so a
+  // row can arrive as null (written since the migration) or with the key absent
+  // (parsed from an older payload). Neither may be badged.
+  it.each([
+    ["null", { scope: null }],
+    ["absent", {}],
+  ])("shows no scope marker when scope is %s", (_label, patch) => {
+    renderWithIntl(<FindingCard f={{ ...FINDING, ...patch }} onAction={() => {}} />);
+    expect(screen.queryByText(OUT_OF_SCOPE)).not.toBeInTheDocument();
+  });
+});

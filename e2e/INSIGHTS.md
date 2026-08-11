@@ -113,6 +113,42 @@ An error string, its real cause, and the fix.
 
 <!-- append below -->
 
+- **2026-08-11** — **`✗ land on the PR list — Wait timed out after 25000ms` as the SECOND step
+  of a flow is the home redirect, not your flow.** Five flows open with the same pair —
+  `open {BASE}/` then `wait --url /pulls` — and the redirect behind it is a client-side
+  `router.replace` inside a `useEffect` that fires only once `useRepos` resolves
+  (`client/src/app/_components/HomeView/HomeView.tsx`). So the opener has just agent-browser's
+  own **25s ceiling** to complete in — `E2E_STEP_TIMEOUT` does not raise it, see the note in
+  `run.ts` — and whichever flow runs LAST is the one that meets a dev server busy recompiling
+  a root route it navigated away from ten flows ago. Flow 12 failed there while 11/12 passed;
+  inserting `wait --load networkidle` between the two steps, so the root's `GET /repos`
+  settles before the URL is asserted, made it 12/12. Same family as the 2026-08-06 entry above
+  (which prescribes the same settle for a click after `wait --url`) — treat a bare
+  `open` → `wait --url` pair as the harness's sharpest edge and always settle between them.
+  How to tell it apart from a real bug in one step, since `run.ts` has **no single-flow
+  filter**: bring the stack up by hand, then replay just that flow's `cmd` arrays through
+  `agent-browser` in a loop. All 30 of flow 12's steps passed that way while the suite run
+  had failed at step 2, which is conclusive. Evidence:
+  `specs/12-pr-smart-diff.flow.json` (the two `networkidle` settles), `run.ts` (`STEP_TIMEOUT`).
+
+- **2026-08-10** — **`✗ Wait timed out after 25000ms` on a `wait --text` whose text is visibly
+  on the screen means the CASING is wrong, not the screen.** `wait --text` matches the
+  **rendered** text, and CSS `text-transform: uppercase` changes what that is — so asserting
+  a message-catalogue string against an uppercase-styled label can never match. Flow 11 was
+  written with `wait --text "Intent"`, `"In scope"`, `"Confidence"`, `"Missing context"`,
+  `"Sources"`; every one of those renders uppercase, because `vendor/ui`'s `SectionLabel`
+  sets `textTransform: "uppercase"` and `IntentCard/styles.ts` does the same in its
+  `columnHead`, `blockLabel` and `metaLabel`. The flow could therefore never pass, on any
+  machine, while the feature was completely correct — the harness's own failure screenshot
+  (`test-results/11-pr-intent-fail.png`) showed the whole card rendered, which is what
+  separated this from a real regression in one step. Two things follow. Read the failure
+  screenshot BEFORE debugging the app: a timeout with a correct-looking screenshot is a
+  locator bug, and `agent-browser`'s message is identical either way. And when asserting a
+  styled label, take the casing from the rendered DOM, not from `messages/en/*.json` — the
+  uppercase is presentational, so the catalogue and the screen legitimately disagree.
+  Evidence: `specs/11-pr-intent.flow.json`,
+  `../client/src/vendor/ui/shell/SectionLabel.tsx`, `test-results/11-pr-intent-fail.png`.
+
 - **2026-08-06** — `✗ open the PR row — Command failed: agent-browser find text "Add rate
   limiting to public API endpoints" click` in flow **04 or 05** is a timing flake, not a
   broken screen — and the warning printed beside it names the wrong cause twice over.

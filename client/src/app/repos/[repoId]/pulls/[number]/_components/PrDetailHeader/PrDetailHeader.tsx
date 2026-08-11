@@ -44,7 +44,11 @@ export function PrDetailHeader({
         : "var(--warn)";
 
   return (
-    <div style={s.root}>
+    // `data-sticky-header` is read by the Smart Diff viewer (L03b), which measures
+    // this element's height so a scrolled-to diff line clears it. An attribute
+    // rather than a shared constant because the measurer is in another route
+    // subtree and this header owns no module the viewer could import.
+    <div data-sticky-header style={s.root}>
       <div style={s.titleRow}>
         <div style={s.titleCol}>
           <h1 style={s.h1}>

@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import type { PrIntent, Provider, Review, RunTrace, ToolCall, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
@@ -35,10 +35,64 @@ export type RunOutcome = {
 };
 
 /**
+ * The PR's intent, resolved ONCE for every queued run (L03).
+ *
+ * Two things travel together because they are produced by the same call and
+ * consumed in two different places: `block` is the pre-rendered prompt slot
+ * (`assemblePrompt` wraps it as untrusted and the engine never learns Intent's
+ * shape), and `call` is the leading `derive_intent` entry of the run trace's
+ * `tool_calls`, so one trace document shows both model calls in order.
+ */
+type ResolvedIntent = {
+  block: string;
+  call: ToolCall;
+};
+
+/**
+ * A derivation started alongside the diff load, and the moment it started.
+ *
+ * Already folded into a settled shape — the promise NEVER rejects — because the
+ * review may stop waiting for it (see {@link INTENT_INLINE_BUDGET_MS}), and an
+ * abandoned rejecting promise is how this API has died twice
+ * (`server/INSIGHTS.md`, 2026-08-06 / 2026-08-07).
+ */
+type IntentAttempt = { ok: true; intent: PrIntent } | { ok: false; error: string };
+
+type PendingIntent = {
+  attempt: Promise<IntentAttempt>;
+  startedAt: number;
+};
+
+/**
+ * How long a review is willing to WAIT for an intent it does not have yet.
+ *
+ * The derivation runs CONCURRENTLY with the diff load rather than after it, so
+ * on the normal path it costs a review nothing at all — by the time the diff is
+ * assembled the classifier has usually answered, and a PR whose intent is
+ * already fresh returns without a model call.
+ *
+ * This budget is what bounds the abnormal path. `INTENT_CALL_DEADLINE_MS` is
+ * 45s, sized for the JOB path where nobody is waiting; `executeRuns` runs
+ * outside `JobRunner`, so before this constant existed a slow classifier held
+ * EVERY queued agent for up to 45s before the first one started. 10s is roughly
+ * one model round-trip — the most a review should pay for a slot that is, by the
+ * feature's own rule, optional.
+ *
+ * Losing the race is not a failure and nothing is cancelled: the derivation
+ * keeps running under its own deadline, records itself on the `pr_intent` row
+ * (ok / partial / failed), and the next review of this PR finds it already
+ * there. The row cannot be left stuck on `running` by this path — the writer is
+ * the derivation, not the waiter — and `INTENT_STALE_AFTER_MS` remains the guard
+ * against a dead PROCESS, not against a routine timeout.
+ */
+const INTENT_INLINE_BUDGET_MS = 10_000;
+
+/**
  * Owns the background execution of queued agent runs (extracted from
- * ReviewService; behaviour unchanged). Loads the diff + intent once, then
- * map-reduces each agent, streaming events over the runBus and persisting each
- * review. Per-agent failures are isolated.
+ * ReviewService; behaviour unchanged). Loads the diff and derives the intent
+ * once — concurrently, and the intent only until the review's own budget runs
+ * out — then map-reduces each agent, streaming events over the runBus and
+ * persisting each review. Per-agent failures are isolated.
  */
 export class ReviewRunExecutor {
   constructor(
@@ -49,8 +103,9 @@ export class ReviewRunExecutor {
 
   /**
    * Background execution of the queued agent runs (NOT awaited by the route).
-   * Loads the diff + intent once, then map-reduces each agent, streaming events
-   * over the runBus and persisting each review. Per-agent failures are isolated.
+   * Loads the diff and derives the intent once, concurrently, then map-reduces
+   * each agent, streaming events over the runBus and persisting each review.
+   * Per-agent failures are isolated.
    */
   async executeRuns(
     workspaceId: string,
@@ -96,6 +151,16 @@ export class ReviewRunExecutor {
       }
     };
 
+    // The run's FIRST model call, started HERE — before the diff load and
+    // CONCURRENTLY with it, not after it. Both are shared pre-work for every
+    // queued agent, neither needs the other's result, and the intent is by the
+    // feature's own rule optional; awaiting it in sequence made every agent of
+    // every review wait for a classifier that has its own 45s ceiling.
+    //
+    // Nothing is awaited yet and nothing can throw: `startIntent` folds both
+    // outcomes into a resolved value.
+    const pendingIntent = this.startIntent(workspaceId, pull);
+
     let diff: UnifiedDiff;
     try {
       diff = await runLog.step('Loading PR diff', () => loadDiff(this.container, this.repo, workspaceId, pull, repo), {
@@ -104,8 +169,23 @@ export class ReviewRunExecutor {
     } catch (err) {
       runLog.error(`Failed to load PR diff: ${(err as Error).message}`);
       await failAll(`Failed to load PR diff: ${(err as Error).message}`);
+      // The derivation outlives this function on purpose: it records its own
+      // outcome on the `pr_intent` row, and abandoning it cannot reject.
       return;
     }
+
+    // Collect what the concurrent derivation produced, bounded by the review's
+    // own budget. Fanned out over every queued run like the diff above, so both
+    // model calls are visible in one Live Log and one trace.
+    //
+    // Deliberately NOT wrapped in failAll: `resolveIntent` never throws, and a
+    // review without an intent is a worse review, not a broken one.
+    const intent = await runLog.step(
+      'Deriving PR intent',
+      () => this.resolveIntent(pendingIntent, runLog),
+      { kind: 'tool' },
+    );
+
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
     for (const { agent, runId } of jobs) {
@@ -115,7 +195,16 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(
+          workspaceId,
+          pull,
+          repo,
+          diff,
+          intent,
+          agent,
+          runId,
+          runLog,
+        );
         logger?.info(
           {
             runId,
@@ -144,6 +233,7 @@ export class ReviewRunExecutor {
     pull: PullRow,
     repo: typeof schema.repos.$inferSelect,
     diff: UnifiedDiff,
+    intent: ResolvedIntent | undefined,
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
@@ -212,6 +302,14 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // L03 — the PR's derived intent and scope, PRE-RENDERED above. Same
+        // omit-when-empty contract as every slot around it: an agent with no
+        // intent produces a byte-identical prompt to the pre-L03 one, because
+        // assemblePrompt drops the whole "## Stated intent and scope" section
+        // (and with it the scope-labelling rule) rather than emitting an empty
+        // heading. The block is wrapped as untrusted THERE, in the one place
+        // this repo does that — never by hand here.
+        ...(intent ? { intent: intent.block } : {}),
         // L02 — linked skill bodies, same omit-when-empty contract. An agent
         // with no enabled skills therefore produces a byte-identical prompt to
         // the pre-L02 one: assemblePrompt drops the whole "## Skills / rules"
@@ -277,12 +375,18 @@ export class ReviewRunExecutor {
           grounding,
         },
         prompt_assembly: outcome.assembly,
-        tool_calls: outcome.chunks.map((c) => ({
-          tool: 'review_file',
-          args: c.label,
-          meta: outcome.mode,
-          ms: Math.round(durationMs / Math.max(outcome.chunks.length, 1)),
-        })),
+        // The intent derivation LEADS the list, ahead of the review calls, so
+        // one trace document shows the run's two distinct model calls in the
+        // order they happened. Absent when no intent was resolved.
+        tool_calls: [
+          ...(intent ? [intent.call] : []),
+          ...outcome.chunks.map((c) => ({
+            tool: 'review_file',
+            args: c.label,
+            meta: outcome.mode,
+            ms: Math.round(durationMs / Math.max(outcome.chunks.length, 1)),
+          })),
+        ],
         raw_output: outcome.raw,
         memory_pulled: [],
         specs_read: [],
@@ -336,6 +440,98 @@ export class ReviewRunExecutor {
       this.container.runBus.complete(runId);
       throw err;
     }
+  }
+
+  /**
+   * L03 — start the PR's derivation, without waiting for it.
+   *
+   * Called before the diff load so the two run concurrently. The staleness
+   * decision stays inside `IntentService.derive`, reached through the container:
+   * that method claims the row, bounds its one model call, records its own
+   * failure, and returns a fresh intent for the current head SHA without calling
+   * a model at all.
+   *
+   * Both outcomes are folded into a RESOLVED value here, at the moment the work
+   * starts, so that whoever stops waiting for it (or never waits at all, when
+   * the diff load fails) leaves behind a promise that cannot reject.
+   */
+  private startIntent(workspaceId: string, pull: PullRow): PendingIntent {
+    const startedAt = Date.now();
+    const attempt = this.container.intent.derive(workspaceId, pull.id).then(
+      (intent): IntentAttempt => ({ ok: true, intent }),
+      (err: Error): IntentAttempt => ({ ok: false, error: err.message }),
+    );
+    return { attempt, startedAt };
+  }
+
+  /**
+   * L03 — the PR's derived intent and scope, for the prompt and for the trace.
+   *
+   * Best-effort, exactly like `buildCallersDigest`, `buildRepoMapDigest` and
+   * `resolveSkills`: anything short of a usable intent emits ONE `runLog.info`
+   * and returns `undefined`. It must NEVER reach `failAll` — a review without an
+   * intent is a worse review, not a broken one, and the prompt then omits the
+   * section entirely.
+   *
+   * Three ways to end with no slot, all of them normal: the derivation failed,
+   * it produced a row with no intent text, or it had not answered within
+   * {@link INTENT_INLINE_BUDGET_MS}. Only the last one leaves work behind, and
+   * that work finishes on its own and writes the row.
+   */
+  private async resolveIntent(
+    pending: PendingIntent,
+    runLog: RunLogger,
+  ): Promise<ResolvedIntent | undefined> {
+    const settled = await Promise.race([pending.attempt, deadline(INTENT_INLINE_BUDGET_MS)]);
+    if (settled === null) {
+      runLog.info(
+        `intent: not derived within ${INTENT_INLINE_BUDGET_MS}ms — reviewing without it; ` +
+          `the derivation continues in the background and the next review will find it`,
+      );
+      return undefined;
+    }
+    if (!settled.ok) {
+      runLog.info(`intent: derivation failed — ${settled.error}`);
+      return undefined;
+    }
+    const intent = settled.intent;
+    const ms = Date.now() - pending.startedAt;
+
+    const block = renderIntentBlock(intent);
+    if (!block) {
+      runLog.info(`intent: none available (status=${intent.status}) — reviewing without it`);
+      return undefined;
+    }
+
+    const provider = intent.provider ?? 'unknown';
+    const model = intent.model ?? 'unknown';
+    const promptTokens = this.container.tokenizer.count(block);
+    // Provider, model, a token estimate, two counts and a status. NOTHING else:
+    // no prompt text, no source body, no diff line, no secret. `RunLogger.event`
+    // forwards this object VERBATIM into pino and this server configures no
+    // `redact` anywhere, so what is passed here is what lands in the log.
+    runLog.info(
+      `intent: ${provider}/${model} — ~${promptTokens} prompt token(s), ${intent.sources.length} source(s), status=${intent.status}`,
+      {
+        provider,
+        model,
+        promptTokens,
+        sources: intent.sources.length,
+        status: intent.status,
+        confidence: intent.confidence,
+        ms,
+      },
+    );
+
+    return {
+      block,
+      call: {
+        tool: 'derive_intent',
+        args: `${provider}/${model}`,
+        meta: `sources=${intent.sources.length} status=${intent.status}`,
+        ms,
+      },
+    };
   }
 
   /**
@@ -480,4 +676,55 @@ export class ReviewRunExecutor {
       log: this.container.runBus.buffer(runId).map((e) => ({ t: e.t, kind: e.kind, msg: e.msg })),
     };
   }
+}
+
+/**
+ * Resolves to `null` after `ms`, to be raced against work a run must not wait on.
+ *
+ * The timer is `unref`'d so a pending deadline can never hold the process open
+ * after the run has moved on — the loser of the race is abandoned, not
+ * cancelled, and Node would otherwise wait for it at shutdown.
+ */
+function deadline(ms: number): Promise<null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), Math.max(0, ms));
+    timer.unref?.();
+  });
+}
+
+/**
+ * Render a stored intent into the compact markdown block the prompt slot takes.
+ *
+ * Returns `undefined` when there is no intent TEXT — a row that is still
+ * `running`, or one that only exists to record a failure, has nothing to say to
+ * the reviewer, and an empty block would add a heading and the scope-labelling
+ * rule for no content.
+ *
+ * Deliberately description only: not one line of it instructs the model. The
+ * labelling instruction is `SCOPE_LABEL_RULE` in `reviewer-core`, appended to
+ * the system message when this slot is present — this text reaches the model
+ * inside the prompt builder's untrusted-data delimiters and is read as data,
+ * which is what makes the classifier's own output safe to re-inject. The
+ * delimiters are applied THERE, in the one place this repo applies them, and
+ * never by hand in this file.
+ */
+function renderIntentBlock(intent: PrIntent): string | undefined {
+  const text = intent.intent?.trim();
+  if (!text) return undefined;
+
+  const sections: string[] = [text];
+  const list = (heading: string, items: string[]) => {
+    const kept = items.map((i) => i.trim()).filter((i) => i.length > 0);
+    if (kept.length > 0) sections.push([`${heading}:`, ...kept.map((i) => `- ${i}`)].join('\n'));
+  };
+  list('In scope', intent.in_scope);
+  list('Out of scope', intent.out_of_scope);
+  // What we could not read, stated plainly — so the reviewer treats the scope
+  // above as incomplete rather than authoritative.
+  list('Context the classifier did not have', intent.missing_context);
+  sections.push(
+    `Derivation: confidence ${intent.confidence.toFixed(2)}, ` +
+      `${intent.sources.length} source(s), status ${intent.status}.`,
+  );
+  return sections.join('\n\n');
 }

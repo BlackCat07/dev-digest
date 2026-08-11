@@ -13,7 +13,18 @@ import type { Finding, UnifiedDiff } from '@devdigest/shared';
  * phantom, hook} as full-file: they only require the file to be present.
  */
 
-const FULL_FILE_KINDS = new Set(['secret_leak', 'lethal_trifecta', 'phantom', 'hook']);
+/**
+ * Finding kinds produced by full-file scanners rather than by reading a hunk.
+ * Exported because the scope guard (`review/scope.ts`) floors exactly these
+ * kinds to `in_scope` — one definition, shared, so the two gates can never
+ * disagree about what "full-file" means.
+ */
+export const FULL_FILE_KINDS: ReadonlySet<string> = new Set([
+  'secret_leak',
+  'lethal_trifecta',
+  'phantom',
+  'hook',
+]);
 
 export interface GroundingResult {
   kept: Finding[];

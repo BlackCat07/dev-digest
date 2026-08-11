@@ -147,7 +147,7 @@ export class ConventionsService {
     );
 
     const { model } = await resolveFeatureModel(
-      this.container,
+      this.container.db,
       workspaceId,
       CONVENTIONS_FEATURE_MODEL,
     );
@@ -277,7 +277,7 @@ export class ConventionsService {
       const categories = options.categories ?? SCAN_CATEGORIES;
       const extractTemplate = await loadTemplate('conventions.extract.system');
       const { provider, model } = await resolveFeatureModel(
-        this.container,
+        this.container.db,
         workspaceId,
         CONVENTIONS_FEATURE_MODEL,
       );
@@ -392,7 +392,7 @@ export class ConventionsService {
     try {
       const template = await loadTemplate('conventions.select.system');
       const { provider, model } = await resolveFeatureModel(
-        this.container,
+        this.container.db,
         workspaceId,
         CONVENTIONS_FEATURE_MODEL,
       );

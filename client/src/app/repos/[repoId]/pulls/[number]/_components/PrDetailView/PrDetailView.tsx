@@ -26,6 +26,7 @@ import { PrDetailHeader } from "../PrDetailHeader";
 import { OverviewTab } from "../OverviewTab";
 import { FindingsTab } from "../FindingsTab";
 import { DiffTab } from "../DiffTab";
+import type { DiffOrder } from "../SmartDiffViewer";
 import RunTraceDrawer from "../RunTraceDrawer";
 import { s } from "./styles";
 
@@ -72,6 +73,12 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
     );
   };
   const setTab = (t: string) => setParam("tab", t);
+  // The diff's grouping (L03b). In the URL, like `?tab` and `?trace`, so a link to
+  // this tab carries the reader's choice. The default is OMITTED rather than
+  // written as `?order=smart`, so an untouched URL stays clean; any unrecognised
+  // value falls back to `smart` rather than rendering nothing.
+  const order: DiffOrder = search.get("order") === "original" ? "original" : "smart";
+  const setOrder = (next: DiffOrder) => setParam("order", next === "smart" ? null : next);
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
@@ -144,7 +151,9 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
       />
 
       <div style={s.tabColumn}>
-        {tab === "overview" && <OverviewTab prBody={pr.body} />}
+        {tab === "overview" && (
+          <OverviewTab prId={prId} headSha={pr.head_sha} prBody={pr.body} />
+        )}
 
         {tab === "findings" && (
           <FindingsTab
@@ -176,6 +185,15 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
             prId={prId}
             filesCount={pr.files_count}
             files={pr.files}
+            additions={pr.additions}
+            deletions={pr.deletions}
+            // The review ROWS, not `allFindings`: the diff tab reduces them to the
+            // newest review per agent so a re-run replaces a file's badge rather
+            // than adding to it. `allFindings` deliberately sums every run, because
+            // the Agent-runs badge above must equal the PR list's FINDINGS column.
+            reviews={runs}
+            order={order}
+            onOrderChange={setOrder}
             canComment={pr.status === "open"}
           />
         )}

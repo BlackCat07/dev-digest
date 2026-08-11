@@ -46,6 +46,19 @@ export const s = {
     color: muted ? "var(--text-muted)" : "var(--text-primary)",
     textDecoration: dismissed ? "line-through" : "none",
   }),
+  /** Out-of-scope marker in the title row. Neutral, not a severity colour — a
+      finding outside the PR's stated scope is not a worse finding, and nothing
+      is ever dropped for carrying this label. */
+  outOfScopeTag: {
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    color: "var(--text-muted)",
+    border: "1px solid var(--border)",
+    borderRadius: 4,
+    padding: "1px 6px",
+  } satisfies CSSProperties,
   acceptedTag: { fontSize: 12, fontWeight: 600, color: "var(--ok)" } satisfies CSSProperties,
   dismissedTag: {
     fontSize: 12,

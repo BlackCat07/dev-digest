@@ -10,6 +10,7 @@ import { Review as ReviewSchema } from '@devdigest/shared';
 import { assemblePrompt } from '../prompt.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
 import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
+import { applyScopeGuard, scopeFloorReason } from './scope.js';
 
 /**
  * reviewPullRequest — the review engine entry point.
@@ -71,6 +72,13 @@ export interface ReviewInput {
   /** PR author's description/body (untrusted; truncated + delimiter-wrapped in
       the prompt). Empty/undefined → section omitted. */
   prDescription?: string;
+  /**
+   * The PR's derived intent and scope (L03), already rendered to a string by
+   * the caller — the engine performs no classification of its own. Untrusted;
+   * delimiter-wrapped in the prompt. Present ⇒ the reviewer is also asked to
+   * label each finding in/out of scope. Empty/undefined → section omitted.
+   */
+  intent?: string;
   /** Task framing line, e.g. "Review PR #482 …". */
   task?: string;
   /** Override the structured-output retry budget. */
@@ -135,11 +143,20 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     callers: input.callers,
     repoMap: input.repoMap,
     prDescription: input.prDescription,
+    intent: input.intent,
     task: input.task,
   };
 
   // Whole-diff assembly is the trace default; overwritten below for single-pass.
   let assembly: PromptAssembly = assemblePrompt({ ...promptParts, diff: input.diff.raw }).assembly;
+
+  // Did an intent block actually reach the prompt? Read back off the assembly
+  // rather than recomputed from `input.intent`, so this is literally the same
+  // fact the `## Stated intent and scope` slot keys on — `assemblePrompt` owns
+  // the definition of "present and non-blank" and the two cannot drift apart.
+  // The diff text differs per chunk but the intent slot does not, so deciding
+  // once here holds for every assembly built below.
+  const hasIntent = assembly.intent != null;
 
   const chunks =
     mode === 'map-reduce'
@@ -193,19 +210,50 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     `Reduced to ${merged.findings.length} finding(s); verdict=${merged.verdict}, score=${merged.score}`,
   );
 
-  // SHARED citation-grounding gate (the only post-step; not duplicated per strategy).
+  // SHARED citation-grounding gate (the first post-step; not duplicated per strategy).
   const ground = groundFindings(merged.findings, input.diff);
+  // ORDER IS LOAD-BEARING: the grounding summary is computed HERE, before any
+  // scope work, so `agent_runs.grounding` stays byte-identical for every input
+  // that produced a value before L03 existed.
   const grounding = groundingSummary(ground);
   for (const d of ground.dropped) {
     emit('info', `grounding dropped "${d.finding.title}": ${d.reason}`);
   }
   emit('result', `Citation grounding: ${grounding}`);
 
+  // Deterministic scope floor, applied ONLY when an intent block was supplied.
+  //
+  // No intent ⇒ nobody judged scope, so `Finding.scope` must stay absent rather
+  // than be back-filled with a judgement nobody made — the contract says exactly
+  // that ("Absent/null when no intent was available",
+  // `@devdigest/shared` contracts/findings.ts). No scope events are emitted
+  // either, so the whole no-intent path — prompt AND event stream — is
+  // byte-identical to the pre-L03 one, which is the omit-when-empty contract
+  // every optional slot in this engine already honours.
+  //
+  // With an intent it runs on the grounded set and changes LABELS only — same
+  // findings, same order, same count — which is why feeding its output to
+  // `scoreFromFindings` below leaves every existing score identical.
+  const scoped = hasIntent ? applyScopeGuard(ground.kept) : null;
+  if (scoped) {
+    for (const f of scoped.findings) {
+      const reason = scopeFloorReason(f);
+      // "Never go silent": a label the floor took away from the model is reported,
+      // exactly like a grounding drop.
+      if (reason) emit('info', `scope floor: "${f.title}" forced in_scope (${reason})`);
+    }
+    emit(
+      'result',
+      `scope: ${scoped.inScope} in-scope, ${scoped.outOfScope} out-of-scope (${scoped.forced} forced)`,
+    );
+  }
+  const findings = scoped?.findings ?? ground.kept;
+
   // Score is derived from the findings that SURVIVED grounding (not the model's
   // self-reported number, and not the pre-grounding set) so the score, the
   // findings list, and the deterministic event always agree.
   return {
-    review: { ...merged, findings: ground.kept, score: scoreFromFindings(ground.kept) },
+    review: { ...merged, findings, score: scoreFromFindings(findings) },
     grounding,
     dropped: ground.dropped,
     mode,

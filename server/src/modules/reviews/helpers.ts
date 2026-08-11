@@ -44,6 +44,12 @@ export function findingRowToDto(row: FindingRow): ReviewDtoFinding {
     suggestion: row.suggestion ?? null,
     confidence: row.confidence,
     kind: (row.kind as Finding['kind']) ?? 'finding',
+    // Null round-trips as null: an unlabelled finding must stay distinguishable
+    // from one the reviewer deliberately called in-scope. Null is what a run
+    // that carried no intent block produces for EVERY one of its findings — the
+    // scope guard only runs when an intent was supplied — and what a run that
+    // did carry one produces for anything the model left unlabelled.
+    scope: row.scope ?? null,
     trifecta_components: (row.trifectaComponents as Finding['trifecta_components']) ?? null,
     evidence: null,
     review_id: row.reviewId,

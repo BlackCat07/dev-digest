@@ -11,6 +11,8 @@
  *  - contracts/conventions ExtractedConvention, ConventionScan/Budget, the scan
  *                         and skill-generation payloads (L02; extends
  *                         ConventionCandidate, never edits it)
+ *  - contracts/intent     IntentSource, IntentStatus, PrIntent, DeriveIntentPayload
+ *                         (L03; extends PrIntentRecord, never edits it)
  *  - contracts/trace      RunTrace, RunEvent, RunLogLine (single-document trace)
  *  - contracts/platform   Settings, ConnTestResult, Repo, PrMeta/PrDetail, SpecFile, …
  *  - adapters             adapter interfaces + ModelInfo
@@ -25,6 +27,7 @@ export * from './contracts/brief.js';
 export * from './contracts/knowledge.js';
 export * from './contracts/skills.js';
 export * from './contracts/conventions.js';
+export * from './contracts/intent.js';
 export * from './contracts/trace.js';
 export * from './contracts/platform.js';
 export * from './contracts/why.js';

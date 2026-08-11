@@ -67,6 +67,39 @@ valuable one — the code does not record what was tried and abandoned.
 
 <!-- append below -->
 
+- **2026-08-11** — **Ranking a derived list by SIZE inverts the feature whose whole purpose
+  is that size is not importance.** Smart Diff's split suggestion bucketed the changed files
+  and sorted the buckets by changed lines, which is the obvious ordering and reads fine in
+  isolation. On the demo PR it put "Generated, tests & lock files" (940 lines) above
+  "Core: src/api" (300), so a too-big PR was advised to split its **lock file** out first —
+  the exact inversion the classifier exists to correct, produced by the one part of the
+  feature that had not been told about roles. Nothing else caught it: the partition
+  invariant held, every bucket was correct, and the totals were right. The fix is to sort by
+  ROLE first and only then by size, so the advice reads in the same order as the groups above
+  it. Generalises to any list this codebase derives from a mix of signals — if one signal is
+  the feature's thesis, it has to be the primary sort key, not a filter applied elsewhere
+  (here the roles only gated the `too_big` THRESHOLD, which felt like enough and was not).
+  Evidence: `src/modules/smart-diff/split.ts` (`buildSplitSuggestion`, the `ordered` sort),
+  `test/smart-diff-split.test.ts` ("orders splits by role first").
+
+- **2026-08-11** — **A fixture that reports its own size will lie for months, and changing
+  what a fixture CONTAINS silently invalidates every other fixture that describes it.** Two
+  halves, both found while giving `SEED_PR_FILES` real patch text. (1) `pull_requests` for PR
+  #482 hand-wrote `additions: 247, deletions: 38, filesCount: 9` over four `pr_files` rows
+  that summed to `126 / 8`. No gate, screen or test compares the two, so the PR header
+  contradicted the file list below it indefinitely; counting `+`/`-` lines out of each patch
+  and summing the rows for the PR row removes the whole class. (2) The knock-on was the
+  expensive part: `seedPrIntent` is a hand-written record of what a real derivation *would*
+  have produced, so adding patches made three of its claims false at once — a real
+  `collectSources` would now read a `hunk_headers` source (+0.05 weight → confidence
+  `0.40 → 0.45`), its `missing_context` line "No hunk headers were available" became
+  untrue, and its comment explaining the absent `deps` risk stopped applying now that
+  `package.json` is in the file list. One of those is asserted by a browser flow, so the
+  seed edit reached `e2e/specs/11-pr-intent.flow.json` too. Before editing seed MATERIAL,
+  grep the seed for every fixture derived from it and ask what each one now claims.
+  Evidence: `src/db/seed.ts` (`SEED_PR_PATCHES`, `countChanges`, `SEED_PR_TOTALS`,
+  `seedPrIntent`), `test/seed-pr-fixture.test.ts`.
+
 - **2026-08-06** — **`ORDER BY <score> DESC` with no tiebreaker reads as a UI feature, and
   the report will be "the row I clicked moves down the list".** `listCandidates` ordered on
   `confidence DESC` alone, and conventions tie constantly — a measured 62/62 is `1.0`, so is
@@ -123,6 +156,61 @@ valuable one — the code does not record what was tried and abandoned.
 Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
+
+- **2026-08-11** — **When an acceptance criterion is UNIVERSAL over a set ("a lock file is
+  always boilerplate"), the set has to be a named constant and the guard has to sit outside
+  the rule table — and both are provable rather than stylistic.** Smart Diff's classifier
+  walks a first-match-wins `[RegExp, role]` table; the tempting spelling is a lock-file row
+  at the top of it. That is quietly fragile in a way a test cannot see: the criterion then
+  holds only until someone inserts a broader pattern above it, and a lock file appearing in
+  `core` breaks no assertion that checks the other roles. Two things fixed it, and the second
+  is the surprising one. `LOCK_FILE_NAMES` is a list that `LOCK_FILE_PATTERN` is BUILT from,
+  so `test/smart-diff-classify.test.ts` iterates the classifier's own set and a name added
+  later is covered with no test edit. And the check is a statement ABOVE the loop, which is
+  **load-bearing, not belt-and-braces**: `pnpm-lock.yaml` and `package-lock.json` both match
+  the wiring block's config-by-extension catch-all (`.yaml`, `.json`) and nothing above it
+  matches them first, so the table alone really does misclassify them. That is asserted
+  directly ("is not redundant with the table") because a test that only called `classifyPath`
+  would pass either way. Evidence: `src/modules/smart-diff/classify.ts` (`classifyPath`),
+  `src/modules/smart-diff/constants.ts` (`LOCK_FILE_NAMES`, `ROLE_BY_PATH`).
+
+- **2026-08-11** — **A derived record is only as good as the WRITE ORDER around its trigger, and
+  in this codebase `GET /pulls/:id` is the only writer of a PR's body and files.** The Intent
+  Layer enqueued its derivation from `GET /repos/:id/pulls`; `pull_requests.body` is not in the
+  list upsert at all (the octokit list mapping drops it) and `pr_files` is written nowhere but
+  the detail route — so every import-time derivation classified the PR from its TITLE alone.
+  Measured on real data: 15 of 21 `pr_intent` rows had `sources = [pr_title]` at the confidence
+  floor, and two PRs derived 0.6s apart differed only in what happened to be in the DB at that
+  instant (one 46%, one 10%). Three properties made it permanent rather than merely unlucky: a
+  title-only derivation is `status: 'ok'` (nothing was *unfetched*, so it is not `partial`);
+  `needsDerivation` takes `Pick<IntentPull,'headSha'>` and is structurally blind to material
+  improving; and the only manual repair path was a button that sent no body. So when adding a
+  trigger for anything derived, ask which route WRITES the inputs and put the trigger there —
+  and if a freshness predicate keys on a version identifier alone, note that a cheap early
+  derivation at a stable identifier is cached forever. Evidence:
+  `src/modules/pulls/routes.ts` (the list upsert vs the detail `.set`),
+  `src/adapters/github/octokit.ts` (list mapping, no `body`),
+  `src/modules/intent/service.ts` (`needsDerivation`).
+
+- **2026-08-10** — **A helper that takes the whole `Container` puts every one of its callers
+  into an import cycle with the DI root, and the fix is to narrow the parameter, not to
+  restructure the callers.** `resolveFeatureModel(container, workspaceId, id)` only ever used
+  `container.db`, but taking the root meant it imported `platform/container.ts`, which imports
+  every module — so `modules/intent/service.ts → modules/settings/feature-models.ts →
+  platform/container.ts → modules/intent/service.ts` was a `no-circular` warning, plus a
+  `no-cross-module-internals` one for reaching into a sibling module at all. Changing the
+  parameter to `db: Db` removed the file from every cycle; having the composition root satisfy
+  a consumer-declared call signature (`FeatureModelResolver`) removed the cross-module edge
+  too, because the module then imports no sibling. Measured: 24 warnings → 22, with the
+  feature contributing none. Two things generalise. A service constructor taking the container
+  **twice** — once as its declared ports and once as "the root, for that one call" — is the
+  tell that a helper wants narrowing; `IntentService` had exactly that shape and lost its
+  second parameter as a result. And structural interfaces are what make this cheap: a
+  `Container` satisfies `IntentDeps` with no `implements` clause, so ports can be added and
+  narrowed without the root ever naming the module's types. Evidence:
+  `src/modules/settings/feature-models.ts` (`resolveFeatureModel`),
+  `src/platform/container.ts` (`featureModel`, `intent`), `src/modules/intent/sources.ts`
+  (`FeatureModelResolver`, `IntentDeps`).
 
 - **2026-08-06** — The conventions extractor is **pre-wired in four places, none of which
   mention "extractor"**, so searching for the feature name finds nothing and the parts get
@@ -220,6 +308,45 @@ Conventions and architectural decisions, each with the reason behind it.
 Dependency and tooling quirks.
 
 <!-- append below -->
+
+- **2026-08-10** — **No test file in this package is typechecked by any gate, so a test can
+  carry a real type error while `vitest` is fully green.** `tsconfig.json`'s `include` is
+  `["src/**/*.ts"]`, so the prescribed `tsc --noEmit -p tsconfig.json` never looks at `test/`;
+  vitest transpiles without typechecking; and `tsconfig.eslint.json` widens the include for
+  ESLint's parser only — type-aware lint rules do not surface `error TS`. Measured today:
+  `./node_modules/.bin/tsc --noEmit -p tsconfig.eslint.json` reports **16 errors across 6 test
+  files** (`prompt-callers` ×7, `skills.it` ×3, `repo-intel-facade-degraded` ×3,
+  `conventions.it`, `agents-versions.it`, `adapters`) while `vitest run` is 283/283 green.
+  Most are the same shape: a `readonly` tuple from an `as const` fixture assigned to a mutable
+  `string[]`/array field. This matters when a port's shape CHANGES: adding a required field to
+  a structural `IntentDeps` left `test/intent-sources.test.ts` missing `featureModel`, and
+  every gate — typecheck, eslint, the whole hermetic suite — stayed green, because the fixture
+  is only structurally wrong and the method under test never reads that field. So after
+  widening an injected interface, run `tsc --noEmit -p tsconfig.eslint.json` and diff the
+  error count; the suite passing is not evidence the fixtures still match. Evidence:
+  `tsconfig.json` (`include`), `tsconfig.eslint.json`, `test/intent-sources.test.ts`
+  (`depsFor`).
+
+- **2026-08-10** — **`dependency-cruiser`'s `modules-no-raw-sdk` rule is SDK-shaped and does
+  not list `node:fs`, so a feature module reading the disk directly is invisible to the one
+  gate that guards the adapters ring.** The rule enumerates `octokit`, `openai`, `postgres`
+  and friends; a module that does `import { readFile, realpath, stat } from 'node:fs/promises'`
+  passes with the gate reporting clean. Measured on this tree: `rg -n "node:fs" src/modules/`
+  returned 4 files across 3 modules while `depcruise` reported **0 errors**. Two of those were
+  `modules/conventions/` (L02) and `modules/intent/sources.ts` (L03), and both had
+  independently reimplemented the same clone-path confinement (`resolveInRoot` in
+  `conventions/verifier.ts`, `resolveInClone` in `intent/sources.ts`) — a security-relevant
+  rule with two copies and no gate over either. Worth knowing before writing the next one:
+  `GitClient.readFile(repo, path)` already exists on the port
+  (`adapters/git/simple-git.ts`) and is a one-liner over `clonePathFor`, but it joins and
+  reads in a single step, so it CANNOT express the post-`realpath` re-check that is the only
+  defence against a symlink escaping the clone — reaching for it as the fix silently drops
+  that check. What worked instead, without touching the frozen `src/vendor/shared/` contract:
+  the consumer declares the port (`RepoDocReader` in `modules/intent/sources.ts`), an adapter
+  implements it (`adapters/git/confined-doc.ts`), and the container wires the two, which the
+  adapter satisfies **structurally** so it imports nothing from `modules/`. Evidence:
+  `.dependency-cruiser.cjs` (`modules-no-raw-sdk`),
+  `src/adapters/git/confined-doc.ts`, `src/modules/conventions/verifier.ts` (`resolveInRoot`).
 
 - **2026-08-06** — A whole-suite `vitest run` **silently skips most `.it.test.ts` files even
   when Docker is up**, so a green run is not evidence the DB-backed half executed.

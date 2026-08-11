@@ -4,10 +4,16 @@ import { waitForPrRuns } from './helpers/runs.js';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
-import { MockLLMProvider, MockEmbedder, MockGitClient } from '../src/adapters/mocks.js';
+import {
+  MockLLMProvider,
+  MockEmbedder,
+  MockGitClient,
+  MockGitHubClient,
+} from '../src/adapters/mocks.js';
+import { INTENT_SCHEMA_NAME } from '../src/modules/intent/constants.js';
 import * as t from '../src/db/schema.js';
 import { eq } from 'drizzle-orm';
-import type { Review } from '@devdigest/shared';
+import type { ChatMessage, Review, StructuredRequest } from '@devdigest/shared';
 
 const hasDocker = await dockerAvailable();
 const d = hasDocker ? describe : describe.skip;
@@ -56,6 +62,62 @@ const REVIEW_FIXTURE: Review = {
       rationale: 'This line does not exist in the diff.',
       confidence: 0.5,
       kind: 'finding',
+    },
+  ],
+};
+
+/**
+ * L03 — what the intent classifier answers. Keyed on `INTENT_SCHEMA_NAME`
+ * wherever it is injected, never on the generic `structured` fixture.
+ */
+const INTENT_FIXTURE = {
+  intent: 'Add a token-bucket rate limiter in front of the public API.',
+  in_scope: ['Rate limiting middleware', 'Public API routes'],
+  out_of_scope: ['Authentication', 'Secret management'],
+  missing_context: ['No design document is linked.'],
+  // Empty on purpose: this suite is about scope labelling, not risk areas, and an
+  // empty list is a legitimate classifier answer.
+  risk_areas: [],
+  confidence: 0.8,
+};
+
+/**
+ * A review whose model deliberately labels BOTH findings out of scope, so one
+ * test covers the label surviving the DB round-trip and the deterministic floor
+ * overruling the model on the CRITICAL one. Both sit on line 11, the only line
+ * `DIFF` adds, so grounding keeps both and the scope column is what differs.
+ */
+const SCOPED_REVIEW_FIXTURE: Review = {
+  verdict: 'request_changes',
+  summary: 'A secret and a drive-by rename.',
+  score: 40,
+  findings: [
+    {
+      id: 'f-critical',
+      severity: 'CRITICAL',
+      category: 'security',
+      title: 'Hardcoded Stripe secret key',
+      file: 'src/config.ts',
+      start_line: 11,
+      end_line: 11,
+      rationale: 'A live Stripe key is committed in source.',
+      confidence: 0.95,
+      kind: 'finding',
+      // The model is WRONG here, and no filter may ever hide a CRITICAL.
+      scope: 'out_of_scope',
+    },
+    {
+      id: 'f-drive-by',
+      severity: 'WARNING',
+      category: 'style',
+      title: 'Drive-by rename unrelated to rate limiting',
+      file: 'src/config.ts',
+      start_line: 11,
+      end_line: 11,
+      rationale: 'Renaming this field is not part of the stated intent.',
+      confidence: 0.6,
+      kind: 'finding',
+      scope: 'out_of_scope',
     },
   ],
 };
@@ -110,18 +172,59 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     await pg?.stop();
   });
 
-  function appWith(structured: unknown, provider: 'openai' | 'anthropic' = 'openai') {
-    return buildApp({
+  /**
+   * Build the app with EVERY provider a review reaches faked — the agent's own
+   * and the intent classifier's.
+   *
+   * The second one is not optional and its absence was a live-billing bug. L03
+   * routes the classifier through
+   * `resolveFeatureModel(root, workspaceId, 'review_intent')`, whose registry
+   * default is now `openrouter/deepseek-v4-flash`, and NOT through the agent
+   * under test. `Container.llm` keys its test seam per provider id
+   * (`this.overrides.llm?.[id]`), so injecting only `{ openai: … }` left
+   * `openrouter` falling through to a real `OpenRouterProvider` built from
+   * `OPENROUTER_API_KEY`: on a machine that has one, every
+   * `POST /pulls/:id/review` issued a real, billed HTTPS request; on CI, which
+   * has none, the same call took the `ConfigError` path instead. The two
+   * environments ran different code, and the local one also overran
+   * `waitForPrRuns`' 10s budget — which returns non-terminal rows rather than
+   * failing, so the symptom surfaced as a null `cost_usd` and a missing trace.
+   *
+   * The fixture MUST be keyed on `INTENT_SCHEMA_NAME`:
+   * `MockLLMProvider.structuredBySchema` looks fixtures up by `schemaName` and
+   * silently falls back to the generic `structured` one, which would then fail
+   * `IntentClassification`'s parse instead of failing loudly here.
+   *
+   * `github` is injected for the same class of reason: the PR body below says
+   * "Closes #471", so `collectSources` dereferences a same-repo issue and would
+   * otherwise reach api.github.com with whatever real token the machine has.
+   */
+  async function appWithMocks(
+    structured: unknown,
+    provider: 'openai' | 'anthropic' = 'openai',
+    opts: { intent?: unknown } = {},
+  ) {
+    const reviewLlm = new MockLLMProvider(provider, { structured });
+    // The mock's own `id` is cosmetic — what resolves it is the key it is
+    // injected under, which is the id `resolveFeatureModel` returns.
+    const intentLlm = new MockLLMProvider('openai', {
+      structuredBySchema: { [INTENT_SCHEMA_NAME]: opts.intent ?? INTENT_FIXTURE },
+    });
+    const app = await buildApp({
       config: config(),
       db: pg.handle.db,
       overrides: {
         embedder: new MockEmbedder(),
         git: new MockGitClient({ diff: DIFF }),
-        llm: {
-          [provider]: new MockLLMProvider(provider, { structured }),
-        },
+        github: new MockGitHubClient(),
+        llm: { [provider]: reviewLlm, openrouter: intentLlm },
       },
     });
+    return { app, reviewLlm, intentLlm };
+  }
+
+  async function appWith(structured: unknown, provider: 'openai' | 'anthropic' = 'openai') {
+    return (await appWithMocks(structured, provider)).app;
   }
 
   it('agents CRUD', async () => {
@@ -418,4 +521,201 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     await app.close();
   });
 
+  // ---- L03: the Intent Layer, seen from a real run -------------------------
+
+  /**
+   * R10 + R9 — `scope` survives `insertFindings` → `reviewsForPull`, and the
+   * deterministic floor overrules the model on a CRITICAL.
+   *
+   * Only a full run can show this: `reviewer-core` proves `applyScopeGuard`
+   * relabels, and the repository proves it writes a column, but nothing else
+   * proves the executor carries the guard's output into `insertFindings` rather
+   * than the model's raw findings — a plausible bug that leaves both unit
+   * suites green and silently persists the model's `out_of_scope` on a CRITICAL.
+   */
+  it('persists each finding’s scope, with CRITICAL forced in_scope whatever the model said', async () => {
+    const app = await appWith(SCOPED_REVIEW_FIXTURE);
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Scoped', provider: 'openai', model: 'gpt-4.1', system_prompt: 'sys' },
+      })
+    ).json();
+
+    await app.inject({
+      method: 'POST',
+      url: `/pulls/${pr.id}/review`,
+      payload: { agentId: agent.id },
+    });
+    const runs = await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+    expect(runs[0]!.status).toBe('done');
+
+    const reviews = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/reviews` })).json();
+    const scopeByTitle = Object.fromEntries(
+      reviews[0].findings.map((f: { title: string; scope: string | null }) => [f.title, f.scope]),
+    );
+    expect(scopeByTitle).toEqual({
+      // The floor owns this one: the model labelled it out of scope and lost.
+      'Hardcoded Stripe secret key': 'in_scope',
+      // And a real out-of-scope label is not quietly normalised away.
+      'Drive-by rename unrelated to rate limiting': 'out_of_scope',
+    });
+
+    await app.close();
+  });
+
+  /**
+   * R18 — the run's TWO model calls are both visible in one trace, in order,
+   * and the intent reached the prompt.
+   *
+   * `tool_calls[0]` is the contract the Live Log and the trace viewer read: the
+   * derivation leads, the per-file review calls follow.
+   */
+  it('leads the trace with derive_intent and injects the intent into the prompt', async () => {
+    const app = await appWith(REVIEW_FIXTURE);
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Intentful', provider: 'openai', model: 'gpt-4.1', system_prompt: 'sys' },
+      })
+    ).json();
+
+    const runId = (
+      await app.inject({
+        method: 'POST',
+        url: `/pulls/${pr.id}/review`,
+        payload: { agentId: agent.id },
+      })
+    ).json().runs[0].run_id as string;
+    const runs = await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+    expect(runs[0]!.status).toBe('done');
+
+    const trace = (await app.inject({ method: 'GET', url: `/runs/${runId}/trace` })).json();
+    expect(trace.tool_calls[0].tool).toBe('derive_intent');
+    expect(trace.tool_calls.length).toBeGreaterThan(1);
+    // Everything after it is the review itself — the derivation is not repeated
+    // per file and does not trail the review calls.
+    expect(trace.tool_calls.slice(1).map((c: { tool: string }) => c.tool)).toEqual(
+      trace.tool_calls.slice(1).map(() => 'review_file'),
+    );
+
+    expect(trace.prompt_assembly.intent).not.toBeNull();
+    expect(trace.prompt_assembly.intent).toContain(INTENT_FIXTURE.intent);
+    const user = trace.prompt_assembly.user as string;
+    expect(user).toContain('## Stated intent and scope');
+    expect(user.indexOf('## Stated intent and scope')).toBeLessThan(user.indexOf('## Diff to review'));
+
+    await app.close();
+  });
+
+  /**
+   * The other half, and the one the feature's own rule turns on: a review whose
+   * intent derivation FAILS still completes. A missing intent is a worse review,
+   * never a broken one — so the run reaches `done`, the prompt omits the slot
+   * entirely, and the failure is recorded on the `pr_intent` row instead.
+   */
+  it('completes a run whose intent derivation failed, with no intent slot in the prompt', async () => {
+    // A fixture that cannot satisfy `IntentClassification`, so the classifier
+    // call throws exactly where a real malformed answer would.
+    const { app } = await appWithMocks(REVIEW_FIXTURE, 'openai', { intent: { nonsense: true } });
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'NoIntent', provider: 'openai', model: 'gpt-4.1', system_prompt: 'sys' },
+      })
+    ).json();
+
+    const runId = (
+      await app.inject({
+        method: 'POST',
+        url: `/pulls/${pr.id}/review`,
+        payload: { agentId: agent.id },
+      })
+    ).json().runs[0].run_id as string;
+    const runs = await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+    expect(runs[0]!.status).toBe('done');
+
+    const trace = (await app.inject({ method: 'GET', url: `/runs/${runId}/trace` })).json();
+    expect(trace.prompt_assembly.intent).toBeNull();
+    expect(trace.prompt_assembly.user).not.toContain('## Stated intent and scope');
+    expect(trace.tool_calls[0].tool).toBe('review_file');
+
+    // The failure is recorded where the card reads it, not swallowed.
+    const [row] = await pg.handle.db
+      .select()
+      .from(t.prIntent)
+      .where(eq(t.prIntent.prId, pr.id));
+    expect(row!.status).toBe('failed');
+    expect(row!.error).toBeTruthy();
+
+    // And nothing was labelled: the scope guard runs only with an intent.
+    const reviews = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/reviews` })).json();
+    expect(reviews[0].findings.every((f: { scope: string | null }) => f.scope === null)).toBe(true);
+
+    await app.close();
+  });
+
+  /**
+   * R2, the acceptance item — «у його запиті немає повних тіл змін».
+   *
+   * The classifier gets paths, counts and `@@` headers; it never gets a diff
+   * body. Asserted over the messages `MockLLMProvider` recorded, because that is
+   * the only place the REQUEST is visible — the audit trail on `pr_intent` says
+   * what we meant to send, not what we sent.
+   *
+   * The system message is excluded on purpose: it is our own markdown and its
+   * bullets legitimately start with `-`. The user message is the one carrying
+   * repository-derived material, and it is the one under the rule.
+   */
+  it('sends the classifier hunk headers and no diff body line', async () => {
+    const { app, intentLlm } = await appWithMocks(REVIEW_FIXTURE);
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Auditor', provider: 'openai', model: 'gpt-4.1', system_prompt: 'sys' },
+      })
+    ).json();
+
+    await app.inject({
+      method: 'POST',
+      url: `/pulls/${pr.id}/review`,
+      payload: { agentId: agent.id },
+    });
+    await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+
+    const call = intentLlm.calls.find(
+      (c) =>
+        c.method === 'completeStructured' &&
+        (c.req as StructuredRequest<unknown>).schemaName === INTENT_SCHEMA_NAME,
+    );
+    expect(call).toBeDefined();
+    const messages = (call!.req as StructuredRequest<unknown>).messages as ChatMessage[];
+    const userText = messages
+      .filter((m) => m.role === 'user')
+      .map((m) => m.content)
+      .join('\n');
+
+    // It DID get the headers — otherwise "no diff body" would pass on an empty
+    // prompt, which is the way this assertion fails open.
+    expect(userText).toContain('@@ -10,3 +10,4 @@');
+    expect(userText).toContain('src/config.ts');
+
+    // …and nothing else from the patch. `+++`/`---` are file markers, not content.
+    const bodyLines = userText
+      .split('\n')
+      .filter((line) => /^[+-]/.test(line) && !/^(\+\+\+|---)/.test(line));
+    expect(bodyLines).toEqual([]);
+    // The line the diff actually adds, named explicitly.
+    expect(userText).not.toContain('sk_live_xxx');
+
+    await app.close();
+  });
 });

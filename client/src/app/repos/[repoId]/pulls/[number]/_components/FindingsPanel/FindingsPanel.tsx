@@ -11,10 +11,12 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Toggle, EmptyState } from "@devdigest/ui";
-import type { FindingRecord, Severity } from "@devdigest/shared";
+import type { FindingRecord, FindingScope, Severity } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
 import { SeverityFilter } from "../SeverityFilter";
+import { ScopeFilter } from "../ScopeFilter";
 import { countBySeverity } from "@/lib/severity";
+import { countByScope } from "@/lib/scope";
 import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
 import { KEY_TO_ACTION } from "./constants";
 import { visibleFindings } from "./helpers";
@@ -37,18 +39,23 @@ export function FindingsPanel({
   // ISOLATE filter, local to this run: a level means "only this level", null
   // means no filtering.
   const [severity, setSeverity] = React.useState<Severity | null>(null);
+  // The scope filter is a SECOND, orthogonal isolate. It defaults to null on
+  // purpose: with nothing set, in-scope, out-of-scope and unlabelled findings
+  // all render — this feature annotates, it never drops.
+  const [scope, setScope] = React.useState<FindingScope | null>(null);
   const [focusIdx, setFocusIdx] = React.useState(0);
 
   const counts = React.useMemo(() => countBySeverity(findings), [findings]);
+  const scopeCounts = React.useMemo(() => countByScope(findings), [findings]);
 
   const shown = React.useMemo(
-    () => visibleFindings(findings, hideLow, severity),
-    [findings, hideLow, severity],
+    () => visibleFindings(findings, hideLow, severity, scope),
+    [findings, hideLow, severity, scope],
   );
 
   // Filtering shrinks `shown`, but focusIdx isn't otherwise reset — leaving the
   // j/k cursor pointing past the end, so no card looks focused.
-  React.useEffect(() => setFocusIdx(0), [severity, hideLow]);
+  React.useEffect(() => setFocusIdx(0), [severity, scope, hideLow]);
 
   // j/k navigation + a/d shortcuts on the focused finding (keyboard).
   React.useEffect(() => {
@@ -70,7 +77,11 @@ export function FindingsPanel({
       <div style={s.toolbar}>
         {/* Nothing to filter in an empty run — show just its empty state. */}
         {findings.length > 0 && (
-          <SeverityFilter counts={counts} active={severity} onChange={setSeverity} />
+          <>
+            <SeverityFilter counts={counts} active={severity} onChange={setSeverity} />
+            <div style={s.divider} />
+            <ScopeFilter counts={scopeCounts} active={scope} onChange={setScope} />
+          </>
         )}
         <div style={s.toggleGroup}>
           {t("panel.hideLowConfidence")}

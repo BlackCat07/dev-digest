@@ -1,6 +1,6 @@
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { Finding, Intent, RunSummary, RunTrace } from '@devdigest/shared';
+import type { Finding, PrIntent, RunSummary, RunTrace } from '@devdigest/shared';
 
 /**
  * A2 — review data-access. The ONLY layer touching the DB for the review
@@ -125,13 +125,30 @@ export class ReviewRepository {
     return reviewRepo.setFindingDismissed(this.db, findingId, at);
   }
 
-  // ---- intent -------------------------------------------------------------
+  // ---- intent (L03) -------------------------------------------------------
+  //
+  // The Intent module owns NO repository. `pr_intent` belongs to this one — it
+  // is a row hanging off a pull request, in the same aggregate as the reviews
+  // and findings around it — and every module reaches it through
+  // `container.reviewRepo`. See the note above the queries in
+  // `./repository/pull.repo.ts`.
 
-  upsertIntent(prId: string, intent: Intent): Promise<void> {
-    return pullRepo.upsertIntent(this.db, prId, intent);
+  /** Write one derivation (insert-or-update on pr_id). */
+  upsertIntent(prId: string, values: pullRepo.IntentUpsert): Promise<void> {
+    return pullRepo.upsertIntent(this.db, prId, values);
   }
 
-  getIntent(prId: string): Promise<Intent | undefined> {
+  /** Mark a derivation in flight against `headSha`, keeping the last good one. */
+  markIntentRunning(prId: string, headSha: string, at?: Date): Promise<void> {
+    return pullRepo.markIntentRunning(this.db, prId, headSha, at);
+  }
+
+  /** Record that a derivation did not complete; the row survives to say so. */
+  failIntent(prId: string, error: string, at?: Date): Promise<void> {
+    return pullRepo.failIntent(this.db, prId, error, at);
+  }
+
+  getIntent(prId: string): Promise<PrIntent | undefined> {
     return pullRepo.getIntent(this.db, prId);
   }
 

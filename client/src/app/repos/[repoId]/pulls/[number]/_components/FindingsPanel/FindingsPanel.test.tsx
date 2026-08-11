@@ -129,3 +129,42 @@ describe("FindingsPanel — severity isolate filter", () => {
     expect(screen.getByText("No findings match")).toBeInTheDocument();
   });
 });
+
+describe("FindingsPanel — scope isolate filter", () => {
+  // The scope row is a SECOND, orthogonal isolate beside the severity chips, and
+  // this panel owns its state, so these drive the real chips. The third finding
+  // is UNLABELLED on purpose: it stands for every finding written before the
+  // Intent Layer.
+  const SCOPED: FindingRecord[] = [
+    { ...FINDINGS[0]!, scope: "in_scope" },
+    { ...FINDINGS[1]!, scope: "out_of_scope" },
+    { ...FINDINGS[1]!, id: "f3", title: "Limiter has no test", severity: "SUGGESTION" },
+  ];
+
+  it("counts only LABELLED findings, so the two chips can sum to less than the list", () => {
+    renderWithIntl(<FindingsPanel findings={SCOPED} prId="pr1" />);
+    expect(screen.getByRole("button", { name: /In scope\s*1/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Out of scope\s*1/ })).toBeInTheDocument();
+    // 1 + 1, with three findings on screen — the unlabelled one is in neither
+    // bucket, and is still shown.
+    expect(screen.getByText("Hardcoded secret")).toBeInTheDocument();
+    expect(screen.getByText("N+1 query")).toBeInTheDocument();
+    expect(screen.getByText("Limiter has no test")).toBeInTheDocument();
+  });
+
+  it("isolating a scope hides the unlabelled findings too, until the chip is cleared", () => {
+    renderWithIntl(<FindingsPanel findings={SCOPED} prId="pr1" />);
+    fireEvent.click(screen.getByRole("button", { name: /In scope/ }));
+
+    expect(screen.getByText("Hardcoded secret")).toBeInTheDocument();
+    expect(screen.queryByText("N+1 query")).not.toBeInTheDocument();
+    // The sharp edge: "show only in-scope" excludes anything that does not
+    // actually carry the label.
+    expect(screen.queryByText("Limiter has no test")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /In scope/ }));
+    expect(screen.getByText("Hardcoded secret")).toBeInTheDocument();
+    expect(screen.getByText("N+1 query")).toBeInTheDocument();
+    expect(screen.getByText("Limiter has no test")).toBeInTheDocument();
+  });
+});
