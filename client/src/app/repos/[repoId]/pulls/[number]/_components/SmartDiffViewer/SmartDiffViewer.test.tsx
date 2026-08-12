@@ -311,6 +311,31 @@ describe("SmartDiffViewer — where a badge leads", () => {
     expect(opened).toEqual(["major"]);
   });
 
+  /**
+   * A style assertion, and it earns its place: without it this button is
+   * unreachable in a way nothing else notices.
+   *
+   * `PrDetailHeader` is `position: sticky` over the `<main>` that scrolls, so
+   * anything that scrolls a badge into view — Tab-focusing it from further down the
+   * diff, an automated click — lands it UNDER that header. Measured on the running
+   * app: the button at `top: 52` beneath a ~128px header, with
+   * `document.elementFromPoint` at its centre returning the header rather than the
+   * button. A keyboard user focuses a control they cannot see; a click at that point
+   * is swallowed with no error at all (it cost two red CI runs — `e2e/INSIGHTS.md`,
+   * 2026-08-12). The value must stay the MEASURED variable: the header's height
+   * varies per PR, so a constant lands some of them back under it.
+   */
+  it("keeps its badges clear of the sticky header when scrolled to", () => {
+    const { container } = mount({ findings: [finding(), finding({ id: "f-line" })] });
+    const badges = [...container.querySelectorAll("button")].filter((b) =>
+      (b.getAttribute("aria-label") ?? "").startsWith("Open t"),
+    );
+    expect(badges.length).toBeGreaterThan(1); // the file's badge AND the line's tag
+    for (const badge of badges) {
+      expect(badge.style.scrollMarginTop).toContain("--dd-sticky-h");
+    }
+  });
+
   it("navigates nowhere on a plain disclosure toggle", () => {
     mount({ findings: [finding()] });
     fireEvent.click(screen.getByText("package-lock.json").closest("button")!);

@@ -113,6 +113,29 @@ An error string, its real cause, and the fix.
 
 <!-- append below -->
 
+- **2026-08-12** — **The real cause of that failure was the STICKY HEADER, not the re-render:
+  agent-browser scrolls a target into view and clicks its CENTRE, and this app's header sits
+  over that point.** Supersedes the diagnosis in the entry below (the `wait --fn` barrier it
+  prescribes is a sound guard for a different race, but it did not fix anything — the flow
+  failed identically with it in place, which is what forced a real measurement instead of a
+  second theory). `PrDetailHeader` is `position: sticky` at the top of the `<main>` that
+  scrolls, ~128px tall; a badge that needed scrolling ended at `top: 52`, so
+  `document.elementFromPoint` at the button's centre returned the HEADER, the click landed
+  there, and `find … click` exited 0 with nothing having happened. Two things make this
+  expensive to find: it depends on whether the target was already in view, so it passes on
+  one viewport and fails on another — locally every attempt passed until the page was
+  deliberately scrolled away from the badge first (`agent-browser scroll down 4000`), which
+  reproduced CI exactly, `✓ Done` and an unchanged URL. And the failing STEP is the one after
+  the click, so the log points at the assertion rather than at the click. The fix belongs in
+  the app, not the flow, and is a real accessibility fix: the button carries
+  `scrollMarginTop` off the header's measured height, so Tab-focusing it from further down
+  the diff no longer parks it under the header either — verified by the same probe going
+  from `{top: 52, inButton: false}` to `{top: 196, inButton: true}`. **Probe to reuse when a
+  green click does nothing:** scroll the element into view, then ask `elementFromPoint` at
+  its centre whether the answer is inside the element. Evidence:
+  `../client/src/app/repos/[repoId]/pulls/[number]/_components/SmartDiffViewer/_components/FindingJumpBadge/styles.ts`,
+  `../client/src/lib/sticky-offset.ts`, `specs/12-pr-smart-diff.flow.json`, run 31599113842.
+
 - **2026-08-12** — **A `find … click` that prints `✓ Done` proves a click was DISPATCHED, not
   that anything received it — so the step that fails is the one AFTER the guilty one.** Flow
   12 clicked a findings badge (step 220, green) and then timed out waiting for the URL it

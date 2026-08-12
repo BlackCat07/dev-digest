@@ -166,6 +166,18 @@ and `FindingCard` reads them. `--sd-sticky-h` became `--dd-sticky-h` with the mo
 The row DOM ids stayed: they cost nothing and they are what keeps the reverse link
 (below) a one-component change.
 
+**A badge needs `scroll-margin-top`, and that turned out to be an accessibility
+fix.** `PrDetailHeader` is `position: sticky` over the `<main>` that scrolls, so
+anything scrolling a badge into view — Tab-focusing it from further down the diff,
+or an automated click — parks it *under* the header: measured at `top: 52` beneath a
+~128px header, with `elementFromPoint` at the button's centre returning the header.
+A keyboard user focuses a control they cannot see, and a click there is swallowed in
+silence. Both badges therefore carry the measured `scrollMarginTop`, which is also
+why `SmartDiffViewer` still publishes the offset even though nothing in the tab
+scrolls itself any more. Found the expensive way — two red e2e runs
+(`e2e/INSIGHTS.md`, 2026-08-12) — and pinned by a style assertion in
+`SmartDiffViewer.test.tsx`.
+
 **Openness on the receiving side is a lazy initial state, for the same reason the
 diff's is not an effect.** The run holding the target must be open on its FIRST
 render, because the card scrolls itself into view and cannot do that while unmounted
