@@ -258,6 +258,24 @@ An error string, its real cause, and the fix.
   `specs/12-pr-smart-diff.flow.json` (step "click the findings badge on a flagged file"),
   `run.ts` (`urlAtFailure`).
 
+- **2026-08-12** — **The detachment fix above did NOT hold either: run 31605913685 failed the
+  same way with the badge clicked BEFORE any remount, and its artifact shows the page scrolled
+  TO the badge** — so this time the target was attached, found and scrolled to, and the click
+  still navigated nothing. That refutes, in order: timing (four settle steps + a passed
+  hittability probe ahead of the click), geometry (the probe centres the badge and checks
+  `elementFromPoint`), staleness (no remount had happened yet), and the app (the same build
+  routes on every local click, and the PR-row and tab-bar clicks in the SAME CI run navigate
+  fine). What is left is the locator engine: `find role button --name … click` swallowing the
+  click on CI Linux specifically, which is the second `find role` CI-only anomaly this suite
+  has hit (see Open Questions, 2026-08-07). The flow no longer clicks the badge — the click
+  contract moved down to component tests (`SmartDiffViewer.test.tsx` badge→id,
+  `FindingsPanel.test.tsx` targeted-card expansion, `FindingCard.test.tsx` scroll landing),
+  with the two-line `PrDetailView.openFinding` glue named in the flow description as the one
+  seam that leaves unpinned. Full click version preserved at commit 9cb8385 if the engine
+  anomaly is ever resolved. Supersedes 2026-08-12 (the detachment entry above) as the
+  diagnosis; the probe pattern and the `url at failure:` runner line it introduced stay.
+  Evidence: `specs/12-pr-smart-diff.flow.json` (description), run 31605913685's artifact.
+
 ## Session Notes
 
 Dated summaries, for when the shape of a session is itself the lesson.
@@ -287,3 +305,19 @@ Left unresolved, stated precisely enough for the next session to pick up.
   `<div>` in `NavItem`, or the `/pulls` screen specifically. Evidence:
   `specs/10-conventions.flow.json`, `../client/src/vendor/ui/shell/NavItem.tsx`,
   run 31168422411.
+
+- **2026-08-12** — **Second `find role` CI-only anomaly, worse than the first: the 2026-08-07
+  case matched NOTHING (loud), this one matches something and clicks it into the VOID
+  (silent).** On CI Linux only, `find role button click --name "Open the finding in
+  src/api/users.ts in the Agent runs tab"` exits 0 and no `onClick` fires — four consecutive
+  runs (31599113842, 31600061139, 31600976140, 31605913685), while `find text` clicks and
+  `find role button --name "Files changed"` in the SAME runs work. Everything app- and
+  flow-side is ruled out; the trail is in Recurring Errors (three 2026-08-12 entries).
+  Unresolved and stated for pickup: (1) the failing runs' LOGS — which now carry `run.ts`'s
+  `url at failure:` line — need an authenticated `gh run view --log`; anonymous API 403s
+  log downloads, though `nightly.link` serves the artifact ZIP. (2) A minimal repro against
+  agent-browser upstream would need a GH-hosted runner, since six local environments
+  (including linux/amd64 + Chrome-for-Testing + 0.34.0 via this exact runner) cannot
+  trigger it. (3) If the engine is fixed, flow 12's full click version lives at commit
+  9cb8385. Evidence: `specs/12-pr-smart-diff.flow.json` (description), `run.ts`
+  (`urlAtFailure`).
