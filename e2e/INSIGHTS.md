@@ -107,6 +107,27 @@ Dependency and tooling quirks.
   server (2026-08-03): three writers, one `.next`. Gate order matters — run e2e *before*
   `pnpm build`, or clear the directory between them. Evidence: `../scripts/e2e.sh:148`.
 
+- **2026-08-12** — **A red CI run on a public repo is fully diagnosable with NO `gh auth`.**
+  `api.github.com/repos/<o>/<r>/actions/runs?branch=…`, `…/runs/<id>/jobs` (per-step ✓/✗)
+  and `…/runs/<id>/artifacts` all answer anonymously; what 403s without a token is the log
+  download AND the artifact download — and the artifact ZIP comes through
+  `https://nightly.link/<o>/<r>/actions/runs/<id>/<artifact-name>.zip` instead. For this
+  suite the artifact IS the failure screenshot `run.ts` uploads, and one look at it settled
+  what three theory-driven fix commits had not (see Recurring Errors, 2026-08-12 below):
+  it showed the page's scroll position, which no log line carries. Evidence: `run.ts`
+  (the failure screenshot), `../.github/workflows/e2e-web.yml` ("Upload failure artifacts").
+
+- **2026-08-12** — **`agent-browser get cdp-url` exposes the daemon's browser WebSocket, and
+  raw CDP over it works** — `Target.getTargets` → `Target.attachToTarget {flatten:true}` →
+  `Emulation.setCPUThrottlingRate {rate:20}` starves the live page's renderer x20 without
+  touching the harness, which is the right first probe for a "slow CI runner" theory about
+  a CI-only failure. Remember to set the rate back to 1: it sticks to the page for the
+  daemon's lifetime, and the whole suite shares that one session. On flow 12 it did NOT
+  reproduce the CI failure, which is what demoted every timing theory and left node
+  detachment as the only mechanism consistent with the artifact. Evidence:
+  `specs/12-pr-smart-diff.flow.json` (the investigation it served), `run.ts` (the shared
+  daemon session).
+
 ## Recurring Errors & Fixes
 
 An error string, its real cause, and the fix.
@@ -212,6 +233,30 @@ An error string, its real cause, and the fix.
   and a `wait --load networkidle` before the click would settle it properly. Evidence:
   `../server/src/modules/pulls/routes.ts:87`, `specs/04-pr-findings.flow.json`,
   `specs/05-pr-diff.flow.json`.
+
+- **2026-08-12** — **A CI-only "click exited 0, nothing happened" that no local environment
+  reproduces is `find` resolving a node a remount already DETACHED — and the failure
+  screenshot proves it through the scroll that ISN'T there.** Supersedes 2026-08-12 (the
+  sticky-header entry above) as the diagnosis of flow 12's CI failure: that fix is real and
+  stays (a scrolled-to badge does land clear of the header, and Tab-focus needed it too),
+  but CI failed identically with it shipped — three straight runs on two commits
+  (31599113842, 31600061139, 31600976140). The pin: `find … click` exits 0, the URL never
+  changes, and the artifact screenshot ~30s later shows the page still at scroll TOP, yet
+  the badge sits at y≈1050 in a 577px viewport — a click that reached anything attached
+  would have scrolled. `scrollIntoView` + click on a detached node is a silent no-op, and
+  the only remount between the flow's barrier and its click was Original order replacing
+  the card subtree. Six configurations would not reproduce it (macOS dev + prod, this exact
+  runner in a linux/amd64 container against a prod build, agent-browser 0.33.2 and 0.34.0,
+  a x20 CDP CPU throttle), so the fix is structural, not another wait: the badge click
+  moved BEFORE the order flip — a subtree that has never re-rendered cannot offer a stale
+  node — with a `wait --fn` hittability probe in front of it (scroll to centre, then
+  `elementFromPoint` must land inside the button), so a swallowed click now times out at
+  ITS step instead of the assertion after it; the flip moved to the tail behind the same
+  settle depth the tab-switch remount already survives in CI; and `run.ts` now appends
+  `url at failure:` to every failed step, which is the one line that separates "never
+  routed" from "routed, wrong locator" without downloading the artifact. Evidence:
+  `specs/12-pr-smart-diff.flow.json` (step "click the findings badge on a flagged file"),
+  `run.ts` (`urlAtFailure`).
 
 ## Session Notes
 
