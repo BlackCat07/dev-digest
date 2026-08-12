@@ -1,8 +1,8 @@
 # Smart Diff
 
 A reviewer opening **Files changed** sees the pull request's business logic first,
-generated files last and collapsed, and can click a finding's badge to land on the
-line it is about.
+generated files last and collapsed, and can click a finding's badge to open that
+finding's card in the **Agent runs** tab.
 
 ## Behaviour
 
@@ -27,18 +27,28 @@ The `?tab=diff` tab of the PR detail screen.
 7. **A file with findings carries a badge** reading "N findings" (or "1 finding"),
    led by the file's worst severity worded as *blocker* / *warning* / *suggestion*.
    It is a real button: reachable by Tab, activated by Enter or Space.
-8. **Clicking the badge opens the file if collapsed and scrolls the diff to the
-   first finding's line**, clearing the sticky PR header. Clicking the same badge
-   again scrolls again.
+8. **Clicking it opens that finding's card in the Agent runs tab** — the file badge
+   opens the file's **worst** finding, through the app's own router
+   (`?tab=findings&finding=<id>`, a `push` so Back returns to the file being read).
+   Not a popup, not a github.com link, and not a scroll to somewhere else in this
+   file: the card is where a finding is actually read — rationale, suggested fix,
+   accept/dismiss — and none of that fits beside a line of diff.
 9. **Lines carrying a finding are decorated** with a coloured left edge across the
-   finding's whole range, and the range's first line carries a severity tag. Only one
-   tag fits on a row, so a line hosting several findings shows the **worst** severity
-   with a `×N` multiplier — without it the visible tags undercount and a file header's
-   total cannot be reconciled with the rows below it (measured on a real PR: 31
-   findings landed on 23 distinct lines).
+   finding's whole range, and the range's first line carries a severity tag, which is
+   **itself a button** leading to that line's worst finding. Only one tag fits on a
+   row, so a line hosting several findings shows the **worst** severity with a `×N`
+   multiplier — without it the visible tags undercount and a file header's total
+   cannot be reconciled with the rows below it (measured on a real PR: 31 findings
+   landed on 23 distinct lines). The click follows the tag: the finding it leads with.
 10. **Findings whose line this patch does not contain are reported, not dropped** —
-    a footer inside the open file says how many, and the badge jumps there instead.
-    The badge's count always equals on-diff plus off-diff.
+    a footer inside the open file says how many, and the file's badge still opens
+    them, because a card does not depend on a line being rendered. The badge's count
+    always equals on-diff plus off-diff.
+10a. **The landing is the finding, not the tab.** The run holding it opens itself
+    (even when it is not the newest), the card is expanded, the `j`/`k` cursor starts
+    on it, and it scrolls into view clearing the sticky PR header. Every filter is at
+    its default on arrival, so nothing can have hidden the target. Switching tabs by
+    hand drops `?finding` — the landing belongs to the navigation that asked for it.
 11. **A file with a quoted summary shows a "✨ summary" marker** in its header and a
     *"What this does: …"* row above its diff when open.
 12. **The order is switchable.** *Smart order | Original order* is a radio group;
@@ -84,7 +94,8 @@ arrived.
 | PR has no changed files | *"No changed files."* |
 | A file with no patch text | The row renders; its body says the patch is unavailable (the shared diff renderer's own wording). |
 | No review yet | Groups and order render in full, with no badges and no decoration. |
-| A finding on a line outside the patch | Counted in the badge, listed in the file's footer, and the badge jumps to that footer. |
+| A finding on a line outside the patch | Counted in the badge, listed in the file's footer, and reachable: the badge opens its card like any other. |
+| The targeted finding's run was deleted between the click and the arrival | The tab renders normally and nothing is highlighted. `?finding` matches no run, so no accordion claims it — a stale link degrades to "the Agent runs tab", never to an error. |
 
 ## Non-goals
 
@@ -107,12 +118,19 @@ arrived.
 | File | Carries |
 |---|---|
 | `_components/DiffTab/DiffTab.tsx` | the container: queries, and the degradation ladder |
-| `_components/SmartDiffViewer/SmartDiffViewer.tsx` | the join, the group order, jump target and per-path openness |
+| `_components/SmartDiffViewer/SmartDiffViewer.tsx` | the join, the group order and per-path openness |
 | `_components/SmartDiffViewer/helpers.ts` | `buildViewModel`, `initialOpen`, `partitionFindings`, `severityByLine` — pure |
-| `_components/SmartDiffViewer/constants.ts` | group order, swatch tokens, severity words, the sticky-offset variable |
-| `…/_components/SmartFileCard/` | one file: header, summary row, decorated diff, off-diff footer, the scroll effect |
-| `…/_components/FindingJumpBadge/` | the clickable badge — a real `<button>` |
+| `_components/SmartDiffViewer/constants.ts` | group order, swatch tokens, severity words, the row-id prefixes |
+| `…/_components/SmartFileCard/` | one file: header, summary row, decorated diff, off-diff footer |
+| `…/_components/FindingJumpBadge/` | the file's badge — a real `<button>`, opens the file's worst finding |
+| `…/_components/FindingLineBadge/` | a row's severity tag, made clickable — opens that line's worst finding |
 | `…/_components/SeverityTag/` | icon + word off the `SEV` registry |
+| `_components/PrDetailView/PrDetailView.tsx` | `openFinding` — the `router.push`, and `?finding` read back out |
+| `_components/FindingsTab/FindingsTab.tsx` | passes the target down; publishes the measured sticky offset |
+| `_components/ReviewRunAccordion/` | opens itself when it holds the target (lazy initial state, not an effect) |
+| `_components/FindingsPanel/FindingsPanel.tsx` | expands the target, starts the `j`/`k` cursor on it |
+| `_components/FindingCard/FindingCard.tsx` | scrolls itself into view, once |
+| `src/lib/sticky-offset.ts` | `useStickyOffset` + `STICKY_SCROLL_MARGIN`, shared by the two tabs |
 | `…/_components/SmartDiffGroupHeader/` | swatch, label, instruction, count |
 | `…/_components/DiffOrderToggle/` | the `radiogroup` |
 | `src/lib/hooks/smart-diff.ts` | `usePrSmartDiff` — GET only |
@@ -124,6 +142,38 @@ arrived.
 Server half: `../server/specs/smart-diff.md`.
 
 ## History
+
+`2026-08-12` — **A findings badge now leaves the tab.** Review feedback on the L03
+PR: a badge that scrolls the diff to a line is a viewer, not navigation — the reader
+clicked a *problem* and wants to know what it says, which only the card can tell them.
+So both badges route (`router.push`, Behaviour #8-#10a), the file's badge to the
+file's worst finding and a row's tag to that row's worst, and the in-diff jump is
+gone with the state that drove it: `JumpTarget`, the nonce, `firstJumpLine` and
+`SmartFileCard`'s scroll effect.
+
+Three consequences worth having on the record.
+
+**The badge no longer needs a line, and that removed a whole case.** The old jump had
+to fall back to the off-diff footer for a finding the patch never rendered
+(Behaviour #10). A card exists whether or not a line does, so the fallback simply
+does not arise — the footer stays as the honest count, and the badge reaches those
+findings like any other.
+
+**The sticky-offset machinery moved rather than died.** Nothing in the diff scrolls
+now, but the *card* does, and it sits under the same variable-height sticky header —
+so `useStickyOffset` and its measured custom property moved to `src/lib/sticky-offset.ts`
+and `FindingCard` reads them. `--sd-sticky-h` became `--dd-sticky-h` with the move.
+The row DOM ids stayed: they cost nothing and they are what keeps the reverse link
+(below) a one-component change.
+
+**Openness on the receiving side is a lazy initial state, for the same reason the
+diff's is not an effect.** The run holding the target must be open on its FIRST
+render, because the card scrolls itself into view and cannot do that while unmounted
+— and `react-hooks/set-state-in-effect` would reject the obvious alternative
+(`ReviewRunAccordion` is already on that rule's burn-down list). `FindingsTab`
+unmounts with the tab, so arriving from the diff always builds that state afresh.
+The one thing this shape cannot do is re-target an already-mounted panel, which no
+path reaches: every badge is on the other tab.
 
 `2026-08-11` — Added. Three decisions were reached by being wrong first.
 

@@ -10,6 +10,8 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
+    "verify:l03": "bash ../scripts/verify-l03.sh --server",
+    "verify:l03:db": "bash ../scripts/verify-l03.sh --server --with-db",
     "lint:arch": "depcruise --config .dependency-cruiser.cjs --output-type err src ../reviewer-core/src",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",

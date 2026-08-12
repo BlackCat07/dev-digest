@@ -1,4 +1,8 @@
-/* FindingJumpBadge — "3 findings", clickable, lands the diff on the first one.
+/* FindingJumpBadge — "3 findings", clickable, opens the file's worst finding.
+
+   It leaves this tab: the click routes to that finding's card in the Agent-runs
+   tab, because the card is where a finding is actually read — rationale, suggested
+   fix, accept/dismiss — and none of that fits beside a line of diff.
 
    A real `<button type="button">`, which is the whole reason this component exists.
    `Badge` and `SeverityBadge` are `<span>`s, and `Chip` — the one vendor primitive
@@ -23,13 +27,13 @@ export function FindingJumpBadge({
   path,
   count,
   worst,
-  onJump,
+  onOpen,
 }: {
   path: string;
   count: number;
   /** Leads the badge; the file's worst severity, so the colour matches the dot. */
   worst: string;
-  onJump: () => void;
+  onOpen: () => void;
 }) {
   const t = useTranslations("prReview");
 
@@ -40,7 +44,7 @@ export function FindingJumpBadge({
         // The header's disclosure is a sibling button, not an ancestor — but the
         // row is a click target in spirit, so stop this from reading as "toggle".
         e.stopPropagation();
-        onJump();
+        onOpen();
       }}
       aria-label={t("smartDiff.findingsBadgeLabel", { count, path })}
       style={s.button}

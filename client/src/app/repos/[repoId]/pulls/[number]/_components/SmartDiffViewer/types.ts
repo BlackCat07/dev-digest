@@ -38,17 +38,3 @@ export interface SmartGroupVm {
   role: ViewRole;
   files: SmartFileVm[];
 }
-
-/**
- * A request to reveal one line of one file.
- *
- * `nonce` is what makes a second click on the same badge scroll again. Without it
- * the effect's dependency array is unchanged between clicks and React never re-runs
- * it, so the second press is a silent no-op — the same reason
- * `ReviewRunAccordion` carries a `targetNonce`.
- */
-export interface JumpTarget {
-  path: string;
-  line: number;
-  nonce: number;
-}

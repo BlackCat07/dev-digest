@@ -78,6 +78,25 @@ valuable one — the code does not record what was tried and abandoned.
 
 <!-- append below -->
 
+- **2026-08-12** — **A "reset the cursor when the filters change" effect also runs on MOUNT,
+  so it silently destroys any lazily-initialised value of the state it resets.**
+  `FindingsPanel` opens with `useEffect(() => setFocusIdx(0), [severity, scope, hideLow])`,
+  which reads as a filter handler and is not one: an effect with a dependency array runs
+  after the FIRST commit too. Starting the `j`/`k` cursor on the finding the URL targets
+  (`useState(() => shown.findIndex(...))`) therefore worked for exactly one render and was
+  gone by the time anything was painted — and nothing failed, because the panel's own tests
+  never targeted a finding and the reset is correct in every case they do cover. The fix is
+  a `useRef(false)` that skips the first run, and it is better than it looks from two other
+  angles: the reset is now CONDITIONAL, so `react-hooks/set-state-in-effect` stops flagging
+  the file (client eslint warnings 9 → 8, and this file was on that rule's burn-down list),
+  and the guard documents that "on mount the cursor is already where it belongs" — which is
+  the actual invariant. General shape to watch for: a lazy `useState` initialiser plus any
+  effect that assigns the same state unconditionally is a bug the type system, the linter
+  and a green suite all miss. Evidence:
+  `_components/FindingsPanel/FindingsPanel.tsx` (`filtersTouched`),
+  `_components/FindingsPanel/FindingsPanel.test.tsx` ("still resets the cursor when a filter
+  change shrinks the list").
+
 - **2026-08-11** — **A per-file findings count built from `reviews.flatMap(r => r.findings)`
   GROWS every time an agent is re-run, and the number looks plausible the whole way.** A
   review fans out over agents and writes one `reviews` row EACH, so summing every row
@@ -350,6 +369,23 @@ Dependency and tooling quirks.
 An error string, its real cause, and the fix.
 
 <!-- append below -->
+
+- **2026-08-12** — **`TypeError: rootRef.current?.scrollIntoView is not a function` means
+  jsdom, not your ref — and the blast radius is every test that merely RENDERS the
+  component.** jsdom implements no scrolling at all, so `Element.prototype.scrollIntoView`
+  is `undefined` rather than a no-op; the optional chain guards a null ref, not a missing
+  method, so a component that scrolls itself into view throws from its effect. Adding that
+  behaviour to `FindingCard` turned 4 tests red across THREE files — `FindingsPanel` and
+  `ReviewRunAccordion` fail too, because they render the card and had nothing to do with
+  scrolling. That is what makes the per-file stub the wrong fix: `SmartDiffViewer.test.tsx`
+  had one (assign in `beforeEach`, `delete` in `afterEach`), and any other file rendering
+  the same component inherits the crash. The shim belongs in `src/test/setup.ts` next to
+  `ResizeObserver`, and it must be a real function (`function scrollIntoView() {}`) rather
+  than a bare property, or `vi.spyOn` cannot wrap it — with the shim in place a test asserts
+  the call with a plain spy and leaves the prototype alone. Note the app itself is fine:
+  every browser has the method, so this is purely the test environment. Evidence:
+  `src/test/setup.ts`, `_components/FindingCard/FindingCard.tsx` (the `landed` effect),
+  `_components/FindingCard/FindingCard.test.tsx`.
 
 - **2026-08-03** — `Module not found: Can't resolve './contracts/findings.js'` pointing at
   `src/vendor/shared/index.ts` during a Next compile means something imported a **runtime

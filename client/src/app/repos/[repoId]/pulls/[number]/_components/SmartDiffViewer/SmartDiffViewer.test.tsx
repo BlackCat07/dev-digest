@@ -23,21 +23,14 @@ const M = messages.smartDiff;
 afterEach(cleanup);
 
 /**
- * jsdom does not implement `scrollIntoView` at all — the property is `undefined`, so
- * `vi.spyOn` throws "does not exist". It has to be ASSIGNED, and the impl records
- * `this.id` so a test can prove WHERE it scrolled rather than merely that something
- * did.
+ * Where a badge press LEADS is the container's decision, so these tests assert the
+ * finding id this viewer reports rather than any navigation. `PrDetailView` turns
+ * that id into `?tab=findings&finding=<id>` via `router.push`, and e2e flow 12
+ * walks the whole path in a real browser.
  */
-let scrolledTo: string[] = [];
+let opened: string[] = [];
 beforeEach(() => {
-  scrolledTo = [];
-  (Element.prototype as unknown as { scrollIntoView: () => void }).scrollIntoView =
-    function (this: Element) {
-      scrolledTo.push(this.id);
-    };
-});
-afterEach(() => {
-  delete (Element.prototype as unknown as { scrollIntoView?: () => void }).scrollIntoView;
+  opened = [];
 });
 
 const CORE_PATCH = [
@@ -134,6 +127,7 @@ function mount(over: Partial<React.ComponentProps<typeof SmartDiffViewer>> = {})
         smartDiff={SMART_DIFF}
         findings={[]}
         grouped
+        onOpenFinding={(id) => opened.push(id)}
         {...over}
       />
     </NextIntlClientProvider>,
@@ -226,12 +220,14 @@ describe("SmartDiffViewer — what starts open", () => {
 });
 
 describe("SmartDiffViewer — the findings badge", () => {
-  it("is a real button naming its count and its file", () => {
+  it("is a real button naming its count, its file and where it leads", () => {
     mount({ findings: [finding(), finding({ id: "f-b", start_line: 12, severity: "WARNING" })] });
     // A `<span>` badge or an onClick div would fail this — the badge has to be
     // reachable by keyboard, and `getByRole` is what proves it.
     expect(
-      screen.getByRole("button", { name: /Jump to the first of 2 findings in src\/config\.ts/ }),
+      screen.getByRole("button", {
+        name: /Open the first of 2 findings in src\/config\.ts in the Agent runs tab/,
+      }),
     ).toBeTruthy();
   });
 
@@ -248,7 +244,7 @@ describe("SmartDiffViewer — the findings badge", () => {
 
   it("shows no badge on a file with no findings", () => {
     mount();
-    expect(screen.queryByRole("button", { name: /Jump to the first/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Open the first/ })).toBeNull();
   });
 
   it("labels a blocker as 'blocker', not 'Critical'", () => {
@@ -258,43 +254,68 @@ describe("SmartDiffViewer — the findings badge", () => {
   });
 });
 
-describe("SmartDiffViewer — clicking the badge", () => {
-  const clickBadge = () =>
-    fireEvent.click(screen.getByRole("button", { name: /Jump to the first/ }));
+/* The navigation, which is what this tab is FOR.
 
-  /** The acceptance criterion: the badge lands the reader at the finding. */
-  it("opens the collapsed file AND scrolls to the finding's line", () => {
-    const { container } = mount({ findings: [finding()] });
-    // The file has a finding, so the rule already opened it. Collapse it by hand
-    // first — otherwise this passes without the jump opening anything.
-    const header = screen.getByText("src/config.ts").closest("button")!;
-    fireEvent.click(header);
-    expect(container.textContent).not.toContain("sk_live_x");
+   A badge does not move the reader inside the file — it reports the finding it
+   stands for, and the container routes to that finding's card in the Agent-runs
+   tab. Every case below therefore asserts an ID: getting the wrong one lands the
+   reader on somebody else's problem, which is the failure this feature exists to
+   prevent and the one a "did it navigate?" assertion cannot see. */
+describe("SmartDiffViewer — where a badge leads", () => {
+  const clickFileBadge = () =>
+    fireEvent.click(screen.getByRole("button", { name: /Open the first of|Open the finding in/ }));
+  const lineBadges = () => screen.getAllByRole("button", { name: /Open this finding|on this line/ });
 
-    clickBadge();
-    expect(container.textContent).toContain("sk_live_x");
-    expect(scrolledTo).toEqual(["sd-line-src/config.ts-RIGHT-12"]);
+  it("opens the file's WORST finding, not the first one it was handed", () => {
+    mount({
+      findings: [
+        finding({ id: "sugg", severity: "SUGGESTION", start_line: 11 }),
+        finding({ id: "blocker", severity: "CRITICAL", start_line: 13 }),
+      ],
+    });
+    clickFileBadge();
+    expect(opened).toEqual(["blocker"]);
   });
 
-  /** Without the nonce the second click is a silent no-op. */
-  it("scrolls again when the same badge is clicked twice", () => {
-    mount({ findings: [finding()] });
-    clickBadge();
-    clickBadge();
-    expect(scrolledTo).toHaveLength(2);
-    expect(new Set(scrolledTo).size).toBe(1);
+  it("opens a finding whose line this patch never rendered", () => {
+    // The badge counts it, so the badge must be able to reach it: an off-diff
+    // finding has a card like any other, and there is no line to land on.
+    mount({ findings: [finding({ id: "off", start_line: 999 })] });
+    clickFileBadge();
+    expect(opened).toEqual(["off"]);
   });
 
-  it("scrolls to the off-diff footer when no rendered line matches", () => {
-    mount({ findings: [finding({ start_line: 999 })] });
-    clickBadge();
-    expect(scrolledTo).toEqual(["sd-offdiff-src/config.ts"]);
+  it("makes each decorated line a real button of its own", () => {
+    mount({
+      findings: [
+        finding({ id: "on-12", start_line: 12, severity: "CRITICAL" }),
+        finding({ id: "on-13", start_line: 13, severity: "WARNING" }),
+      ],
+    });
+    // Keyboard-reachable, like the file badge — `getByRole` is what proves the tag
+    // is a `<button>` and not a `<span>` with an onClick.
+    expect(lineBadges()).toHaveLength(2);
+    fireEvent.click(lineBadges()[1]!);
+    expect(opened).toEqual(["on-13"]);
   });
 
-  it("does not scroll on a plain disclosure toggle", () => {
+  it("opens the worst finding on a line that hosts several", () => {
+    mount({
+      findings: [
+        finding({ id: "minor", start_line: 12, severity: "SUGGESTION" }),
+        finding({ id: "major", start_line: 12, severity: "CRITICAL" }),
+      ],
+    });
+    // One tag stands for both and leads with the worst, so the click follows it.
+    fireEvent.click(lineBadges()[0]!);
+    expect(opened).toEqual(["major"]);
+  });
+
+  it("navigates nowhere on a plain disclosure toggle", () => {
     mount({ findings: [finding()] });
     fireEvent.click(screen.getByText("package-lock.json").closest("button")!);
-    expect(scrolledTo).toEqual([]);
+    fireEvent.click(screen.getByText("src/config.ts").closest("button")!);
+    expect(opened).toEqual([]);
   });
 });
 

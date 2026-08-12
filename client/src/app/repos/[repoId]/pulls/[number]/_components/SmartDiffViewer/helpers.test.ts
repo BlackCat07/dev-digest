@@ -9,7 +9,6 @@ import type { FindingRecord, PrFile, ReviewRecord, SmartDiff } from "@devdigest/
 import { AUTO_EXPAND_MAX_LINES, parsePatch } from "@/components/diff-viewer";
 import {
   buildViewModel,
-  firstJumpLine,
   groupFiles,
   initialOpen,
   latestFindingsPerAgent,
@@ -356,17 +355,7 @@ describe("severityByLine — the extent of a finding", () => {
   });
 });
 
-describe("firstJumpLine and lineId", () => {
-  const lines = parsePatch(PATCH);
-
-  it("picks the lowest anchorable line", () => {
-    expect(firstJumpLine([finding({ start_line: 13 }), finding({ start_line: 11 })], lines)).toBe(11);
-  });
-
-  it("returns null when nothing in the file is anchorable", () => {
-    expect(firstJumpLine([finding({ start_line: 999 })], lines)).toBeNull();
-  });
-
+describe("lineId", () => {
   it("builds an id that getElementById can find but a selector could not", () => {
     const id = lineId("src/api/users.ts", 45);
     expect(id).toBe("sd-line-src/api/users.ts-RIGHT-45");

@@ -59,6 +59,14 @@ interface DiffTabProps {
   onOrderChange: (next: DiffOrder) => void;
   /** Inline commenting is offered only on open PRs (GitHub rejects otherwise). */
   canComment?: boolean;
+  /**
+   * Where a findings badge leads. Handed down from `PrDetailView`, which owns the
+   * URL — this tab knows which finding was clicked, not how the screen routes.
+   *
+   * The degraded branch below renders the plain `DiffViewer`, which has no findings
+   * and therefore no badges, so nothing there needs it.
+   */
+  onOpenFinding: (findingId: string) => void;
 }
 
 export function DiffTab({
@@ -71,6 +79,7 @@ export function DiffTab({
   order,
   onOrderChange,
   canComment,
+  onOpenFinding,
 }: DiffTabProps) {
   const t = useTranslations("prReview");
   const { data: comments } = usePrComments(prId);
@@ -155,6 +164,7 @@ export function DiffTab({
           findings={findings}
           grouped={order === "smart"}
           commenting={commenting}
+          onOpenFinding={onOpenFinding}
         />
       )}
     </section>

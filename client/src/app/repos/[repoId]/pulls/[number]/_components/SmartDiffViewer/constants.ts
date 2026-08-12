@@ -71,31 +71,15 @@ export const SEVERITY_RANK: Record<string, number> = {
   INFO: 3,
 };
 
-/** Prefix of a code row's DOM id. See `lineId` for why ids and not selectors. */
+/**
+ * Prefix of a code row's DOM id. See `lineId` for why ids and not selectors.
+ *
+ * Nothing in this tab scrolls to one any more — a finding badge routes to the
+ * finding's card instead — but the ids stay: they are what makes the reverse link
+ * (`FindingCard`'s `file:line` landing here rather than on github.com) a change to
+ * one component instead of a change to this one, and they cost nothing.
+ */
 export const LINE_ID_PREFIX = "sd-line";
 
-/** Prefix of the off-diff footer's DOM id — the jump target when no line matches. */
+/** Prefix of the off-diff footer's DOM id. Same reasoning as {@link LINE_ID_PREFIX}. */
 export const OFFDIFF_ID_PREFIX = "sd-offdiff";
-
-/**
- * Custom property carrying the sticky header's measured height.
- *
- * A scrolled-to line has to clear `PrDetailHeader`, which is `position: sticky` at
- * the top of the `<main>` that actually scrolls. Its height is NOT a constant: it
- * grows on a merged or closed PR (the stale banner) and again when the meta row
- * wraps at a narrow width, so any single number is wrong for some PRs. The viewer
- * measures it and writes it here; every row reads it through
- * `scrollMarginTop: var(--sd-sticky-h, <fallback>)`.
- */
-export const STICKY_CSS_VAR = "--sd-sticky-h";
-
-/** Attribute the viewer measures. Set on `PrDetailHeader`'s root. */
-export const STICKY_HEADER_SELECTOR = "[data-sticky-header]";
-
-/**
- * Fallback offset, used during SSR, before the first measurement, and under jsdom
- * (where `ResizeObserver` is a no-op stub that never fires). Mid-range of the
- * header's real heights, so a scroll that happens before measurement lands close
- * rather than under the header.
- */
-export const STICKY_FALLBACK_PX = 148;

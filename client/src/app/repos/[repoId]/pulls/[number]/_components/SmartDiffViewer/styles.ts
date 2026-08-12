@@ -3,7 +3,6 @@
     and `--bg-hover`, and an unknown custom property silently drops the whole
     declaration (`client/INSIGHTS.md`, 2026-08-06). */
 import type { CSSProperties } from "react";
-import { STICKY_CSS_VAR, STICKY_FALLBACK_PX } from "./constants";
 
 export const s = {
   list: { display: "flex", flexDirection: "column", gap: 18 } satisfies CSSProperties,
@@ -16,30 +15,13 @@ export const s = {
   } satisfies CSSProperties,
 
   /**
-   * Every code row carries this, so a scrolled-to line clears the sticky PR header.
-   * The variable is measured at runtime; the fallback covers SSR, the first paint
-   * and jsdom (where `ResizeObserver` never fires).
-   */
-  scrollAnchor: {
-    scrollMarginTop: `var(${STICKY_CSS_VAR}, ${STICKY_FALLBACK_PX}px)`,
-  } satisfies CSSProperties,
-
-  /**
    * An `inset` box-shadow, NOT a `borderLeft`: a border adds 3px to the box and
    * would shift every decorated line's text relative to its undecorated neighbours,
    * which reads as the diff being misaligned.
    */
   lineEdge: (token: string): CSSProperties => ({
     boxShadow: `inset 3px 0 0 ${token}`,
-    scrollMarginTop: `var(${STICKY_CSS_VAR}, ${STICKY_FALLBACK_PX}px)`,
   }),
-
-  lineBadgeWrap: {
-    display: "inline-flex",
-    alignItems: "center",
-    paddingRight: 12,
-    flexShrink: 0,
-  } satisfies CSSProperties,
 
   summaryRow: {
     display: "flex",
@@ -62,7 +44,6 @@ export const s = {
     display: "flex",
     alignItems: "center",
     gap: 6,
-    scrollMarginTop: `var(${STICKY_CSS_VAR}, ${STICKY_FALLBACK_PX}px)`,
   } satisfies CSSProperties,
 
   /** The file header is a row, not a button — the disclosure and the badge are siblings. */

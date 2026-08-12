@@ -2,6 +2,7 @@
 
 import React, { useCallback } from "react";
 import { Icon, Badge, Button, SectionLabel, EmptyState } from "@devdigest/ui";
+import { useStickyOffset } from "@/lib/sticky-offset";
 import { RunStatus } from "../RunStatus";
 import { RunHistory } from "../RunHistory/RunHistory";
 import { ReviewRunAccordion } from "../ReviewRunAccordion";
@@ -23,6 +24,14 @@ interface FindingsTabProps {
   /** owner/repo + head sha — used to deep-link a finding's file:line to GitHub. */
   repoFullName?: string | null;
   headSha?: string | null;
+  /**
+   * The finding `?finding=` names, if any — the landing of a badge press in the
+   * diff. The run holding it opens itself and its card scrolls into view.
+   *
+   * Matched against a finding ID rather than a run: the reader clicked one problem,
+   * and which run happens to have reported it is not something they know.
+   */
+  targetFindingId?: string | null;
   onOpenTrace: (id: string) => void;
   onDelete: (id: string) => void;
   onRunDone: () => void;
@@ -39,10 +48,17 @@ export function FindingsTab({
   cancelMutation,
   repoFullName,
   headSha,
+  targetFindingId,
   onOpenTrace,
   onDelete,
   onRunDone,
 }: FindingsTabProps) {
+  // A targeted card scrolls itself into view, and has to clear the sticky PR
+  // header to be readable — the same measured offset the diff introduced, which is
+  // why the hook now lives in `src/lib/` rather than inside Smart Diff.
+  const rootRef = React.useRef<HTMLElement | null>(null);
+  useStickyOffset(rootRef);
+
   const handleCancelAll = useCallback(() => {
     liveRunIds.forEach((id) => cancelMutation.mutate(id));
   }, [liveRunIds, cancelMutation]);
@@ -102,7 +118,7 @@ export function FindingsTab({
   }, []);
 
   return (
-    <section>
+    <section ref={rootRef}>
       {liveRunIds.length > 0 && (
         <div style={s.liveRunSection}>
           <SectionLabel
@@ -196,6 +212,7 @@ export function FindingsTab({
             headSha={headSha}
             targetRunId={target?.runId ?? null}
             targetNonce={target?.n ?? 0}
+            targetFindingId={targetFindingId ?? null}
           />
         ))
       )}

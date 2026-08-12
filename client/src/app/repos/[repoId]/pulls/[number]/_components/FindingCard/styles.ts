@@ -1,9 +1,14 @@
 import type { CSSProperties } from "react";
+import { STICKY_SCROLL_MARGIN } from "@/lib/sticky-offset";
 
 /** Co-located styles for FindingCard (extracted from inline styles). */
 export const s = {
   card: (focused: boolean, sevColor: string, muted: boolean): CSSProperties => ({
     borderRadius: 8,
+    // A card reached from a diff badge scrolls itself to `block: "start"`, and the
+    // PR header is `position: sticky` above it — at a height that varies per PR, so
+    // this is measured rather than chosen (`client/INSIGHTS.md`, 2026-08-11).
+    scrollMarginTop: STICKY_SCROLL_MARGIN,
     // FULLY per-side longhand. `border` is not the only shorthand here: so are
     // `borderColor` and `borderWidth`, and pairing either with a `borderLeft*`
     // longhand makes React warn "Updating a style property during rerender

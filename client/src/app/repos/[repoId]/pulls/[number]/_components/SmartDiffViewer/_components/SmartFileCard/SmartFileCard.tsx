@@ -6,8 +6,12 @@
    reuses that unit's parser, styles and — crucially — its `CodeLine`, so inline
    commenting cannot drift between the two cards. What it replaces is the parts
    Smart Diff redefines: `FileCard` initialises `open` from size alone and is not
-   controllable, whereas this card must open on demand (a jump) and by rule (see
-   `initialOpen`). */
+   controllable, whereas this card opens by rule (see `initialOpen`) and by the
+   reader's own toggle.
+
+   Every badge in here is a link to a finding's CARD, not to a place in this file:
+   the header badge stands for the file's worst finding, a row's tag for the worst
+   finding on that row, and both report an id the container routes on. */
 "use client";
 
 import React from "react";
@@ -27,7 +31,6 @@ import {
   type Line,
 } from "@/components/diff-viewer";
 import {
-  firstJumpLine,
   initialOpen,
   lineId,
   offDiffId,
@@ -35,9 +38,9 @@ import {
   severityByLine,
 } from "../../helpers";
 import { s } from "../../styles";
-import type { JumpTarget, SmartFileVm } from "../../types";
+import type { SmartFileVm } from "../../types";
 import { FindingJumpBadge } from "../FindingJumpBadge";
-import { SeverityTag } from "../SeverityTag";
+import { FindingLineBadge } from "../FindingLineBadge";
 import { s as cardStyles } from "./styles";
 
 /** Threads anchored to a given parsed line — mirrors the diff-viewer's own helper. */
@@ -54,31 +57,24 @@ function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): Commen
 export function SmartFileCard({
   file,
   commenting,
-  target,
   openOverride,
   onToggle,
-  onJump,
+  onOpenFinding,
 }: {
   file: SmartFileVm;
   commenting?: DiffCommentApi;
-  /** The viewer's current jump request; acted on only when it names this file. */
-  target: JumpTarget | null;
   /** The reader's explicit choice, if they have made one; otherwise the rule decides. */
   openOverride: boolean | undefined;
   onToggle: (path: string, next: boolean) => void;
-  onJump: (path: string, line: number) => void;
+  onOpenFinding: (findingId: string) => void;
 }) {
   const t = useTranslations("prReview");
   // The "no diff text" line belongs to the shared diff renderer, not to this
   // feature — reusing its key keeps one wording for one situation.
   const tShell = useTranslations("shell");
 
-  // DERIVED, not state. Openness lives in the viewer because a jump has to open
-  // this card and scroll to a row inside it, and holding it here would mean
-  // `setOpen` in an effect — which `react-hooks/set-state-in-effect` rejects as an
-  // error, not a warning. Deriving it also removes the two-render dance the first
-  // implementation needed: the jump handler sets openness AND the target in one
-  // batched event, so by the time the effect below runs the row is already mounted.
+  // DERIVED, not state: openness is the rule unless the reader has overridden it,
+  // and the override lives in the viewer so one map covers every card.
   const open = openOverride ?? initialOpen(file);
 
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
@@ -99,29 +95,6 @@ export function SmartFileCard({
     for (const ln of lines) for (const k of keysForLine(ln)) renderedKeys.add(k);
     return partitionThreads(fileThreads, renderedKeys);
   }, [comments, file.path, lines]);
-
-  // ---- the jump --------------------------------------------------------------
-  //
-  // One effect, and it touches only the DOM and a ref — which is what an effect is
-  // for. It cannot open the card (that is the viewer's job, done in the same click)
-  // so by the time this runs the row exists.
-  //
-  // The ref is the idempotence guard: `byLine` is a fresh Map whenever findings or
-  // the patch change, so without it an unrelated re-render would re-scroll the page
-  // out from under the reader. Keyed on the nonce, which is exactly "how many jump
-  // requests have been made" — so clicking the same badge twice scrolls twice, and
-  // nothing else scrolls at all.
-  const scrolledNonce = React.useRef<number | null>(null);
-  React.useEffect(() => {
-    if (!target || target.path !== file.path || !open) return;
-    if (scrolledNonce.current === target.nonce) return;
-    scrolledNonce.current = target.nonce;
-
-    const id = byLine.has(target.line) ? lineId(file.path, target.line) : offDiffId(file.path);
-    // `getElementById`, never `querySelector`: a path's `/` and `.` are selector
-    // syntax and would need `CSS.escape` to match anything.
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [target, open, byLine, file.path]);
 
   return (
     <div style={diffStyles.fileCard}>
@@ -159,12 +132,11 @@ export function SmartFileCard({
           <FindingJumpBadge
             path={file.path}
             count={file.findings.length}
-            // `findings` is sorted worst-first, so the leader is the file's worst.
+            // `findings` is sorted worst-first, so the leader is the file's worst —
+            // and it is the one the badge opens. It needs no line: a finding whose
+            // line this patch never rendered still has a card.
             worst={file.findings[0].severity}
-            onJump={() => {
-              // Prefer a real diff line; `null` still jumps, to the off-diff footer.
-              onJump(file.path, firstJumpLine(file.findings, lines) ?? -1);
-            }}
+            onOpen={() => onOpenFinding(file.findings[0]!.id)}
           />
         )}
       </div>
@@ -200,16 +172,18 @@ export function SmartFileCard({
                     rowStyle={
                       severity
                         ? s.lineEdge((SEV[severity as keyof typeof SEV] ?? SEV.INFO).c)
-                        : s.scrollAnchor
+                        : undefined
                     }
                     right={
                       anchored?.[0] ? (
-                        <span style={s.lineBadgeWrap}>
-                          {/* `findings` is sorted worst-first, so `[0]` is the worst
-                              severity on this line; `count` says how many it stands
-                              for, so the tags reconcile with the header's total. */}
-                          <SeverityTag severity={anchored[0].severity} count={anchored.length} />
-                        </span>
+                        /* `findings` is sorted worst-first, so `[0]` is the worst
+                           severity on this line; `count` says how many it stands
+                           for, so the tags reconcile with the header's total. */
+                        <FindingLineBadge
+                          severity={anchored[0].severity}
+                          count={anchored.length}
+                          onOpen={() => onOpenFinding(anchored[0]!.id)}
+                        />
                       ) : undefined
                     }
                   />

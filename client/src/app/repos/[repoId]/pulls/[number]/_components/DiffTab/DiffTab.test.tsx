@@ -84,6 +84,7 @@ function mount() {
           reviews={[]}
           order="smart"
           onOrderChange={vi.fn()}
+          onOpenFinding={vi.fn()}
         />
       </NextIntlClientProvider>
     </QueryClientProvider>,

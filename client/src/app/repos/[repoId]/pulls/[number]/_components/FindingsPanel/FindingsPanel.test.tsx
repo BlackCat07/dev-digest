@@ -72,6 +72,50 @@ describe("FindingsPanel (smoke)", () => {
   });
 });
 
+/* The landing of a diff badge press: `?finding=<id>` reaches this panel through
+   the run that holds it.
+
+   `f2` is deliberately the SECOND card. Everything about the default render —
+   `defaultExpanded={i === 0}`, `focusIdx` starting at 0 — favours the first one, so
+   a case targeting the first would pass with the feature entirely absent. */
+describe("FindingsPanel — landing on a targeted finding", () => {
+  const card = (container: HTMLElement, id: string) =>
+    container.querySelector<HTMLElement>(`[data-finding-id="${id}"]`)!;
+
+  it("expands the targeted card, not merely the first one", () => {
+    renderWithIntl(<FindingsPanel findings={FINDINGS} prId="pr1" targetFindingId="f2" />);
+    // The rationale lives in the body, so it is only on screen when expanded.
+    expect(screen.getByText("One query per user.")).toBeInTheDocument();
+  });
+
+  it("moves the j/k cursor onto it, so it arrives outlined", () => {
+    const { container } = renderWithIntl(
+      <FindingsPanel findings={FINDINGS} prId="pr1" targetFindingId="f2" />,
+    );
+    // `focused` is drawn as a ring; the outline is the whole point of landing.
+    expect(card(container, "f2").style.boxShadow).not.toBe("none");
+    expect(card(container, "f1").style.boxShadow).toBe("none");
+  });
+
+  it("leaves the cursor at the top when nothing is targeted", () => {
+    const { container } = renderWithIntl(<FindingsPanel findings={FINDINGS} prId="pr1" />);
+    expect(card(container, "f1").style.boxShadow).not.toBe("none");
+    expect(card(container, "f2").style.boxShadow).toBe("none");
+  });
+
+  it("still resets the cursor when a filter change shrinks the list", () => {
+    // The reset effect skips its FIRST run so the landing survives; this is the
+    // behaviour that skip must not have cost.
+    const { container } = renderWithIntl(
+      <FindingsPanel findings={FINDINGS} prId="pr1" targetFindingId="f2" />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Warning/ }));
+    // Only the WARNING remains, and the cursor is back on the first visible card.
+    expect(card(container, "f2").style.boxShadow).not.toBe("none");
+    expect(container.querySelector('[data-finding-id="f1"]')).toBeNull();
+  });
+});
+
 describe("FindingsPanel — severity isolate filter", () => {
   // The filter is OWNED by this panel (one chip row per review run), so these
   // drive the real chips rather than passing a prop.

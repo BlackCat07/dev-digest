@@ -224,26 +224,13 @@ export function severityByLine(
 }
 
 /**
- * The first line in this file a jump can actually land on, or `null`.
- *
- * Prefers an on-diff line; falls back to the off-diff footer, which is why the
- * badge is still clickable on a file whose patch does not contain its findings.
- */
-export function firstJumpLine(
-  findings: readonly FindingRecord[],
-  lines: readonly Line[],
-): number | null {
-  const { byLine } = partitionFindings(findings, lines);
-  if (byLine.size === 0) return null;
-  return Math.min(...byLine.keys());
-}
-
-/**
  * DOM id of one rendered line.
  *
- * Resolved with `document.getElementById`, never `querySelector`: a path contains
- * `/` and `.`, which are legal in an HTML id but are selector syntax, so a
- * selector would need `CSS.escape` and would silently match nothing without it.
+ * A stable anchor, not a scroll target of this tab's own: a badge press leaves for
+ * the finding's card rather than moving within the file. Resolve one with
+ * `document.getElementById`, never `querySelector` — a path contains `/` and `.`,
+ * which are legal in an HTML id but are selector syntax, so a selector would need
+ * `CSS.escape` and would silently match nothing without it.
  */
 export function lineId(path: string, line: number): string {
   return `${LINE_ID_PREFIX}-${path}-RIGHT-${line}`;

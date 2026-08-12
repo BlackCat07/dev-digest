@@ -71,6 +71,13 @@ The prompt slot this record feeds: [`../../reviewer-core/specs/intent-in-prompt.
    `unfetched`, up to `MAX_RECORDED_LINKS`.
 9. No diff `+`/`-` line, no file body other than a fetched `repo_doc`, and no secret or
    environment value ever reaches the classifier prompt.
+9a. **Every field comes back in English, whatever language the PR is written in.** The
+    material is read in whatever language it was written; the record is written in one.
+    Stated explicitly in the system prompt, because a model handed a Ukrainian title and
+    description will otherwise mirror it — and the derived intent, its risk titles and its
+    `missing_context` lines are rendered verbatim in an English UI and stored as this PR's
+    record, where a second language is not a translation problem but an inconsistent one.
+    Identifiers, paths and short quoted phrases keep their original form.
 10. Any link that is not a same-repository GitHub issue/PR or a path-confined document in
     the local clone is recorded as an `unfetched` source with a reason and is never
     dereferenced — this includes every external host, every `../` or absolute-path

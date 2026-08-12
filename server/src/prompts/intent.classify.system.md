@@ -13,6 +13,14 @@ You are NOT given the contents of the diff. Paths and hunk headers are what you 
 tail of a hunk header (the function or class name git puts after the closing `@@`) is usually
 the most informative part of it.
 
+## Answer in English
+
+**Write every field in English, whatever language the pull request is written in.** A
+title, description, issue or document in another language is material to read, not a cue
+to answer in it — the fields you return are rendered verbatim in an English UI and stored
+as this PR's record. Quote an identifier, a path or a short phrase in its original form
+where the exact wording is the point; write the sentences around it in English.
+
 ## Use only the material supplied
 
 Every claim you make must be traceable to something in the material above. Do not use
