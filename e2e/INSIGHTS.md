@@ -113,6 +113,29 @@ An error string, its real cause, and the fix.
 
 <!-- append below -->
 
+- **2026-08-12** — **A `find … click` that prints `✓ Done` proves a click was DISPATCHED, not
+  that anything received it — so the step that fails is the one AFTER the guilty one.** Flow
+  12 clicked a findings badge (step 220, green) and then timed out waiting for the URL it
+  routes to (step 221, `Wait timed out after 30000ms`), which reads as "the app does not
+  navigate" and is not that: the same commands, in the same order, against a local dev
+  server, routed correctly every time. The mechanism is one step earlier still.
+  `wait --url order=original` returns the INSTANT the URL changes, and on this screen the
+  URL is written by `router.replace` **before** React commits the re-render it causes — so
+  the next command runs against the old DOM. Original order replaces the whole subtree
+  (three `<section>` group wrappers become flat cards), so every file card below is a new
+  node; `find` resolved the OLD badge, clicked a detached element, and exited 0. On a
+  loaded CI runner the commit lands after the process spawn; locally it lands before, which
+  is why this is a CI-only failure that reproduces nowhere. What fixes it is not another
+  `wait --load networkidle` — the DOM swap is not a network event — but a **barrier that
+  only the new render can satisfy**: `wait --fn "!document.body.innerText.includes('Core
+  logic')"`, since group headers exist in Smart order only. Generalises to every step that
+  changes what is RENDERED rather than merely what is fetched: assert a fact of the new
+  render before the next `find`, and prefer `wait --fn` — the help's own
+  wait-for-text-to-DISAPPEAR idiom — where the harness's positive-only `wait --text` cannot
+  express it. Evidence: `specs/12-pr-smart-diff.flow.json` (the `wait --fn` barrier),
+  `../client/src/app/repos/[repoId]/pulls/[number]/_components/SmartDiffViewer/SmartDiffViewer.tsx`
+  (the `!grouped` early return), run 31599113842.
+
 - **2026-08-11** — **`✗ land on the PR list — Wait timed out after 25000ms` as the SECOND step
   of a flow is the home redirect, not your flow.** Five flows open with the same pair —
   `open {BASE}/` then `wait --url /pulls` — and the redirect behind it is a client-side
