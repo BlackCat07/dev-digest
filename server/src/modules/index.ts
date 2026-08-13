@@ -7,6 +7,8 @@ import workspace from './workspace/routes.js';
 import agents from './agents/routes.js';
 import skills from './skills/routes.js';
 import conventions from './conventions/routes.js';
+import intent from './intent/routes.js';
+import smartDiff from './smart-diff/routes.js';
 import reviews from './reviews/routes.js';
 import repoIntel from './repo-intel/routes.js';
 
@@ -19,9 +21,10 @@ import repoIntel from './repo-intel/routes.js';
  * than via filesystem autoload so the same code path works under tsx, the
  * bundler, and vitest — native dynamic import() of .ts files is not portable.)
  *
- * This is the Part-0 starter set plus L02's `skills`. Each further course lesson
- * adds its own module here (intent/smart-diff, blast, brief/context/onboarding,
- * eval/ci/hooks, memory, plugins, …) without touching any other module.
+ * This is the Part-0 starter set plus L02's `skills`/`conventions` and L03's
+ * `intent` and `smart-diff`. Each further course lesson adds its own module here
+ * (blast, brief/context/onboarding, eval/ci/hooks, memory, plugins, …) without
+ * touching any other module.
  */
 export const modules: Record<string, FastifyPluginAsync> = {
   settings,
@@ -32,6 +35,8 @@ export const modules: Record<string, FastifyPluginAsync> = {
   agents,
   skills,
   conventions,
+  intent,
+  smartDiff,
   reviews,
   repoIntel,
 };

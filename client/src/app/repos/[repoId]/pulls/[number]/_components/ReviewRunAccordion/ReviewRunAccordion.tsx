@@ -33,6 +33,7 @@ export function ReviewRunAccordion({
   headSha,
   targetRunId = null,
   targetNonce = 0,
+  targetFindingId = null,
 }: {
   review: ReviewRecord;
   /** The agent run that produced this review, joined on `run_id` by the parent.
@@ -46,8 +47,23 @@ export function ReviewRunAccordion({
    *  (driven from the Timeline: clicking an agent name navigates here). */
   targetRunId?: string | null;
   targetNonce?: number;
+  /** The finding `?finding=` names — set when a diff badge routed the reader here. */
+  targetFindingId?: string | null;
 }) {
-  const [open, setOpen] = React.useState(defaultOpen);
+  const findings = review.findings;
+  const holdsTarget = !!targetFindingId && findings.some((f) => f.id === targetFindingId);
+
+  /**
+   * Open from the first render when this run holds the targeted finding — a LAZY
+   * initial value, not an effect.
+   *
+   * It has to be the first render because the card below scrolls itself into view,
+   * and it can only do that once it is mounted; opening from an effect would also
+   * be the `react-hooks/set-state-in-effect` shape this file is already on the
+   * burn-down list for. Building it at mount is safe because `FindingsTab` unmounts
+   * with the tab, so arriving from the diff always constructs this state afresh.
+   */
+  const [open, setOpen] = React.useState(() => defaultOpen || holdsTarget);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
     if (review.run_id && review.run_id === targetRunId) {
@@ -58,7 +74,6 @@ export function ReviewRunAccordion({
     // bumped to re-trigger this effect for the same run_id.
   }, [targetRunId, targetNonce, review.run_id]);
   const del = useDeleteReview(prId);
-  const findings = review.findings;
   const blockers = findings.filter((f) => f.severity === "CRITICAL" && !f.dismissed_at).length;
   const verdictColor = review.verdict ? VERDICT_COLOR[review.verdict] ?? "var(--text-muted)" : "var(--text-muted)";
 
@@ -170,6 +185,7 @@ export function ReviewRunAccordion({
             prId={prId}
             repoFullName={repoFullName}
             headSha={headSha}
+            targetFindingId={holdsTarget ? targetFindingId : null}
           />
         </div>
       )}

@@ -111,16 +111,38 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
               additions: detail.additions,
               deletions: detail.deletions,
               filesCount: detail.files_count,
+              // L03 — the BODY, too, and it costs nothing: this loop already has
+              // the detail payload in hand. The PR-list payload carries no body
+              // (`adapters/github/octokit.ts` omits it), and the only other writer
+              // is `GET /pulls/:id` — so before this line the intent derivation
+              // enqueued below ran on a row whose `body` was still null and
+              // classified the PR from its TITLE alone, at the confidence floor.
+              body: detail.body ?? null,
             })
             .where(eq(t.pullRequests.id, r.id));
           r.additions = detail.additions;
           r.deletions = detail.deletions;
           r.filesCount = detail.files_count;
+          r.body = detail.body ?? null;
         } catch (err) {
           app.log.warn({ err, number: r.number }, 'PR diff-stat backfill skipped');
         }
       }
     }
+
+    // L03 — NO intent derivation is triggered here, and that is deliberate.
+    //
+    // It used to be, and it was the bug: `pr_files` and `pull_requests.body` are
+    // written by `GET /pulls/:id` and by NOTHING ELSE, so a derivation started
+    // from this route could only ever see the title. It recorded `status: 'ok'`
+    // with one source at the confidence floor, and because `needsDerivation` keys
+    // on the head SHA it then cached that forever. Measured on real data before
+    // the fix: 15 of 21 rows were title-only at 10%.
+    //
+    // The trigger now lives on the detail route, immediately after the writes it
+    // depends on. Do not add a second one back here "for coverage": whichever
+    // trigger fires first wins for that head SHA, so a list-route derivation
+    // would re-create the same bug at a figure that merely LOOKS plausible.
 
     // SCORE + COST + FINDINGS per PR, all aggregated ACROSS AGENTS: a review fans
     // out over N agents, each writing its own reviews row and its own agent_runs
@@ -236,6 +258,35 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       .where(eq(t.repos.id, pr.repoId));
     if (!repo) throw new NotFoundError('Repo not found');
 
+    /**
+     * L03 — derive this PR's intent in the background, from HERE.
+     *
+     * This route is the only writer of `pr_files` and of `pull_requests.body`, so
+     * it is the only place where the classifier's full material — description,
+     * changed-file list, `@@` hunk headers — is guaranteed to exist. Triggering
+     * from the PR list instead meant deriving from the title alone and caching
+     * that (see the note in the list handler above).
+     *
+     * Called on BOTH exits. The offline path serves persisted files and body,
+     * which is real material and exactly the degradation the spec describes; a PR
+     * in a repo with no token still deserves an intent.
+     *
+     * The route WIRES ONLY — the window, the dedup and the per-row failure
+     * isolation are `IntentService`'s rules. Not awaited, so it cannot touch this
+     * response's status, body or latency, and `.catch`'d because a floating
+     * rejection would kill the process (`server/INSIGHTS.md`, 2026-08-06 /
+     * 2026-08-07) even though the method itself never throws.
+     */
+    const triggerIntent = (headSha: string) => {
+      void container.intent
+        .enqueueDerivations(
+          workspaceId,
+          [{ id: pr.id, number: pr.number, headSha, updatedAt: pr.updatedAt }],
+          app.log,
+        )
+        .catch((err: unknown) => app.log.warn({ err }, 'PR intent enqueue failed'));
+    };
+
     // Local-first: refresh detail from GitHub when a token is configured;
     // otherwise serve the persisted files/commits/body (seeded or previously
     // imported) so PR detail works offline.
@@ -271,6 +322,14 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         .update(t.pullRequests)
         .set({
           body: detail.body ?? null,
+          // The head SHA too, alongside the files we just replaced. Without it the
+          // row can claim head N while `pr_files` hold head N+1, and the intent
+          // derived below would be stamped with a SHA that does not match the
+          // material it read. Side effect worth knowing: `deriveReviewStatus`
+          // compares `last_reviewed_sha` to this, so a reviewed PR whose head has
+          // moved starts reading `stale` one detail-read sooner — which is what
+          // `stale` already means.
+          headSha: detail.head_sha,
           // Diff stats aren't on GitHub's PR-list payload — backfill them from
           // the detail fetch so the Pull Requests list shows real size/files.
           additions: detail.additions,
@@ -279,11 +338,14 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         })
         .where(eq(t.pullRequests.id, pr.id));
 
+      triggerIntent(detail.head_sha);
       return { ...detail, id: pr.id };
     } catch (err) {
       app.log.warn({ err }, 'GitHub PR detail refresh skipped (no token / offline); serving persisted detail');
       const files = await container.db.select().from(t.prFiles).where(eq(t.prFiles.prId, pr.id));
       const commits = await container.db.select().from(t.prCommits).where(eq(t.prCommits.prId, pr.id));
+      // The persisted head SHA, because nothing was refreshed on this path.
+      triggerIntent(pr.headSha);
       return {
         id: pr.id,
         number: pr.number,

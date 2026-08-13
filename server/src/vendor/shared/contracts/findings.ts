@@ -40,6 +40,15 @@ export const FindingKind = z.enum([
 ]);
 export type FindingKind = z.infer<typeof FindingKind>;
 
+/**
+ * Whether a finding is about the job the PR set out to do, judged against the
+ * derived intent. Labelling only — nothing is ever dropped for being out of
+ * scope, and a deterministic floor in `reviewer-core` forces `in_scope` back
+ * onto anything that must not be filtered away.
+ */
+export const FindingScope = z.enum(['in_scope', 'out_of_scope']);
+export type FindingScope = z.infer<typeof FindingScope>;
+
 export const Verdict = z.enum(['request_changes', 'approve', 'comment']);
 export type Verdict = z.infer<typeof Verdict>;
 
@@ -73,6 +82,9 @@ export const Finding = z.object({
   suggestion: z.string().nullish(), // markdown
   confidence: z.number().min(0).max(1),
   kind: FindingKind.nullish(),
+  // Scope label relative to the derived PR intent: set by the model, then floored
+  // deterministically in `reviewer-core`. Absent/null when no intent was available.
+  scope: FindingScope.nullish(),
   // Lethal-trifecta variant fields (present only when kind === 'lethal_trifecta')
   trifecta_components: z.array(TrifectaComponent).nullish(),
   evidence: z.array(TrifectaEvidence).nullish(),

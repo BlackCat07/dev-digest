@@ -26,6 +26,7 @@ import { PrDetailHeader } from "../PrDetailHeader";
 import { OverviewTab } from "../OverviewTab";
 import { FindingsTab } from "../FindingsTab";
 import { DiffTab } from "../DiffTab";
+import type { DiffOrder } from "../SmartDiffViewer";
 import RunTraceDrawer from "../RunTraceDrawer";
 import { s } from "./styles";
 
@@ -63,15 +64,49 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
 
   const tab = search.get("tab") ?? "overview";
   const traceRunId = search.get("trace");
-  const setParam = (key: string, val: string | null) => {
+  // The finding the screen was asked to land on (L03b review follow-up). Set by a
+  // badge in the diff, read by the Agent-runs tab, which opens the run holding it
+  // and scrolls its card into view. In the URL like every other bit of this
+  // screen's state, so the landing is linkable and survives a reload.
+  const targetFindingId = search.get("finding");
+
+  const href = (sp: URLSearchParams) =>
+    `/repos/${repoId}/pulls/${number}${sp.toString() ? `?${sp.toString()}` : ""}`;
+  // Several keys at once, because two sequential single-key calls would each build
+  // from the SAME stale `search` and the second would silently drop the first.
+  const paramsWith = (patch: Record<string, string | null>) => {
     const sp = new URLSearchParams(search.toString());
-    if (val == null) sp.delete(key);
-    else sp.set(key, val);
-    router.replace(
-      `/repos/${repoId}/pulls/${number}${sp.toString() ? `?${sp.toString()}` : ""}`,
-    );
+    for (const [key, val] of Object.entries(patch)) {
+      if (val == null) sp.delete(key);
+      else sp.set(key, val);
+    }
+    return sp;
   };
-  const setTab = (t: string) => setParam("tab", t);
+  const setParam = (key: string, val: string | null) => {
+    router.replace(href(paramsWith({ [key]: val })));
+  };
+  // Switching tabs by hand drops the finding target: the landing belongs to the
+  // navigation that asked for it, not to the tab. Without this, coming back to
+  // Agent runs later would re-open and re-scroll to a finding nobody asked about.
+  const setTab = (t: string) => router.replace(href(paramsWith({ tab: t, finding: null })));
+
+  /**
+   * A findings badge in the diff → that finding's card in the Agent-runs tab.
+   *
+   * `push`, not `replace`: this is a real navigation across tabs, so Back has to
+   * return the reader to the file they were reading. Standard app routing rather
+   * than a modal or a github.com link — the card is a first-class part of this
+   * screen, with the rationale, the suggested fix and the accept/dismiss actions.
+   */
+  const openFinding = (findingId: string) => {
+    router.push(href(paramsWith({ tab: "findings", finding: findingId })));
+  };
+  // The diff's grouping (L03b). In the URL, like `?tab` and `?trace`, so a link to
+  // this tab carries the reader's choice. The default is OMITTED rather than
+  // written as `?order=smart`, so an untouched URL stays clean; any unrecognised
+  // value falls back to `smart` rather than rendering nothing.
+  const order: DiffOrder = search.get("order") === "original" ? "original" : "smart";
+  const setOrder = (next: DiffOrder) => setParam("order", next === "smart" ? null : next);
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
@@ -144,7 +179,9 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
       />
 
       <div style={s.tabColumn}>
-        {tab === "overview" && <OverviewTab prBody={pr.body} />}
+        {tab === "overview" && (
+          <OverviewTab prId={prId} headSha={pr.head_sha} prBody={pr.body} />
+        )}
 
         {tab === "findings" && (
           <FindingsTab
@@ -157,6 +194,7 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
             prCommits={pr.commits}
             repoFullName={repoFullName}
             headSha={pr.head_sha}
+            targetFindingId={targetFindingId}
             cancelMutation={cancel}
             onOpenTrace={(id) => setParam("trace", id)}
             onDelete={(id) => {
@@ -176,7 +214,17 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
             prId={prId}
             filesCount={pr.files_count}
             files={pr.files}
+            additions={pr.additions}
+            deletions={pr.deletions}
+            // The review ROWS, not `allFindings`: the diff tab reduces them to the
+            // newest review per agent so a re-run replaces a file's badge rather
+            // than adding to it. `allFindings` deliberately sums every run, because
+            // the Agent-runs badge above must equal the PR list's FINDINGS column.
+            reviews={runs}
+            order={order}
+            onOrderChange={setOrder}
             canComment={pr.status === "open"}
+            onOpenFinding={openFinding}
           />
         )}
       </div>

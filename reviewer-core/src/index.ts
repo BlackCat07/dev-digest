@@ -20,7 +20,15 @@ export {
 } from './prompt.js';
 
 // Citation grounding — the mandatory mechanical gate for diff findings.
-export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
+export {
+  groundFindings,
+  groundingSummary,
+  FULL_FILE_KINDS,
+  type GroundingResult,
+} from './grounding.js';
+
+// The deterministic scope floor — labels only, never drops (L03).
+export { applyScopeGuard, type ScopeGuardResult } from './review/scope.js';
 
 // Structured-output helpers (Zod → JSON Schema + parse-with-repair).
 export {

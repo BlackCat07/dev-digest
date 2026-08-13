@@ -1,9 +1,14 @@
 import type { CSSProperties } from "react";
+import { STICKY_SCROLL_MARGIN } from "@/lib/sticky-offset";
 
 /** Co-located styles for FindingCard (extracted from inline styles). */
 export const s = {
   card: (focused: boolean, sevColor: string, muted: boolean): CSSProperties => ({
     borderRadius: 8,
+    // A card reached from a diff badge scrolls itself to `block: "start"`, and the
+    // PR header is `position: sticky` above it — at a height that varies per PR, so
+    // this is measured rather than chosen (`client/INSIGHTS.md`, 2026-08-11).
+    scrollMarginTop: STICKY_SCROLL_MARGIN,
     // FULLY per-side longhand. `border` is not the only shorthand here: so are
     // `borderColor` and `borderWidth`, and pairing either with a `borderLeft*`
     // longhand makes React warn "Updating a style property during rerender
@@ -46,6 +51,19 @@ export const s = {
     color: muted ? "var(--text-muted)" : "var(--text-primary)",
     textDecoration: dismissed ? "line-through" : "none",
   }),
+  /** Out-of-scope marker in the title row. Neutral, not a severity colour — a
+      finding outside the PR's stated scope is not a worse finding, and nothing
+      is ever dropped for carrying this label. */
+  outOfScopeTag: {
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    color: "var(--text-muted)",
+    border: "1px solid var(--border)",
+    borderRadius: 4,
+    padding: "1px 6px",
+  } satisfies CSSProperties,
   acceptedTag: { fontSize: 12, fontWeight: 600, color: "var(--ok)" } satisfies CSSProperties,
   dismissedTag: {
     fontSize: 12,

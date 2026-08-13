@@ -1,0 +1,1 @@
+export { SmartDiffGroupHeader } from "./SmartDiffGroupHeader";

@@ -10,6 +10,7 @@ Format, naming and required sections: [`../../docs/specs-convention.md`](../../d
 | Spec | Covers |
 |---|---|
 | [`skills-in-prompt.md`](skills-in-prompt.md) | The `## Skills / rules` slot: where it renders, how bodies are ordered and joined, and why the engine wraps nothing. |
+| [`intent-in-prompt.md`](intent-in-prompt.md) | The `## Stated intent and scope` slot, the labelling-only system rule, and `applyScopeGuard`'s deterministic floor — labels only, nothing ever dropped. |
 
 The rest of the engine's behaviour is documented as mechanism in
 [`../docs/grounding.md`](../docs/grounding.md); a spec lands here when a lesson changes what

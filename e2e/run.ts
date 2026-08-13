@@ -109,7 +109,13 @@ async function runFlow(file: string, flow: Flow): Promise<FlowResult> {
       steps.push({ label, ok: true });
       console.log(`   ✓ ${label}`);
     } catch (e) {
-      const msg = failureDetail(e as ExecError);
+      let msg = failureDetail(e as ExecError);
+      // The URL at failure time, in the log itself: it separates "the app never
+      // routed" from "the app routed and the locator is wrong" without pulling
+      // the artifact — the distinction flow 12's CI failure took three runs and
+      // a screenshot download to make.
+      const urlAtFailure = await ab(["get", "url"]).catch(() => "");
+      if (urlAtFailure.trim()) msg += ` · url at failure: ${urlAtFailure.trim()}`;
       steps.push({ label, ok: false, detail: msg });
       console.log(`   ✗ ${label} — ${msg}`);
       // Best-effort failure screenshot for the artifact upload.

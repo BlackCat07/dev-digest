@@ -5,6 +5,8 @@ import type {
   GitClient,
   CodeIndex,
   Embedder,
+  FeatureModelChoice,
+  FeatureModelId,
   LLMProvider,
 } from '@devdigest/shared';
 import type { AppConfig } from './config.js';
@@ -15,6 +17,7 @@ import { LocalSecretsProvider } from '../adapters/secrets/local.js';
 import { LocalNoAuthProvider } from '../adapters/auth/local.js';
 import { OctokitGitHubClient } from '../adapters/github/octokit.js';
 import { SimpleGitClient } from '../adapters/git/simple-git.js';
+import { ConfinedRepoDocReader } from '../adapters/git/confined-doc.js';
 import { RipgrepCodeIndex } from '../adapters/codeindex/ripgrep.js';
 import { OpenAIProvider } from '../adapters/llm/openai.js';
 import { AnthropicProvider } from '../adapters/llm/anthropic.js';
@@ -26,6 +29,9 @@ import { ConfigError } from './errors.js';
 import { AgentsRepository } from '../modules/agents/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
 import { SkillsService } from '../modules/skills/service.js';
+import { IntentService } from '../modules/intent/service.js';
+import { SmartDiffService } from '../modules/smart-diff/service.js';
+import { resolveFeatureModel } from '../modules/settings/feature-models.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
@@ -63,6 +69,7 @@ export class Container {
   readonly runBus: RunBus;
 
   private _git?: GitClient;
+  private _repoDocs?: ConfinedRepoDocReader;
   private _github?: GitHubClient;
   private _codeIndex?: CodeIndex;
   private _embedder?: Embedder;
@@ -74,6 +81,8 @@ export class Container {
   private _agentsRepo?: AgentsRepository;
   private _reviewRepo?: ReviewRepository;
   private _skills?: SkillsService;
+  private _intent?: IntentService;
+  private _smartDiff?: SmartDiffService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -94,6 +103,19 @@ export class Container {
     return this._git;
   }
 
+  /**
+   * L03 — path-confined reads of a document inside a repo's local clone.
+   *
+   * Its own getter rather than a method on `git` because `GitClient` lives in
+   * `src/vendor/shared/`, which is coordination-only; the intent module declares
+   * the shape it needs (`RepoDocReader`) and this adapter satisfies it
+   * structurally. Built off `this.git` so a test that overrides `git` overrides
+   * the clone location this reader confines to, with nothing extra to stub.
+   */
+  get repoDocs(): ConfinedRepoDocReader {
+    return (this._repoDocs ??= new ConfinedRepoDocReader(this.git));
+  }
+
   get agentsRepo(): AgentsRepository {
     return (this._agentsRepo ??= new AgentsRepository(this.db));
   }
@@ -111,6 +133,52 @@ export class Container {
   get skills(): SkillsService {
     return (this._skills ??= new SkillsService(this));
   }
+
+  /**
+   * Intent (L03). Exposed as the SERVICE for the same reason `skills` is, and
+   * NOT as a repository: `pr_intent` already belongs to `reviewRepo`, and the
+   * one cross-module need — a review run resolving the PR's intent before the
+   * per-agent loop — has to apply the staleness rule, claim the row, bound the
+   * model call and record its own failure. None of that is a query, and the
+   * reviews module must not re-derive any of it for itself.
+   */
+  get intent(): IntentService {
+    // One argument: this container, as the set of ports the service declares
+    // (`IntentDeps`, which a Container satisfies structurally — including
+    // `featureModel` and `repoDocs` below). It used to be passed twice, the
+    // second time as the composition root that `resolveFeatureModel` demanded;
+    // that call is now a port, which is what removed this module's import cycle
+    // with THIS file.
+    return (this._intent ??= new IntentService(this));
+  }
+
+  /**
+   * Smart Diff (L03b). Exposed as the SERVICE and given no repository of its own:
+   * every table it reads — `pull_requests`, `pr_files`, `reviews`, `findings` —
+   * already belongs to `reviewRepo`.
+   *
+   * Note how little it asks for. `SmartDiffDeps` declares ONE port, so this
+   * getter's `this` is satisfied by `reviewRepo` alone — no LLM, no GitHub, no
+   * git, no jobs. That is the feature's central claim expressed in the wiring: a
+   * model call is not something this service chose not to make, it is something
+   * it has no way to make.
+   */
+  get smartDiff(): SmartDiffService {
+    return (this._smartDiff ??= new SmartDiffService(this));
+  }
+
+  /**
+   * L03 — the workspace's chosen provider+model for one feature.
+   *
+   * Wired here, in the one ring allowed to know every module, so the intent
+   * module needs no import of `modules/settings/`. An arrow property rather than
+   * a method so it satisfies the `FeatureModelResolver` call signature directly
+   * and carries `this` with it wherever the container is destructured.
+   */
+  readonly featureModel = (
+    workspaceId: string,
+    id: FeatureModelId,
+  ): Promise<FeatureModelChoice> => resolveFeatureModel(this.db, workspaceId, id);
 
   get codeIndex(): CodeIndex {
     if (this.overrides.codeIndex) return this.overrides.codeIndex;

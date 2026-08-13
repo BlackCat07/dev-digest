@@ -141,3 +141,42 @@ describe("ReviewRunAccordion — collapsed header", () => {
     expect(bareSpanText().filter((t) => t === "1")).toEqual([]);
   });
 });
+
+/* Arriving from a diff badge (`?finding=<id>` → `FindingsTab` → here).
+
+   The run holding the finding has to be OPEN on its first render, because the card
+   inside it scrolls itself into view and cannot do that while unmounted. That makes
+   it a lazy initial state rather than an effect, and these cases are what stop it
+   being "simplified" back into one — the symptom would be a navigation that lands
+   on a collapsed accordion, which reads as the feature simply not working. */
+describe("ReviewRunAccordion — arriving at a targeted finding", () => {
+  const renderTargeted = (targetFindingId: string | null, defaultOpen = false) =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
+        <ReviewRunAccordion
+          review={review()}
+          run={runSummary()}
+          prId="pr-1"
+          defaultOpen={defaultOpen}
+          targetFindingId={targetFindingId}
+        />
+      </NextIntlClientProvider>,
+    );
+
+  it("opens itself when it holds the targeted finding, though it is not the first run", () => {
+    renderTargeted("f2");
+    // The body is what carries the finding titles; a collapsed accordion shows
+    // only its header, so this asserts the disclosure rather than the data.
+    expect(screen.getByText("N+1 query in user list endpoint")).toBeInTheDocument();
+  });
+
+  it("stays collapsed for a finding that belongs to another run", () => {
+    renderTargeted("f-from-another-run");
+    expect(screen.queryByText("N+1 query in user list endpoint")).not.toBeInTheDocument();
+  });
+
+  it("is unaffected when nothing is targeted", () => {
+    renderTargeted(null);
+    expect(screen.queryByText("N+1 query in user list endpoint")).not.toBeInTheDocument();
+  });
+});

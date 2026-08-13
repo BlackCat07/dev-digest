@@ -47,6 +47,13 @@ export async function insertFindings(
         suggestion: f.suggestion ?? null,
         confidence: f.confidence,
         kind: f.kind ?? 'finding',
+        // L03 scope label. `?? null` rather than dropping the key: a finding
+        // the reviewer did not label is stored as NULL = "never labelled",
+        // which is NOT `in_scope` and is shown under every filter. Nothing is
+        // ever dropped on the strength of this column. Every finding of a run
+        // whose prompt carried no intent block arrives here null, because the
+        // scope guard in `reviewer-core` runs only when an intent was supplied.
+        scope: f.scope ?? null,
         trifectaComponents: f.trifecta_components ?? null,
       })),
     )

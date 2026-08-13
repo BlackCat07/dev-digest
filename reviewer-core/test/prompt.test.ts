@@ -119,3 +119,84 @@ describe('assemblePrompt — ## Skills / rules', () => {
     expect(assembly.skills).toBe('A\n\nB');
   });
 });
+
+describe('assemblePrompt — ## Stated intent and scope (L03)', () => {
+  const INTENT = 'Rate-limit the public API. In scope: middleware. Out: the docs rewrite.';
+
+  it('renders the section untrusted-wrapped, after the description and before the skills', () => {
+    const { messages, assembly } = assemblePrompt({
+      system: 'sys',
+      diff: 'DIFF',
+      prDescription: 'PRBODY',
+      intent: INTENT,
+      skills: ['SKILL ONE'],
+    });
+    const user = messages[1]!.content;
+
+    expect(user).toContain('## Stated intent and scope');
+    // The classifier read author-controlled text to produce this, so it is
+    // untrusted again on the way back in.
+    expect(user).toContain('<untrusted source="intent">');
+    expect(user).toContain(INTENT);
+
+    // Order is the contract: the intent sits below the material it was derived
+    // from, and above the rules the reviewer judges by.
+    expect(user.indexOf('## PR description')).toBeLessThan(
+      user.indexOf('## Stated intent and scope'),
+    );
+    expect(user.indexOf('## Stated intent and scope')).toBeLessThan(
+      user.indexOf('## Skills / rules'),
+    );
+    expect(user.indexOf('## Stated intent and scope')).toBeLessThan(
+      user.indexOf('## Diff to review'),
+    );
+
+    expect(assembly.intent).toBe(INTENT);
+  });
+
+  it('omits the section entirely when the intent is absent or blank', () => {
+    for (const parts of [
+      { system: 'sys', diff: 'DIFF' },
+      { system: 'sys', diff: 'DIFF', intent: '' },
+      { system: 'sys', diff: 'DIFF', intent: '   \n  ' },
+    ]) {
+      const { messages, assembly } = assemblePrompt(parts);
+      expect(messages[1]!.content).not.toContain('## Stated intent and scope');
+      expect(messages[1]!.content).not.toContain('<untrusted source="intent">');
+      expect(assembly.intent ?? null).toBeNull();
+    }
+    // A PR with no derived intent gets a byte-identical prompt to the pre-L03
+    // one — not an empty heading. `assembly.intent` is the fact the engine
+    // gates the scope guard on, which is why blank must land on null here.
+    expect(userOf({ system: 'sys', diff: 'DIFF' })).toBe(
+      userOf({ system: 'sys', diff: 'DIFF', intent: '  ' }),
+    );
+  });
+
+  it('appends the scope-labelling rule to the system message only when an intent is present', () => {
+    const withIntent = systemOf({ system: 'AGENT-SYS', diff: 'DIFF', intent: INTENT });
+    const without = systemOf({ system: 'AGENT-SYS', diff: 'DIFF' });
+
+    expect(withIntent).toContain('SCOPE LABELLING');
+    expect(withIntent).toMatch(/in_scope/);
+    expect(withIntent).toMatch(/out_of_scope/);
+    // Labelling only: the rule must never authorise dropping or downgrading.
+    expect(withIntent).toMatch(/never omit, downgrade, soften or merge a finding/);
+
+    expect(without).not.toContain('SCOPE LABELLING');
+    expect(without).not.toContain('out_of_scope');
+  });
+
+  it('leaves the injection guard intact and ahead of the scope rule', () => {
+    // The guard is the one shared defense; the intent slot must extend the
+    // system message, never edit or displace it.
+    const withIntent = systemOf({ system: 'AGENT-SYS', diff: 'DIFF', intent: INTENT });
+    const without = systemOf({ system: 'AGENT-SYS', diff: 'DIFF' });
+
+    expect(withIntent.startsWith('AGENT-SYS')).toBe(true);
+    expect(withIntent).toContain(without);
+    expect(withIntent.indexOf('DATA to be analyzed')).toBeLessThan(
+      withIntent.indexOf('SCOPE LABELLING'),
+    );
+  });
+});

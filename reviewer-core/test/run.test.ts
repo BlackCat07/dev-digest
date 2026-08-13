@@ -104,6 +104,103 @@ describe('reviewPullRequest (engine)', () => {
     ).rejects.toThrow('cancelled');
   });
 
+  /**
+   * The scope guard is gated on the intent slot, not run unconditionally.
+   *
+   * Without an intent nobody judged scope, so `Finding.scope` must stay absent
+   * — the contract says "Absent/null when no intent was available". Persisting
+   * `in_scope` on every finding of an intent-less review makes the UI render
+   * "In scope N / Out of scope 0", a judgement nobody made.
+   */
+  describe('scope labelling is gated on the intent slot', () => {
+    // Both findings are grounded: the mock diff's hunk covers new-side 10–12.
+    const scopeFixture = {
+      verdict: 'request_changes',
+      summary: 'two real findings',
+      score: 40,
+      findings: [
+        {
+          id: 'f-critical',
+          severity: 'CRITICAL',
+          category: 'security',
+          title: 'Hardcoded Stripe secret key',
+          file: 'src/config.ts',
+          start_line: 11,
+          end_line: 11,
+          rationale: 'sk_live in diff',
+          confidence: 0.98,
+          kind: 'finding',
+        },
+        {
+          id: 'f-warning',
+          severity: 'WARNING',
+          category: 'style',
+          title: 'drive-by rename',
+          file: 'src/config.ts',
+          start_line: 12,
+          end_line: 12,
+          rationale: 'unrelated to the stated job',
+          confidence: 0.5,
+          kind: 'finding',
+          scope: 'out_of_scope',
+        },
+      ],
+    };
+
+    async function run(intent?: string) {
+      const events: string[] = [];
+      const outcome = await reviewPullRequest({
+        systemPrompt: 'security reviewer',
+        model: 'gpt-4.1',
+        diff: await new MockGitClient().diff(),
+        llm: new MockLLMProvider('openai', { structured: scopeFixture }),
+        task: 'Review PR #482',
+        ...(intent ? { intent } : {}),
+        onEvent: (e) => events.push(e.msg),
+      });
+      return { outcome, events };
+    }
+
+    it('leaves every scope untouched and emits no scope event when no intent was supplied', async () => {
+      const { outcome, events } = await run();
+
+      const byId = new Map(outcome.review.findings.map((f) => [f.id, f]));
+      expect([...byId.keys()]).toEqual(['f-critical', 'f-warning']);
+      // Unlabelled stays unlabelled — NOT back-filled to 'in_scope'.
+      expect(byId.get('f-critical')!.scope ?? null).toBeNull();
+      // And a label the model did set survives: the floor did not run at all.
+      expect(byId.get('f-warning')!.scope).toBe('out_of_scope');
+
+      expect(outcome.assembly.intent ?? null).toBeNull();
+      expect(events.some((m) => m.startsWith('scope:'))).toBe(false);
+      expect(events.some((m) => m.startsWith('scope floor:'))).toBe(false);
+    });
+
+    it('labels and floors every finding when an intent was supplied', async () => {
+      const { outcome, events } = await run('Rate-limit the public API endpoints.');
+
+      const byId = new Map(outcome.review.findings.map((f) => [f.id, f]));
+      // A CRITICAL cannot even be labelled out of scope, so no filter can hide it.
+      expect(byId.get('f-critical')!.scope).toBe('in_scope');
+      expect(byId.get('f-warning')!.scope).toBe('out_of_scope');
+
+      expect(events).toContain('scope: 1 in-scope, 1 out-of-scope (1 forced)');
+      expect(events.some((m) => m.startsWith('scope floor:'))).toBe(true);
+    });
+
+    it('changes labels only: grounding, membership and score are identical either way', async () => {
+      const bare = await run();
+      const scoped = await run('Rate-limit the public API endpoints.');
+
+      expect(scoped.outcome.grounding).toBe(bare.outcome.grounding);
+      expect(scoped.outcome.review.score).toBe(bare.outcome.review.score);
+      expect(scoped.outcome.review.findings.map((f) => f.id)).toEqual(
+        bare.outcome.review.findings.map((f) => f.id),
+      );
+      expect(scoped.outcome.dropped).toHaveLength(bare.outcome.dropped.length);
+    });
+  });
+
   it('forwards sessionId to every LLM call (OpenRouter session grouping)', async () => {
     const seen: (string | undefined)[] = [];
     const recorder: LLMProvider = {

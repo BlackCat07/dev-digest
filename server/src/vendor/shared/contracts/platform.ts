@@ -49,12 +49,16 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     defaultProvider: 'openrouter',
     defaultModel: 'deepseek/deepseek-v4-flash',
   },
+  // One cheap classification pass in front of every review, so a flash-class
+  // model is the right default. It also has to be an OpenRouter one: Settings →
+  // Feature Models writes `provider: 'openrouter'` for every pick, so an OpenAI
+  // default is one the UI can never restore.
   {
     id: 'review_intent',
     label: 'PR Review · Intent',
     description: 'Derives a PR’s intent and scope before review.',
-    defaultProvider: 'openai',
-    defaultModel: 'gpt-4.1',
+    defaultProvider: 'openrouter',
+    defaultModel: 'deepseek/deepseek-v4-flash',
   },
   {
     id: 'risk_brief',

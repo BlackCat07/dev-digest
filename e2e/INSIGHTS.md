@@ -107,11 +107,114 @@ Dependency and tooling quirks.
   server (2026-08-03): three writers, one `.next`. Gate order matters — run e2e *before*
   `pnpm build`, or clear the directory between them. Evidence: `../scripts/e2e.sh:148`.
 
+- **2026-08-12** — **A red CI run on a public repo is fully diagnosable with NO `gh auth`.**
+  `api.github.com/repos/<o>/<r>/actions/runs?branch=…`, `…/runs/<id>/jobs` (per-step ✓/✗)
+  and `…/runs/<id>/artifacts` all answer anonymously; what 403s without a token is the log
+  download AND the artifact download — and the artifact ZIP comes through
+  `https://nightly.link/<o>/<r>/actions/runs/<id>/<artifact-name>.zip` instead. For this
+  suite the artifact IS the failure screenshot `run.ts` uploads, and one look at it settled
+  what three theory-driven fix commits had not (see Recurring Errors, 2026-08-12 below):
+  it showed the page's scroll position, which no log line carries. Evidence: `run.ts`
+  (the failure screenshot), `../.github/workflows/e2e-web.yml` ("Upload failure artifacts").
+
+- **2026-08-12** — **`agent-browser get cdp-url` exposes the daemon's browser WebSocket, and
+  raw CDP over it works** — `Target.getTargets` → `Target.attachToTarget {flatten:true}` →
+  `Emulation.setCPUThrottlingRate {rate:20}` starves the live page's renderer x20 without
+  touching the harness, which is the right first probe for a "slow CI runner" theory about
+  a CI-only failure. Remember to set the rate back to 1: it sticks to the page for the
+  daemon's lifetime, and the whole suite shares that one session. On flow 12 it did NOT
+  reproduce the CI failure, which is what demoted every timing theory and left node
+  detachment as the only mechanism consistent with the artifact. Evidence:
+  `specs/12-pr-smart-diff.flow.json` (the investigation it served), `run.ts` (the shared
+  daemon session).
+
 ## Recurring Errors & Fixes
 
 An error string, its real cause, and the fix.
 
 <!-- append below -->
+
+- **2026-08-12** — **The real cause of that failure was the STICKY HEADER, not the re-render:
+  agent-browser scrolls a target into view and clicks its CENTRE, and this app's header sits
+  over that point.** Supersedes the diagnosis in the entry below (the `wait --fn` barrier it
+  prescribes is a sound guard for a different race, but it did not fix anything — the flow
+  failed identically with it in place, which is what forced a real measurement instead of a
+  second theory). `PrDetailHeader` is `position: sticky` at the top of the `<main>` that
+  scrolls, ~128px tall; a badge that needed scrolling ended at `top: 52`, so
+  `document.elementFromPoint` at the button's centre returned the HEADER, the click landed
+  there, and `find … click` exited 0 with nothing having happened. Two things make this
+  expensive to find: it depends on whether the target was already in view, so it passes on
+  one viewport and fails on another — locally every attempt passed until the page was
+  deliberately scrolled away from the badge first (`agent-browser scroll down 4000`), which
+  reproduced CI exactly, `✓ Done` and an unchanged URL. And the failing STEP is the one after
+  the click, so the log points at the assertion rather than at the click. The fix belongs in
+  the app, not the flow, and is a real accessibility fix: the button carries
+  `scrollMarginTop` off the header's measured height, so Tab-focusing it from further down
+  the diff no longer parks it under the header either — verified by the same probe going
+  from `{top: 52, inButton: false}` to `{top: 196, inButton: true}`. **Probe to reuse when a
+  green click does nothing:** scroll the element into view, then ask `elementFromPoint` at
+  its centre whether the answer is inside the element. Evidence:
+  `../client/src/app/repos/[repoId]/pulls/[number]/_components/SmartDiffViewer/_components/FindingJumpBadge/styles.ts`,
+  `../client/src/lib/sticky-offset.ts`, `specs/12-pr-smart-diff.flow.json`, run 31599113842.
+
+- **2026-08-12** — **A `find … click` that prints `✓ Done` proves a click was DISPATCHED, not
+  that anything received it — so the step that fails is the one AFTER the guilty one.** Flow
+  12 clicked a findings badge (step 220, green) and then timed out waiting for the URL it
+  routes to (step 221, `Wait timed out after 30000ms`), which reads as "the app does not
+  navigate" and is not that: the same commands, in the same order, against a local dev
+  server, routed correctly every time. The mechanism is one step earlier still.
+  `wait --url order=original` returns the INSTANT the URL changes, and on this screen the
+  URL is written by `router.replace` **before** React commits the re-render it causes — so
+  the next command runs against the old DOM. Original order replaces the whole subtree
+  (three `<section>` group wrappers become flat cards), so every file card below is a new
+  node; `find` resolved the OLD badge, clicked a detached element, and exited 0. On a
+  loaded CI runner the commit lands after the process spawn; locally it lands before, which
+  is why this is a CI-only failure that reproduces nowhere. What fixes it is not another
+  `wait --load networkidle` — the DOM swap is not a network event — but a **barrier that
+  only the new render can satisfy**: `wait --fn "!document.body.innerText.includes('Core
+  logic')"`, since group headers exist in Smart order only. Generalises to every step that
+  changes what is RENDERED rather than merely what is fetched: assert a fact of the new
+  render before the next `find`, and prefer `wait --fn` — the help's own
+  wait-for-text-to-DISAPPEAR idiom — where the harness's positive-only `wait --text` cannot
+  express it. Evidence: `specs/12-pr-smart-diff.flow.json` (the `wait --fn` barrier),
+  `../client/src/app/repos/[repoId]/pulls/[number]/_components/SmartDiffViewer/SmartDiffViewer.tsx`
+  (the `!grouped` early return), run 31599113842.
+
+- **2026-08-11** — **`✗ land on the PR list — Wait timed out after 25000ms` as the SECOND step
+  of a flow is the home redirect, not your flow.** Five flows open with the same pair —
+  `open {BASE}/` then `wait --url /pulls` — and the redirect behind it is a client-side
+  `router.replace` inside a `useEffect` that fires only once `useRepos` resolves
+  (`client/src/app/_components/HomeView/HomeView.tsx`). So the opener has just agent-browser's
+  own **25s ceiling** to complete in — `E2E_STEP_TIMEOUT` does not raise it, see the note in
+  `run.ts` — and whichever flow runs LAST is the one that meets a dev server busy recompiling
+  a root route it navigated away from ten flows ago. Flow 12 failed there while 11/12 passed;
+  inserting `wait --load networkidle` between the two steps, so the root's `GET /repos`
+  settles before the URL is asserted, made it 12/12. Same family as the 2026-08-06 entry above
+  (which prescribes the same settle for a click after `wait --url`) — treat a bare
+  `open` → `wait --url` pair as the harness's sharpest edge and always settle between them.
+  How to tell it apart from a real bug in one step, since `run.ts` has **no single-flow
+  filter**: bring the stack up by hand, then replay just that flow's `cmd` arrays through
+  `agent-browser` in a loop. All 30 of flow 12's steps passed that way while the suite run
+  had failed at step 2, which is conclusive. Evidence:
+  `specs/12-pr-smart-diff.flow.json` (the two `networkidle` settles), `run.ts` (`STEP_TIMEOUT`).
+
+- **2026-08-10** — **`✗ Wait timed out after 25000ms` on a `wait --text` whose text is visibly
+  on the screen means the CASING is wrong, not the screen.** `wait --text` matches the
+  **rendered** text, and CSS `text-transform: uppercase` changes what that is — so asserting
+  a message-catalogue string against an uppercase-styled label can never match. Flow 11 was
+  written with `wait --text "Intent"`, `"In scope"`, `"Confidence"`, `"Missing context"`,
+  `"Sources"`; every one of those renders uppercase, because `vendor/ui`'s `SectionLabel`
+  sets `textTransform: "uppercase"` and `IntentCard/styles.ts` does the same in its
+  `columnHead`, `blockLabel` and `metaLabel`. The flow could therefore never pass, on any
+  machine, while the feature was completely correct — the harness's own failure screenshot
+  (`test-results/11-pr-intent-fail.png`) showed the whole card rendered, which is what
+  separated this from a real regression in one step. Two things follow. Read the failure
+  screenshot BEFORE debugging the app: a timeout with a correct-looking screenshot is a
+  locator bug, and `agent-browser`'s message is identical either way. And when asserting a
+  styled label, take the casing from the rendered DOM, not from `messages/en/*.json` — the
+  uppercase is presentational, so the catalogue and the screen legitimately disagree.
+  Evidence: `specs/11-pr-intent.flow.json`,
+  `../client/src/vendor/ui/shell/SectionLabel.tsx`, `test-results/11-pr-intent-fail.png`.
 
 - **2026-08-06** — `✗ open the PR row — Command failed: agent-browser find text "Add rate
   limiting to public API endpoints" click` in flow **04 or 05** is a timing flake, not a
@@ -130,6 +233,48 @@ An error string, its real cause, and the fix.
   and a `wait --load networkidle` before the click would settle it properly. Evidence:
   `../server/src/modules/pulls/routes.ts:87`, `specs/04-pr-findings.flow.json`,
   `specs/05-pr-diff.flow.json`.
+
+- **2026-08-12** — **A CI-only "click exited 0, nothing happened" that no local environment
+  reproduces is `find` resolving a node a remount already DETACHED — and the failure
+  screenshot proves it through the scroll that ISN'T there.** Supersedes 2026-08-12 (the
+  sticky-header entry above) as the diagnosis of flow 12's CI failure: that fix is real and
+  stays (a scrolled-to badge does land clear of the header, and Tab-focus needed it too),
+  but CI failed identically with it shipped — three straight runs on two commits
+  (31599113842, 31600061139, 31600976140). The pin: `find … click` exits 0, the URL never
+  changes, and the artifact screenshot ~30s later shows the page still at scroll TOP, yet
+  the badge sits at y≈1050 in a 577px viewport — a click that reached anything attached
+  would have scrolled. `scrollIntoView` + click on a detached node is a silent no-op, and
+  the only remount between the flow's barrier and its click was Original order replacing
+  the card subtree. Six configurations would not reproduce it (macOS dev + prod, this exact
+  runner in a linux/amd64 container against a prod build, agent-browser 0.33.2 and 0.34.0,
+  a x20 CDP CPU throttle), so the fix is structural, not another wait: the badge click
+  moved BEFORE the order flip — a subtree that has never re-rendered cannot offer a stale
+  node — with a `wait --fn` hittability probe in front of it (scroll to centre, then
+  `elementFromPoint` must land inside the button), so a swallowed click now times out at
+  ITS step instead of the assertion after it; the flip moved to the tail behind the same
+  settle depth the tab-switch remount already survives in CI; and `run.ts` now appends
+  `url at failure:` to every failed step, which is the one line that separates "never
+  routed" from "routed, wrong locator" without downloading the artifact. Evidence:
+  `specs/12-pr-smart-diff.flow.json` (step "click the findings badge on a flagged file"),
+  `run.ts` (`urlAtFailure`).
+
+- **2026-08-12** — **The detachment fix above did NOT hold either: run 31605913685 failed the
+  same way with the badge clicked BEFORE any remount, and its artifact shows the page scrolled
+  TO the badge** — so this time the target was attached, found and scrolled to, and the click
+  still navigated nothing. That refutes, in order: timing (four settle steps + a passed
+  hittability probe ahead of the click), geometry (the probe centres the badge and checks
+  `elementFromPoint`), staleness (no remount had happened yet), and the app (the same build
+  routes on every local click, and the PR-row and tab-bar clicks in the SAME CI run navigate
+  fine). What is left is the locator engine: `find role button --name … click` swallowing the
+  click on CI Linux specifically, which is the second `find role` CI-only anomaly this suite
+  has hit (see Open Questions, 2026-08-07). The flow no longer clicks the badge — the click
+  contract moved down to component tests (`SmartDiffViewer.test.tsx` badge→id,
+  `FindingsPanel.test.tsx` targeted-card expansion, `FindingCard.test.tsx` scroll landing),
+  with the two-line `PrDetailView.openFinding` glue named in the flow description as the one
+  seam that leaves unpinned. Full click version preserved at commit 9cb8385 if the engine
+  anomaly is ever resolved. Supersedes 2026-08-12 (the detachment entry above) as the
+  diagnosis; the probe pattern and the `url at failure:` runner line it introduced stay.
+  Evidence: `specs/12-pr-smart-diff.flow.json` (description), run 31605913685's artifact.
 
 ## Session Notes
 
@@ -160,3 +305,19 @@ Left unresolved, stated precisely enough for the next session to pick up.
   `<div>` in `NavItem`, or the `/pulls` screen specifically. Evidence:
   `specs/10-conventions.flow.json`, `../client/src/vendor/ui/shell/NavItem.tsx`,
   run 31168422411.
+
+- **2026-08-12** — **Second `find role` CI-only anomaly, worse than the first: the 2026-08-07
+  case matched NOTHING (loud), this one matches something and clicks it into the VOID
+  (silent).** On CI Linux only, `find role button click --name "Open the finding in
+  src/api/users.ts in the Agent runs tab"` exits 0 and no `onClick` fires — four consecutive
+  runs (31599113842, 31600061139, 31600976140, 31605913685), while `find text` clicks and
+  `find role button --name "Files changed"` in the SAME runs work. Everything app- and
+  flow-side is ruled out; the trail is in Recurring Errors (three 2026-08-12 entries).
+  Unresolved and stated for pickup: (1) the failing runs' LOGS — which now carry `run.ts`'s
+  `url at failure:` line — need an authenticated `gh run view --log`; anonymous API 403s
+  log downloads, though `nightly.link` serves the artifact ZIP. (2) A minimal repro against
+  agent-browser upstream would need a GH-hosted runner, since six local environments
+  (including linux/amd64 + Chrome-for-Testing + 0.34.0 via this exact runner) cannot
+  trigger it. (3) If the engine is fixed, flow 12's full click version lives at commit
+  9cb8385. Evidence: `specs/12-pr-smart-diff.flow.json` (description), `run.ts`
+  (`urlAtFailure`).

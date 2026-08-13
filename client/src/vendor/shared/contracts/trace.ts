@@ -47,6 +47,10 @@ export const PromptAssembly = z.object({
   repo_map: z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
+  /** Pre-rendered "Stated intent and scope" block (L03); null when absent.
+      Traces written before L03 carry the key ABSENT, not null — read it as
+      `undefined`-tolerant, exactly like the other optional slots here. */
+  intent: z.string().nullish(),
   user: z.string(),
 });
 export type PromptAssembly = z.infer<typeof PromptAssembly>;

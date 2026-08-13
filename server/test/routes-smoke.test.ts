@@ -64,4 +64,18 @@ describe('routes (no DB)', () => {
     expect(res.json().error.code).toBe('validation_error');
     await app.close();
   });
+
+  /**
+   * L03b — the one part of `GET /pulls/:id/smart-diff` that can be covered without
+   * Postgres. `IdParams` validation runs before the handler, so a non-uuid id never
+   * reaches `getContext` and postgres-js never connects. Everything else about the
+   * route needs real rows and lives in `smart-diff.it.test.ts`.
+   */
+  it('422s a smart-diff request whose PR id is not a uuid', async () => {
+    const app = await buildApp({ config });
+    const res = await app.inject({ method: 'GET', url: '/pulls/not-a-uuid/smart-diff' });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('validation_error');
+    await app.close();
+  });
 });

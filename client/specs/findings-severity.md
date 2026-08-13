@@ -39,7 +39,12 @@ Server half of this feature: [`../../server/specs/findings-severity.md`](../../s
    active, and each run filters independently.
 10. A level with nothing to isolate is dimmed — unless it is the active one, so the filter
     is always clearable from where you set it.
-11. Changing the filter resets the `j`/`k` cursor to the first visible card.
+11. Changing the filter resets the `j`/`k` cursor to the first visible card. It starts on
+    the first card too — **unless the screen was navigated to one finding in particular**
+    (`?finding=<id>`, set by a badge in the Smart Diff; see
+    [`smart-diff.md`](./smart-diff.md) Behaviour #10a), in which case the cursor starts
+    there and that card arrives expanded and outlined. Only the FIRST reset is skipped, so
+    a later filter change still rescues the cursor as above.
 12. Filtering composes with the existing *hide low confidence* toggle.
 
 ### PR detail — read-only counters

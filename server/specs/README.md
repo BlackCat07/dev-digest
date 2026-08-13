@@ -12,6 +12,8 @@ Format, naming and required sections: [`../../docs/specs-convention.md`](../../d
 | [`findings-severity.md`](findings-severity.md) | Per-severity finding counts on the PR list payload, and the reviews endpoint the hover panel reads. |
 | [`skills.md`](skills.md) | Skills CRUD, versioning and import; per-run skill attribution and the usage figures derived from it. |
 | [`conventions-extractor.md`](conventions-extractor.md) | Scanning a cloned repo for house rules, the evidence gate and adherence count that filter them, and composing the accepted ones into a skill. |
+| [`intent-layer.md`](intent-layer.md) | Deriving a PR's intent and scope: the endpoints, the `pr_intent` shape, the three derivation triggers, the source policy, confidence derivation, and the two-LLM-call trace. |
+| [`smart-diff.md`](smart-diff.md) | Grouping a PR's changed files by role from their paths alone, overlaying the latest review's findings, the split suggestion, and why the route can make no model call. |
 
 ## Scope of a server spec
 

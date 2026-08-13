@@ -2,6 +2,7 @@
   "finding": {
     "accepted": "accepted",
     "dismissed": "dismissed",
+    "outOfScope": "out of scope",
     "suggestedFix": "Suggested fix",
     "accept": "Accept",
     "dismiss": "Dismiss",
@@ -50,14 +51,53 @@
     "blockers": "{count} blockers"
   },
   "smartDiff": {
-    "coreLabel": "Core",
-    "wiringLabel": "Wiring",
-    "boilerplateLabel": "Boilerplate",
+    "label": "Reviewer-ordered diff",
+    "filesChanged": "Files changed",
+    "summary": "{files} files · +{additions} −{deletions}",
+    "order": {
+      "legend": "Diff order",
+      "smart": "Smart order",
+      "original": "Original order"
+    },
+    "groups": {
+      "core": {
+        "label": "Core logic",
+        "description": "The substance of the change — review closely"
+      },
+      "wiring": {
+        "label": "Wiring",
+        "description": "Hooks the core into the app"
+      },
+      "boilerplate": {
+        "label": "Boilerplate",
+        "description": "Generated / mechanical — skim"
+      },
+      "unclassified": {
+        "label": "Unclassified",
+        "description": "The grouping didn't cover these files"
+      }
+    },
+    "filesCount": "{count, plural, one {# file} other {# files}}",
+    "findingsBadge": "{count, plural, one {# finding} other {# findings}}",
+    "findingsBadgeLabel": "{count, plural, one {Open the finding in {path} in the Agent runs tab} other {Open the first of # findings in {path} in the Agent runs tab}}",
+    "lineBadgeLabel": "{count, plural, one {Open this finding in the Agent runs tab} other {Open the first of # findings on this line in the Agent runs tab}}",
+    "hasBlockers": "Has blocking findings",
+    "summaryPill": "summary",
+    "whatThisDoes": "What this does:",
+    "severity": {
+      "blocker": "blocker",
+      "warning": "warning",
+      "suggestion": "suggestion",
+      "info": "info"
+    },
+    "lineOffDiff": "{count, plural, one {# finding is} other {# findings are}} on lines outside this patch",
+    "unavailable": "Couldn't group these files by role — showing the original order.",
+    "grouping": "Grouping files by role…",
+    "noFiles": "No changed files.",
+    "showComments": "Show comments",
+    "hideComments": "Hide comments",
     "largeTitle": "This PR is large ({lines} changed lines)",
-    "largeBody": "Consider splitting it into smaller, focused PRs for easier review:",
-    "filesCount": "{count} files",
-    "findingLines": "{count} finding-lines",
-    "groupedByRole": "Smart Diff · grouped by role"
+    "largeBody": "Consider splitting it into smaller, focused PRs for easier review:"
   },
   "list": {
     "breadcrumb": "Pull Requests",
@@ -116,6 +156,11 @@
     "critical": "Critical",
     "warning": "Warning",
     "suggestion": "Suggestion"
+  },
+  "scopeFilter": {
+    "label": "Filter findings by scope",
+    "inScope": "In scope",
+    "outOfScope": "Out of scope"
   },
   "timeline": {
     "goToReview": "Jump to this run’s findings below",
