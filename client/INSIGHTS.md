@@ -71,6 +71,23 @@ Approaches and solutions that worked and should be reused.
   `src/app/repos/[repoId]/pulls/styles.ts` (`tableCard`),
   `_components/FindingsHoverCard/` (`FindingsHoverTrigger`), `_components/PrFindingsCell/`.
 
+- **2026-08-14** — **The "undefined token name" class of bug (2026-08-06, `var(--bg)`) is
+  mechanically detectable in ~40 lines, and this package has no such check.** A sibling product
+  that vendors this exact design system added one and it caught a real bug the moment it was
+  written: nine reviewed-and-shipped files styled muted text with `var(--text-tertiary)`, which
+  `styles.css` does not define — `color` fell back to *inherited*, so every date and hint
+  rendered at full contrast instead of dimmed. The test is a plain vitest file: regex every
+  `(--[a-z0-9-]+)\s*:` declared in `src/vendor/ui/styles.css` into a set, walk `src/` for
+  `.ts|.tsx|.css`, and assert every `var(--…)` written in our own code is in that set. Two scope
+  decisions make it usable here: skip `src/vendor/**` (a verbatim copy is not ours to correct, and
+  a self-reference there is a finding about the copy, not a bug), and read the theme file for both
+  colour schemes at once so a token defined in only one `[data-theme]` block still counts as
+  defined — catching *that* asymmetry needs a second, separate assertion. Note this is the one
+  styling mistake invisible to `tsc`, `eslint`, `next build` and every existing test, which is
+  what makes a mechanical check worth its 40 lines. Evidence: `src/vendor/ui/styles.css`,
+  `../learning-platform/frontend/src/test/tokens.test.ts` (the sibling implementation),
+  `.claude/skills/product-ui-language/references/tokens.md`.
+
 ## What Doesn't Work
 
 Dead ends and antipatterns, and why they fail. The most-skipped section and the most

@@ -15,6 +15,7 @@ Subagents are the neighbouring concept and live in [`../agents/`](../agents/READ
 | [postgresql-table-design](postgresql-table-design/SKILL.md) | Backend | Postgres schema design, data types, indexing, constraints |
 | [onion-architecture](onion-architecture/SKILL.md) | Backend | Which ring a server file belongs to and which way its dependencies may point |
 | [frontend-ui-architecture](frontend-ui-architecture/SKILL.md) | Frontend | Where files go, when to split a component, which layer owns logic and state |
+| [product-ui-language](product-ui-language/SKILL.md) | Frontend | Token roles, spacing and type scale, and the recipes for a list / detail / grid / modal screen — portable to a second product |
 | [next-best-practices](next-best-practices/SKILL.md) | Frontend | Next.js App Router, RSC boundaries, data fetching, optimization |
 | [react-best-practices](react-best-practices/SKILL.md) | Frontend | React anti-patterns, state management, hooks rules |
 | [react-testing-library](react-testing-library/SKILL.md) | Frontend | General-purpose React Testing Library guide with Vitest |
@@ -23,8 +24,8 @@ Subagents are the neighbouring concept and live in [`../agents/`](../agents/READ
 | [security](security/SKILL.md) | Full-stack | OWASP Top 10:2025, auth, injection, uploads, secrets |
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
 
-`engineering-insights`, `frontend-ui-architecture`, `onion-architecture` and
-`pr-self-review` are authored in
+`engineering-insights`, `frontend-ui-architecture`, `onion-architecture`,
+`product-ui-language` and `pr-self-review` are authored in
 this repo. Every other
 skill is vendored from GitHub and pinned by hash in `../../skills-lock.json` —
 locally-authored skills have no upstream and do not belong in that lockfile.

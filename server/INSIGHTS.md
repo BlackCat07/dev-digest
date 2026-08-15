@@ -140,6 +140,29 @@ valuable one — the code does not record what was tried and abandoned.
   `src/modules/conventions/service.ts` (the extraction loop),
   `src/adapters/codeindex/ripgrep.ts` (`IGNORE_DIRS`).
 
+- **2026-08-13** — **`ReviewRunResponse`'s doc-comment states the run is synchronous and that
+  the persisted reviews come back with it. Both claims are false, and the file cannot be
+  fixed.** `POST /pulls/:id/review` is fire-and-forget: `runReview` creates the `agent_runs`
+  rows, fires `void this.executor.executeRuns(...)` and returns immediately, so `reviews` in
+  that response is **always `[]`**. The comment at `contracts/review-api.ts:40-44` says the
+  opposite ("The persisted reviews are also returned once the (synchronous) run completes"),
+  and it is the single most expensive sentence in the contract for a new consumer — it invites
+  "just read `reviews` off the POST response", which returns an empty array forever with no
+  error. `src/vendor/shared/**` is a do-not-touch cross-package contract, so the comment stays
+  wrong; this entry is the correction. Any consumer must do create → poll
+  `GET /pulls/:id/runs` → read `GET /pulls/:id/reviews`. Evidence:
+  `src/modules/reviews/service.ts` (`runReview`), `src/vendor/shared/contracts/review-api.ts`.
+
+- **2026-08-13** — **`GET /pulls/:id/runs` does not check that the pull request exists — it
+  answers `200 []`** — so a polling loop keyed on "no runs have appeared yet" spins forever
+  against a typo'd or deleted `pr_id` and never errors. `listRunsForPull` is a plain
+  `where(eq(agentRuns.prId, id))`, and an empty result is indistinguishable from "the PR is
+  not there". Key the loop on the **specific `run_id` returned by the POST** instead, and stop
+  after a bounded number of consecutive absences with a report; the run id is the only value
+  whose disappearance means something definite. Evidence:
+  `src/modules/reviews/repository/run.repo.ts` (`listRunsForPull`),
+  `src/modules/reviews/routes.ts`.
+
 - **2026-08-03** — Deriving a **PR-level** figure from the newest **single** row per PR is
   wrong by construction on this schema: one review fans out over N agents and `runOneAgent`
   writes one `agent_runs` row *and* one `reviews` row **per agent**, so the PR list's
@@ -150,6 +173,73 @@ valuable one — the code does not record what was tried and abandoned.
   `pickLatestPerPr` (see 2026-08-02, Recurring Errors) no longer exists;
   `groupLatestPerAgent` / `sumCosts` / `minScore` replace it in the same file. Evidence:
   `src/modules/pulls/latest.ts`, `src/modules/reviews/run-executor.ts` (`runOneAgent`).
+
+- **2026-08-14** — **A per-LINE regex scan cannot see this repository's own route
+  declarations, and it emptied half a feature while every gate stayed green.**
+  `extractEndpoints` split the file and matched each line, so the verb and the path had to
+  share one. Prettier formats every `modules/*/routes.ts` here as `app.get(\n  '/path',`, so
+  none of them ever matched. Measured on the real index of this repo: **21 files carried
+  endpoint facts and all 21 were client hooks** (`api.get(\`/agents\`)` fits on a line), while
+  all 10 server route files carried none — i.e. `file_facts` described the API's consumers and
+  not the API. Blast Radius reads those facts, so its endpoint column was empty on real data
+  while returning correct callers, which is the worst shape for a bug: the feature looks
+  half-working rather than broken. Nothing caught it because `test/extract.test.ts`'s fixture
+  is single-line, and the patterns already contained `\s*` — only the loop was wrong. Two
+  things to carry forward: scan whole files (`matchAll`) and keep the "only whitespace between
+  the call and a literal" rule, which is what keeps a computed path from being reported as a
+  fact; and remember the fix does not reach anyone without `INDEXER_VERSION`, because the
+  facts are re-extracted only on a version mismatch. Evidence:
+  `src/adapters/codeindex/extract.ts` (`extractEndpoints`),
+  `src/modules/repo-intel/constants.ts` (`INDEXER_VERSION`, 2 → 3),
+  `test/extract.test.ts` ("path is on the NEXT line").
+
+- **2026-08-14** — **An early-return path that omits optional metadata makes a correct
+  consumer report the wrong status, and the consumer is not the bug.**
+  `tryPersistentBlast` has a second return for "the changed files declare no symbols" that
+  returned `{ changedSymbols, callers: [], impactedEndpoints: [], degraded: false }` — no
+  `indexStatus`, no `indexedSha`. The blast module derives `ok` / `partial` / `degraded` from
+  that field and, given nothing, refuses to claim completeness it was not shown — so a repo
+  with a **full** index answered `partial / index_missing` for any docs-only or config-only
+  PR. Found only on real data (a 2-file PR against a 312-file indexed repo); every hermetic
+  test passed, because they all exercised the main return. The same return also skipped the
+  reverse graph walk, so a config file that a router imports reported no impact at all. Rule
+  for any facade with several exits: if a consumer branches on an OPTIONAL field, every exit
+  must set it — an absent value is not a neutral default, it is a third state the consumer has
+  to invent a meaning for. Evidence: `src/modules/repo-intel/service.ts`
+  (`tryPersistentBlast`, the `nameSet.size === 0` return), `src/modules/blast/service.ts`
+  (`statusOf`), `test/repo-intel-blast.test.ts` ("still reports coverage when the changed
+  files declare no symbols").
+
+- **2026-08-14** — **A cap applied to a MERGED list is not the per-group cap it reads as, and
+  the false negative it produces is indistinguishable from a true one.**
+  `getBlastRadius` ended `callers: callers.slice(0, MAX_CALLERS_PER_SYMBOL)` over the whole
+  flat list, where the constant says *per symbol*. One popular helper with 25 callers consumed
+  the entire budget, and every other changed symbol in the same PR rendered as "no callers" —
+  which looks exactly like a symbol nobody calls. Group first, cap each group, and take the
+  pre-cap count BEFORE the slice so the response can say "14 callers" over a shorter list
+  honestly. The same list also sorted on `rank DESC` alone, the shape the 2026-08-06 entry in
+  this section describes for `listCandidates` — but here it is worse than a wobbling order,
+  because the list is then TRUNCATED, so a tie decides which callers a reviewer is shown at
+  all, and ties are the norm (every unranked file shares `0`, and the whole fallback path is
+  `rank: 0`). Both were verified by mutation: reverting the cap turns 1 test red, reverting
+  the tiebreakers 2. Evidence: `src/modules/repo-intel/service.ts` (`tryPersistentBlast`,
+  `compareCallers`), `test/repo-intel-blast.test.ts` ("keeps the quiet symbol's callers").
+
+- **2026-08-14** — **A reverse-reachability walk is correct to exclude its own seeds, and that
+  correctness is exactly what loses the most direct impact of all.** The blast walk seeds
+  `seen` with the changed files so a changed file is never reported as its own dependent —
+  right, and non-negotiable. But on a real PR that edited `agents/helpers.ts` **and**
+  `agents/routes.ts`, that meant every endpoint the diff literally rewrites was absent from
+  the map while endpoints two hops away were present. Symbol-caller attribution did not cover
+  it either, because the symbols lived in the *other* changed file. So a reachability feature
+  needs a **depth-0 term** — the seeds' own facts, collected separately (`changedFileFacts`)
+  and merged with a shallowest-depth-wins dedup — plus a map-level union for impact that
+  belongs to the PR rather than to any one symbol, or the headline count and the tree below it
+  disagree. Related: endpoints sourced from test files must be dropped at this layer, because
+  `extractEndpoints` cannot tell "declares this route" from "calls it" and an `.it.test.ts`
+  therefore records the API it exercises. Evidence: `src/modules/repo-intel/service.ts`
+  (`reverseImpact`, `ownFacts`), `src/modules/blast/service.ts` (`mapLevelImpact`,
+  `isTestPath`), `specs/blast-radius.md`.
 
 ## Codebase Patterns
 
@@ -191,6 +281,17 @@ Conventions and architectural decisions, each with the reason behind it.
   `src/modules/pulls/routes.ts` (the list upsert vs the detail `.set`),
   `src/adapters/github/octokit.ts` (list mapping, no `body`),
   `src/modules/intent/service.ts` (`needsDerivation`).
+
+- **2026-08-13** — Addendum to 2026-08-07 (Recurring Errors, the trace-before-status fix): the
+  write order in `runOneAgent` is `insertReview` → `saveRunTrace` → `completeAgentRun`, so a
+  terminal `agent_runs.status` is a promise about **the review row too**, not only the trace.
+  That is load-bearing for any out-of-process consumer: it means "status is terminal" is
+  sufficient warrant to issue exactly **one** `GET /pulls/:id/reviews` and expect the row to be
+  there — no retry loop, no second poll for the review itself. Keep all three writes in that
+  order if the executor is ever reshaped; moving `insertReview` after `completeAgentRun` would
+  reintroduce the same race the 2026-08-07 entry closed for traces, one layer up and against
+  every external reader rather than only against CI. Evidence:
+  `src/modules/reviews/run-executor.ts` (`runOneAgent`).
 
 - **2026-08-10** — **A helper that takes the whole `Container` puts every one of its callers
   into an import cycle with the DI root, and the fix is to narrow the parameter, not to
@@ -302,6 +403,36 @@ Conventions and architectural decisions, each with the reason behind it.
   leaves the citation dangling and creates a second doc for the same topic. Evidence:
   `src/modules/pulls/routes.ts` (the SCORE/COST/FINDINGS comment block),
   `docs/scores-and-costs.md`.
+
+- **2026-08-14** — **`import type` does NOT exempt a module from
+  `no-cross-module-internals` — a types-only import of a sibling's `types.ts` is a real
+  violation, and the fix takes ten minutes if done first.** `modules/blast/` was written
+  against `repo-intel`'s `BlastResult` with `import type`, which feels free (it erases at
+  compile time and cannot create a runtime cycle). `depcruise` counts it anyway: 22 → 24
+  warnings, both attributed to blast. The fix is the shape the 2026-08-10 entry above
+  prescribes for ports, applied to a whole result type: the CONSUMER declares the fields it
+  reads (`IndexBlastFacts` in `modules/blast/types.ts`), the facade's real `BlastResult`
+  satisfies it structurally with no `implements`, and the module imports nothing from its
+  sibling — back to 22. Worth doing for a second reason that is not about the linter: the
+  declared view is narrower than the real type, so it documents exactly which index facts the
+  feature depends on. Keep one test importing the REAL type and passing it in, or the two
+  shapes can drift silently — `test/blast-service.test.ts` does that deliberately. Evidence:
+  `src/modules/blast/types.ts` (`IndexBlastFacts`), `.dependency-cruiser.cjs`
+  (`no-cross-module-internals`).
+
+- **2026-08-15** — **`pr_files` is sparse on every real workspace, so a feature that queries
+  ACROSS pull requests is in its "partial" state by default, not by exception.** Measured on
+  the live dev database while building `GET /pulls/:id/prior-prs`: `BlackCat07/typescriptdemo`
+  had 14 pull requests and **10** with any `pr_files` rows, because that table is written only
+  by `GET /pulls/:id` (2026-08-11, this section) and a row appears the first time somebody
+  opens that PR in the studio. Two consequences worth carrying into the next cross-PR feature.
+  The coverage figure has to be QUERIED, not inferred from the result — an empty overlap and a
+  full overlap are the same empty array, and only `count(pull_requests)` vs
+  `count(distinct pr_files.pr_id)` separates "nothing else touched these files" from "nothing
+  else was searchable"; and the incomplete-coverage copy is the branch most users will see
+  first, so it belongs in the design pass rather than in an edge-case list. Evidence:
+  `src/modules/reviews/repository/pull.repo.ts` (`countPullCoverage`),
+  `src/modules/prior-prs/service.ts` (`statusOf`), `specs/prior-prs.md` (States).
 
 ## Tool & Library Notes
 

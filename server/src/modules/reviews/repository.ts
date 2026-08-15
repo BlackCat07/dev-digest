@@ -39,6 +39,20 @@ export class ReviewRepository {
     return pullRepo.getPrFiles(this.db, prId);
   }
 
+  /** L04 — other pull requests of the repo that touched one of `paths`. */
+  listPriorPrOverlaps(
+    repoId: string,
+    prId: string,
+    paths: readonly string[],
+  ): Promise<pullRepo.PriorPrOverlapRow[]> {
+    return pullRepo.listPriorPrOverlaps(this.db, repoId, prId, paths);
+  }
+
+  /** L04 — pull requests in the repo, and how many have an imported file list. */
+  countPullCoverage(repoId: string): Promise<{ total: number; withFileLists: number }> {
+    return pullRepo.countPullCoverage(this.db, repoId);
+  }
+
   // ---- reviews + findings -------------------------------------------------
 
   insertReview(values: {

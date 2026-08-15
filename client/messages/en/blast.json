@@ -1,4 +1,5 @@
 {
+  "label": "Blast radius",
   "stat": {
     "symbols": "symbols",
     "callers": "callers",
@@ -14,5 +15,49 @@
   "graph": {
     "empty": "No downstream callers to graph.",
     "ariaLabel": "Blast radius graph"
+  },
+  "truncated": "top {shown} of {total}",
+  "openInGithub": "Open {file} line {line} on GitHub",
+  "depth": {
+    "indirect": "reached through {depth} import hops"
+  },
+  "empty": {
+    "title": "No downstream callers found",
+    "hint": "The index covers this repository, and nothing outside the changed files calls the symbols they declare."
+  },
+  "partial": {
+    "title": "The index covers only part of this repository",
+    "hint": "Callers may be missing from this map. Absence of a caller is not evidence there is none — re-index the repository for a complete answer."
+  },
+  "degraded": {
+    "title": "No impact map could be built",
+    "hint": "Nothing was analysed, so this is not a statement that the change has no impact.",
+    "reason": {
+      "flag_off": "Codebase indexing is turned off for this workspace.",
+      "index_missing": "This repository has not been indexed yet.",
+      "index_partial": "The repository index is incomplete.",
+      "index_failed": "The last indexing run failed.",
+      "repo_too_large": "This repository is too large to index.",
+      "no_changed_files": "This PR's changed files have not been imported yet. Reload the PR to fetch them."
+    }
+  },
+  "error": {
+    "title": "Blast radius unavailable",
+    "hint": "The impact map could not be read. The rest of this page is unaffected."
+  },
+  "directImpact": "Declared by the changed files",
+  "reachedImpact": "Reached through imports",
+  "prior": {
+    "label": "Prior PRs touching these files",
+    "age": "{age} ago",
+    "sharedFiles": "Shares {count} file(s) with this PR: {files}",
+    "truncated": "Showing the {shown} most recent of {total}.",
+    "none": "No other pull request in DevDigest has touched these files.",
+    "error": "Prior pull requests could not be read. The impact map above is unaffected.",
+    "partial": "Only {searched} of this repository's {total} pull requests have an imported file list, so this history is incomplete. Open a pull request once to import its files.",
+    "degraded": {
+      "noChangedFiles": "This PR's changed files have not been imported yet, so no history could be compared. Reload the PR to fetch them.",
+      "noFileLists": "No other pull request in this repository has an imported file list yet, so nothing could be compared — this is not a statement that none touched these files."
+    }
   }
 }

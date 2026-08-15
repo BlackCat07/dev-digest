@@ -40,6 +40,38 @@ export function formatTokenTotal(
   return `${((tokensIn ?? 0) + (tokensOut ?? 0)).toLocaleString("en-US")} tok`;
 }
 
+/**
+ * How long ago a timestamp was, compactly: `"3h"`, `"11d"`, `"2mo"`, `"1y"`.
+ *
+ * The unit, not the word: the caller supplies the phrasing from its own i18n
+ * namespace (`"{age} ago"`), so this stays a pure formatter with no message
+ * catalogue behind it — the same split the PR list's own `relativeTime` uses.
+ * It differs from that one by not stopping at days: pull-request history is
+ * routinely months old, and "412d" is a number a reader has to convert.
+ *
+ * Months are calendar-averaged (30.44 days) rather than exact. This is a
+ * scanning aid — "roughly when" — and an exact month boundary would cost a date
+ * library for a distinction nobody reads.
+ *
+ * `null` / unparseable → `"—"`, never `"now"`: a missing timestamp must not
+ * render as a fresh one.
+ */
+export function formatAge(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return "—";
+  const minutes = Math.max(0, Math.round((Date.now() - then) / 60_000));
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  if (days < 31) return `${days}d`;
+  const months = Math.round(days / 30.44);
+  if (months < 12) return `${months}mo`;
+  return `${Math.round(days / 365.25)}y`;
+}
+
 /** Token in→out flow, thousands-scaled (e.g. "8.2K→1.3K", "12K→1.5K"). */
 export function formatTokenFlow(
   tokensIn: number | null | undefined,

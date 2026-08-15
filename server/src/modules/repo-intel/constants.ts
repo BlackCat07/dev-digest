@@ -35,8 +35,16 @@ export const MAX_CALLERS_PER_SYMBOL = 20;
  *
  * v2 (T3): graph + decl_file resolution + file_rank + repo-map landed, so every
  * T2 `partial` index must be rebuilt to gain the rank-driven data.
+ *
+ * v3 (L04): `extractEndpoints` scans whole files instead of line by line, so a
+ * route whose path sits on the line after `app.get(` is finally recorded. Every v2
+ * index stored `file_facts` with the endpoints of its client hooks and NONE of its
+ * server routes, and no query can repair that from the outside — the facts have to
+ * be re-extracted, which is exactly what a version mismatch triggers. Blast Radius
+ * reads those facts, so without the bump its endpoint column stays empty on every
+ * repository indexed before today.
  */
-export const INDEXER_VERSION = 2;
+export const INDEXER_VERSION = 3;
 
 // --- [T2] Full-index limits (documented now, enforced in the pipeline) ------
 export const MAX_INDEXED_FILES = 5000;

@@ -47,6 +47,21 @@ wired — into `modules/reviews/run-executor.ts`, which adds the repo map and a
 high-blast-radius note to the prompt. Toggled by `REPO_INTEL_ENABLED` (global)
 and a per-agent `repo_intel` flag.
 
+**L04 wires `getBlastRadius`** into `modules/blast/`, which serves
+`GET /pulls/:id/blast`. Three things about that method are worth knowing before
+calling it (`../../../specs/blast-radius.md` has the whole contract):
+
+- `callers` is capped at `MAX_CALLERS_PER_SYMBOL` **per symbol**, not per result,
+  and ordered by a total comparator — rank alone ties constantly here, because
+  every unranked file shares `0`.
+- `reachedFiles` is a **reverse** walk of `file_edges` (who imports the changed
+  file), bounded at `BFS_DEPTH`. It uses the `(repo_id, to_file)` index, which
+  exists for exactly this. `changedFileFacts` covers the changed files' own
+  routes, which that walk excludes by design.
+- `indexStatus` and `indexedSha` travel with every non-degraded result, so a
+  consumer can distinguish "nothing calls this" from "the index covers only part
+  of the repository" — a distinction the `degraded` boolean alone cannot carry.
+
 ## Routes
 
 - `GET /repos/:id/index-state` — index status (drives the **Indexed** badge).
