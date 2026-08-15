@@ -1,0 +1,29 @@
+{
+  "name": "@devdigest/mcp-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local stdio MCP server over the DevDigest HTTP API. Wraps the API in a handful of agent-facing tools; talks HTTP to http://localhost:3001, never imports the server's Container and never touches Postgres. stdout is the JSON-RPC transport, so every log line goes to stderr.",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.eslint.json",
+    "lint": "eslint .",
+    "test": "vitest run --passWithNoTests",
+    "inspect": "npx @modelcontextprotocol/inspector --config inspector.config.json --server devdigest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^22.10.0",
+    "eslint": "^9.39.5",
+    "globals": "^17.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.66.0",
+    "vitest": "^2.1.8"
+  }
+}

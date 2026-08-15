@@ -1,6 +1,6 @@
 # Testing & CI strategy
 
-DevDigest is four independent packages (no workspace), so testing is organised
+DevDigest is five independent packages (no workspace), so testing is organised
 as **one suite per package**, each with its own CI workflow, runner, and path
 filter. A package's suite runs only when that package (or a package it depends
 on at type-check time) changes.
@@ -30,6 +30,7 @@ If a test wouldn't catch a class of regression we care about, we don't write it.
 | server-unit | `server/` | unit (hermetic) | vitest | `server-unit.yml` | no |
 | server-integration | `server/` | integration (real Postgres) | vitest | `server-integration.yml` | **yes** |
 | reviewer-core | `reviewer-core/` | unit (engine) | vitest | `reviewer-core.yml` | no |
+| mcp-server | `mcp-server/` | unit (hermetic, fake fetch) | vitest | `mcp-server.yml` | no |
 | e2e web | `e2e/` | browser e2e (deterministic) | agent-browser + `run.ts` | `e2e-web.yml` | yes (stack) |
 
 ## What each suite covers
@@ -52,6 +53,15 @@ Docker is unavailable.
 **reviewer-core** — the pure engine: `toReview` selection, prompt construction,
 and a `run` with a stubbed model → grounded findings. No DB / GitHub / FS.
 
+**mcp-server** — the stdio MCP server as hermetic units: `fetch` is injected and faked,
+so no API, DB, or network. Covers the failure → instruction mappers, repo/PR resolution
+(including how many requests a cache miss costs), the response projections, and the
+create → poll → collect wait-loop on fake timers. Two of its files guard the whole
+package rather than a unit: one measures a real `tools/list` over the SDK's in-memory
+transport against a token budget, the other scans every file under `src/` for a write to
+stdout, which is the JSON-RPC channel. Its `typecheck` script runs **both** tsconfig
+projects, so unlike `server/` its test files are typechecked by a gate.
+
 **e2e web** — see `e2e/README.md`. Deterministic agent-browser flows over the
 main journeys (boot → PR list → PR detail; agents) against a real seeded stack.
 No `chat`, no model key.
@@ -62,6 +72,7 @@ No `chat`, no model key.
 # per package
 cd client        && pnpm test           # + pnpm typecheck
 cd reviewer-core && npm test
+cd mcp-server    && npm test            # npm, not pnpm
 
 # server — the unit/integration split (see note below)
 cd server && pnpm exec vitest run --exclude '**/*.it.test.ts'   # unit, no Docker
@@ -80,6 +91,9 @@ cd e2e && npm install && npm test
   (`vitest run --exclude '**/*.it.test.ts'`); the integration lane selects only
   it (`vitest run .it.test`). A DB-backed test that imports `test/helpers/pg.ts`
   must use the `.it.test.ts` suffix.
+- **That suffix is a `server/` CI filter, not a general marker.** No `mcp-server/` test is
+  named `*.it.test.ts`: its suite is hermetic end to end, and `mcp-server.yml` runs it
+  unsplit with `npm test`.
 - **`server/package.json` is `skip-worktree`** (a local variant diverges from the
   committed file). CI therefore invokes the split with
   `pnpm exec vitest run …` rather than relying on committed `test:unit` /
@@ -90,6 +104,8 @@ cd e2e && npm install && npm test
   only `--url` / `--text` / `find` locators — never the AI `chat` command.
 - **CI is path-filtered per package.** Cross-package source aliases are encoded
   in each workflow's `paths:` (e.g. `reviewer-core/**` triggers `server-unit`
-  because the server type-checks against `../reviewer-core/src`).
+  because the server type-checks against `../reviewer-core/src`). For the same reason
+  `server/src/vendor/shared/**` triggers `mcp-server.yml`: that package aliases
+  `@devdigest/shared` onto it at type-check time, so a contract change must run its suite.
 - **`server/clones/**` is runtime data** (git-ignored) and never collected by
   any suite.

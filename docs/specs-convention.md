@@ -1,7 +1,7 @@
 # Feature specs — the shared convention
 
 Every package keeps its feature specs in its own `specs/` directory. This file defines the
-format once so the four `specs/README.md` files don't each carry their own copy of it.
+format once so the per-package `specs/README.md` files don't each carry their own copy of it.
 
 ## Where specs live
 
@@ -10,6 +10,7 @@ format once so the four `specs/README.md` files don't each carry their own copy 
 | `client` | `client/specs/` |
 | `server` | `server/specs/` |
 | `reviewer-core` | `reviewer-core/specs/` |
+| `mcp-server` | `mcp-server/specs/` |
 | `e2e` | **none** — `e2e/specs/` is already taken by browser flows (`NN-name.flow.json`), which `e2e/run.ts` loads. e2e documentation lives in `e2e/docs/`. |
 
 A feature that spans packages gets **one spec per package**, each describing that
