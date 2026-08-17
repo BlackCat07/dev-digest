@@ -3,7 +3,12 @@
 What each behaviour of the MCP server must do, from an MCP client's side: which tools exist,
 what arguments they take, and exactly what comes back — including every empty and failed case.
 
-Format, naming and required sections: [`../../docs/specs-convention.md`](../../docs/specs-convention.md).
+Format, naming, `Spec ID`, the `Status` lifecycle and the required sections:
+[`../../docs/specs-convention.md`](../../docs/specs-convention.md).
+
+**Only features that live entirely inside this package belong here.** A feature spanning
+more than one package gets a single spec in [`../../specs/`](../../specs/README.md)
+instead, with a per-package section.
 
 ## Specs
 

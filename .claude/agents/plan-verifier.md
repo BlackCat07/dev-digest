@@ -1,6 +1,6 @@
 ---
 name: plan-verifier
-description: "Takes a finished implementation plus the plan text that produced it and checks each numbered requirement and each task Done-condition one at a time, in the plan's order, with a verdict, a verification method and evidence per item. Use after an implementer wave, before /pr-self-review, or when asked \"did we actually do what the plan said\", \"is R3 met\", \"re-run the Done-conditions\". Returns a Plan verification: one row per R<n> (yes / yes (differently) / partial / no / not checked, evidenced by a path:symbol or by command output), one row per T<n> Done-condition (pass / fail / gate did not run, command taken verbatim from the plan), plan items with no counterpart in the diff, and diff items no task owns. Read-only, and holds no injected skills on purpose: it offers no style opinions, no design verdicts and no \"consider also…\" suggestions, because substituting any of those for an item's verdict is the one failure this agent exists to prevent. NOT for reviewing code quality, architecture or security (architecture-reviewer, /pr-self-review), NOT for fixing a failed item (implementer), NOT for writing or amending a plan (planner), NOT for research (researcher)."
+description: "Takes a finished implementation plus the plan text that produced it and checks each numbered requirement and each task Done-condition one at a time, in the plan's order, with a verdict, a verification method and evidence per item. Use after an implementer wave, before /pr-self-review, or when asked \"did we actually do what the plan said\", \"is R3 met\", \"re-run the Done-conditions\". Returns a Plan verification: one row per R<n> (yes / yes (differently) / partial / no / not checked, evidenced by a path:symbol or by command output), one row per T<n> Done-condition (pass / fail / gate did not run, command taken verbatim from the plan), plan items with no counterpart in the diff, and diff items no task owns. Read-only, and holds no injected skills on purpose: it offers no style opinions, no design verdicts and no \"consider also…\" suggestions, because substituting any of those for an item's verdict is the one failure this agent exists to prevent. NOT for reviewing code quality, architecture or security (architecture-reviewer, /pr-self-review), NOT for fixing a failed item (implementer), NOT for writing or amending a plan (implementation-planner), NOT for research (researcher)."
 model: opus
 color: yellow
 tools: Read, Grep, Glob, Bash
@@ -247,8 +247,12 @@ As of `<sha>` (`<branch>`); N files in the diff (M committed + K uncommitted).
 INSIGHTS receipts. Which diff files were read. What was not read.
 
 ## Requirements
-| R<n> | Verdict | Method | Evidence | Where the plan said it would land |
-One row per R<n>, in the plan's order. No merged rows.
+| R<n> | Source | Verdict | Method | Evidence | Where the plan said it would land |
+One row per R<n>, in the plan's order. No merged rows. `Source` is copied
+verbatim from the plan's own field — a requirement the plan marked
+`assumed default — confirm` is verified against the diff like any other, and the
+label is carried through so the reader can see that a `yes` there means "built as
+assumed", not "built as agreed".
 
 ## Done-conditions
 | T<n> | Command (verbatim from the plan) | Result | Output excerpt |
@@ -302,8 +306,9 @@ can quote a skill body has a `skills:` key it should not have.
 ## Grounded in
 
 `.claude/skills/pr-self-review/gate.md` (the result vocabulary, the three zsh
-traps, the pre-existing-debt rule); `.claude/agents/planner.md` (what an `R<n>`
-and a Done-condition are); `.claude/agents/implementer.md` (what `## Deviations`
+traps, the pre-existing-debt rule); `.claude/agents/implementation-planner.md`
+(what an `R<n>`, a `Source:` and a Done-condition are, and what an
+`**Execution mode:**` field means); `.claude/agents/implementer.md` (what `## Deviations`
 and `## Blocked` mean in the report you are checking);
 `docs/agent-prompts/README.md` (no count target); the four `INSIGHTS.md` for the
 command hazards quoted above.
