@@ -66,6 +66,7 @@ flowchart TB
   subgraph Repos_PRs["Repos & PRs"]
     repos["repos<br/>/repos"]
     pulls["pulls<br/>/pulls/:id · /pulls/:id/comments"]
+    priorPrs["prior-prs<br/>/pulls/:id/prior-prs"]
     polling["polling<br/>/repos/:id/poll"]
   end
   subgraph Review["Review & runs"]
@@ -76,6 +77,7 @@ flowchart TB
   end
   subgraph Intel["Repo intelligence"]
     repoIntel["repo-intel<br/>/repos/:id/index-state · /resync"]
+    blast["blast<br/>/pulls/:id/blast"]
   end
   subgraph Platform["Platform"]
     settings["settings<br/>/settings · /providers"]

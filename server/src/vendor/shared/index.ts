@@ -13,6 +13,12 @@
  *                         ConventionCandidate, never edits it)
  *  - contracts/intent     IntentSource, IntentStatus, PrIntent, DeriveIntentPayload
  *                         (L03; extends PrIntentRecord, never edits it)
+ *  - contracts/blast      BlastStatus/BlastReason, BlastEndpoint, BlastDownstream,
+ *                         PrBlastRadius (L04; reuses brief's ChangedSymbol /
+ *                         DownstreamImpact, never edits them)
+ *  - contracts/prior-prs  PriorPr, PriorPrsCoverage, PrPriorPrs (L04; the history
+ *                         half of the Blast Radius card, deliberately its own
+ *                         document rather than a field on PrBlastRadius)
  *  - contracts/trace      RunTrace, RunEvent, RunLogLine (single-document trace)
  *  - contracts/platform   Settings, ConnTestResult, Repo, PrMeta/PrDetail, SpecFile, …
  *  - adapters             adapter interfaces + ModelInfo
@@ -28,6 +34,8 @@ export * from './contracts/knowledge.js';
 export * from './contracts/skills.js';
 export * from './contracts/conventions.js';
 export * from './contracts/intent.js';
+export * from './contracts/blast.js';
+export * from './contracts/prior-prs.js';
 export * from './contracts/trace.js';
 export * from './contracts/platform.js';
 export * from './contracts/why.js';

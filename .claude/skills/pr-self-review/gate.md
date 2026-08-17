@@ -57,6 +57,27 @@ non-TTY invocations proceed.
 `reviewer-core/` change runs the **server** gates too — exactly as
 `.github/workflows/server-unit.yml` encodes in its path filter.
 
+### `mcp-server/` (npm), from `mcp-server/`
+
+| Gate | Command | Failure → |
+|---|---|---|
+| typecheck | `./node_modules/.bin/tsc --noEmit -p tsconfig.json` | **CRITICAL** |
+| typecheck (tests) | `./node_modules/.bin/tsc --noEmit -p tsconfig.eslint.json` | **CRITICAL** |
+| lint | `./node_modules/.bin/eslint .` | WARNING |
+| unit tests | `./node_modules/.bin/vitest run` | **CRITICAL** |
+
+Two gates, not one, because this package deliberately type-checks its **tests** as
+well — `tsconfig.json` covers `src/**` only, and `tsconfig.eslint.json` widens the
+include specifically so the hole `server/INSIGHTS.md` (2026-08-10) records cannot
+reopen here. `npm run typecheck` runs both; the split above is for reporting which
+one failed. Lint runs over the whole package rather than the changed files, because
+`no-console` and the `process.stdout` restriction are what keep the JSON-RPC channel
+clean and a single stray call anywhere breaks the transport.
+
+This package aliases `@devdigest/shared` onto `server/src/vendor/shared` at
+type-check time, so a change under that directory runs the **mcp-server** gates too
+— exactly as `.github/workflows/mcp-server.yml` encodes in its path filter.
+
 ### Capturing the result (the shell here is zsh)
 
 Three traps, all measured here, all of which silently manufacture a "pass":

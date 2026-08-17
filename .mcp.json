@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "devdigest": {
+      "command": "bash",
+      "args": ["scripts/mcp.sh"],
+      "env": {
+        "DEVDIGEST_API_URL": "http://localhost:3001",
+        "DEVDIGEST_MCP_RUN_TIMEOUT_MS": "300000"
+      },
+      "timeout": 330000
+    }
+  }
+}

@@ -65,10 +65,37 @@ export interface BlastCallerRow {
   symbol: string;
   /** Which changed symbol this caller reaches. */
   viaSymbol: string;
+  /**
+   * The file that changed symbol is declared in — the other half of its identity.
+   *
+   * A name alone does not identify a changed symbol: one PR can change
+   * `createTask` in both `repo.ts` and `service.ts`, and attributing by name gives
+   * BOTH rows the same callers and counts every caller twice. Measured on a real PR:
+   * 10 distinct callers reported as 20.
+   */
+  viaFile: string;
   /** 1-based line of the reference (representative; for the BlastRadius view). */
   line: number;
   /** file_rank.rank of the caller file (0 in the degraded/ripgrep path). */
   rank: number;
+}
+
+/**
+ * One file reached by walking the import graph BACKWARDS from a changed file,
+ * with the facts the index recorded about it.
+ *
+ * `depth` is the number of reverse-import hops (1 = imports a changed file
+ * directly), bounded by `BFS_DEPTH`. It is kept because a direct importer is much
+ * stronger evidence of impact than a second-hop one, and collapsing the two would
+ * throw that away.
+ */
+export interface BlastReachedFile {
+  file: string;
+  depth: number;
+  /** The changed file this one was reached from (nearest, by depth). */
+  viaFile: string;
+  endpoints: string[];
+  crons: string[];
 }
 
 export interface BlastResult {
@@ -82,6 +109,48 @@ export interface BlastResult {
    * Present on the persistent (non-degraded) path; absent otherwise.
    */
   factsByFile?: Record<string, { endpoints: string[]; crons: string[] }>;
+  /**
+   * Files reachable by REVERSE import edges from the changed files, up to
+   * `BFS_DEPTH` hops, each with its endpoints/crons. This is the graph-direction
+   * half of the feature and is strictly wider than `factsByFile`, which only ever
+   * covers files holding a resolved *symbol* caller: a module can re-export or
+   * mount a changed file without naming any of its symbols, and that still puts
+   * its routes in the blast radius.
+   *
+   * Present on the persistent path only — the ripgrep fallback has no import graph.
+   */
+  reachedFiles?: BlastReachedFile[];
+  /**
+   * Endpoints and crons declared BY the changed files themselves.
+   *
+   * Separate from `reachedFiles` because a changed file is not downstream of itself
+   * and must never be listed as its own dependent — but its own routes are the most
+   * direct impact a diff can have, and the reverse walk structurally cannot report
+   * them (it excludes the changed files from the walk, correctly). Measured on a real
+   * PR that edited a `routes.ts`: every endpoint that file declares was missing from
+   * the map while endpoints two hops away were present.
+   */
+  changedFileFacts?: Array<{ file: string; endpoints: string[]; crons: string[] }>;
+  /**
+   * Total resolved callers per changed symbol BEFORE the per-symbol cap, so a
+   * consumer can say "14 callers" while listing the top 20 of them.
+   *
+   * A LIST of `{symbol, file, total}` rather than a record keyed by some composite
+   * string: a changed symbol is identified by its name AND its declaring file, and
+   * encoding that pair into a map key would force every consumer to reproduce this
+   * module's key format exactly. A consumer that got the format subtly wrong would
+   * not fail — it would silently fall back to the post-cap length and under-report
+   * the count. Explicit fields cannot drift that way.
+   */
+  callerCounts?: Array<{ symbol: string; file: string; total: number }>;
+  /**
+   * The index's own coverage, passed through so a consumer can tell a truthful
+   * "nothing calls this" from "the index only covers part of this repository".
+   * Absent on the fallback path, where nothing was read from an index at all.
+   */
+  indexStatus?: IndexStatus;
+  /** Commit the index was built at, for pinning file:line links. */
+  indexedSha?: string;
   degraded?: boolean;
   reason?: DegradedReason;
 }

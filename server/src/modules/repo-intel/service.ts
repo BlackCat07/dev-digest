@@ -32,6 +32,7 @@ import { RepoIntelRepository, type FullSymbolRow } from './repository.js';
 import type {
   BlastCallerRow,
   BlastChangedSymbol,
+  BlastReachedFile,
   BlastResult,
   FileRankRow,
   IndexResult,
@@ -279,6 +280,7 @@ export class RepoIntelService implements RepoIntel {
           file: r.fromPath,
           symbol: callerName,
           viaSymbol: sym.name,
+          viaFile: sym.file,
           line: r.line,
           rank: 0, // ripgrep/degraded path has no persistent rank
         });
@@ -294,10 +296,31 @@ export class RepoIntelService implements RepoIntel {
       }
     }
 
+    // Same total order and same per-symbol cap as the persistent path. The rank is
+    // uniformly 0 here, so without the tiebreakers this list would be in raw scan
+    // order — see `compareCallers`.
+    callerRows.sort(compareCallers);
+    const fallbackCounts: Array<{ symbol: string; file: string; total: number }> = [];
+    const fallbackCapped: BlastCallerRow[] = [];
+    const fallbackGroups = new Map<string, BlastCallerRow[]>();
+    for (const c of callerRows) {
+      const key = symbolKey(c.viaSymbol, c.viaFile);
+      const arr = fallbackGroups.get(key);
+      if (arr) arr.push(c);
+      else fallbackGroups.set(key, [c]);
+    }
+    for (const rows of fallbackGroups.values()) {
+      const head = rows[0];
+      if (head === undefined) continue;
+      fallbackCounts.push({ symbol: head.viaSymbol, file: head.viaFile, total: rows.length });
+      fallbackCapped.push(...rows.slice(0, MAX_CALLERS_PER_SYMBOL));
+    }
+
     return {
       changedSymbols,
-      callers: callerRows,
-      impactedEndpoints: [...endpoints],
+      callers: fallbackCapped,
+      impactedEndpoints: [...endpoints].sort(),
+      callerCounts: fallbackCounts,
       degraded: true,
       reason: 'no_data',
     };
@@ -335,7 +358,32 @@ export class RepoIntelService implements RepoIntel {
       nameSet.add(s.name);
     }
     if (nameSet.size === 0) {
-      return { changedSymbols, callers: [], impactedEndpoints: [], degraded: false };
+      // No symbol was DECLARED in the changed files — a docs-only or config-only PR,
+      // or files the indexer does not cover. There is still a graph answer to give:
+      // something may import those files even though they export no symbol this
+      // index knows, so the reverse walk runs here too rather than being skipped.
+      //
+      // `indexStatus` and `indexedSha` must travel with this return. Leaving them off
+      // made a fully-indexed repository answer `partial / index_missing` — measured
+      // on a real PR — because the consumer cannot distinguish "the facade told me
+      // nothing about coverage" from "coverage is incomplete", and correctly refuses
+      // to claim completeness it was not given.
+      const reachedFiles = await this.reverseImpact(repoId, changedFiles);
+      const changedFileFacts = await this.ownFacts(repoId, changedFiles);
+      const endpoints = new Set<string>();
+      for (const r of reachedFiles) for (const e of r.endpoints) endpoints.add(e);
+      for (const f of changedFileFacts) for (const e of f.endpoints) endpoints.add(e);
+      return {
+        changedSymbols,
+        callers: [],
+        impactedEndpoints: [...endpoints].sort(),
+        reachedFiles,
+        changedFileFacts,
+        callerCounts: [],
+        indexStatus: state.status,
+        indexedSha: state.lastIndexedSha,
+        degraded: false,
+      };
     }
 
     // Resolved cross-file callers.
@@ -358,18 +406,47 @@ export class RepoIntelService implements RepoIntel {
         enclosingFromRows(symsByFile.get(c.fromPath) ?? [], c.line) ??
         c.fromPath.split('/').pop() ??
         c.fromPath;
-      const key = `${c.fromPath}|${enclosing}|${c.toSymbol}`;
+      // The dedup key carries the DECL FILE too: the same caller legitimately
+      // appears once per changed symbol it reaches, and two changed files may
+      // declare the same name.
+      const viaFile = c.declFile ?? '';
+      const key = `${c.fromPath}|${enclosing}|${c.toSymbol}|${viaFile}`;
       if (seenCaller.has(key)) continue;
       seenCaller.add(key);
       callers.push({
         file: c.fromPath,
         symbol: enclosing,
         viaSymbol: c.toSymbol,
+        viaFile,
         line: c.line,
         rank: c.rank,
       });
     }
-    callers.sort((a, b) => b.rank - a.rank);
+    callers.sort(compareCallers);
+
+    // Cap PER SYMBOL, not across the whole list.
+    //
+    // `MAX_CALLERS_PER_SYMBOL` says per symbol and a single `slice` on the merged
+    // list does not implement that: one popular helper with 40 callers would
+    // consume the entire budget and every other changed symbol in the same PR
+    // would render as "no callers" — a false negative that reads exactly like a
+    // true one. Grouping first also means the count is honest, because
+    // `callerCountBySymbol` is taken BEFORE the cap.
+    const grouped = new Map<string, BlastCallerRow[]>();
+    for (const c of callers) {
+      const key = symbolKey(c.viaSymbol, c.viaFile);
+      const arr = grouped.get(key);
+      if (arr) arr.push(c);
+      else grouped.set(key, [c]);
+    }
+    const callerCounts: Array<{ symbol: string; file: string; total: number }> = [];
+    const capped: BlastCallerRow[] = [];
+    for (const rows of grouped.values()) {
+      const head = rows[0];
+      if (head === undefined) continue;
+      callerCounts.push({ symbol: head.viaSymbol, file: head.viaFile, total: rows.length });
+      capped.push(...rows.slice(0, MAX_CALLERS_PER_SYMBOL));
+    }
 
     // Precomputed facts per caller file (endpoints + crons), so consumers can
     // attribute them to the changed symbol whose callers live in that file.
@@ -381,13 +458,110 @@ export class RepoIntelService implements RepoIntel {
       for (const e of f.endpoints) endpoints.add(e);
     }
 
+    // The graph half: walk import edges BACKWARDS from the changed files and take
+    // the facts of everything reached. Symbol callers alone under-report, because
+    // a router can mount a changed module without naming a single one of its
+    // symbols.
+    const reachedFiles = await this.reverseImpact(repoId, changedFiles);
+    for (const r of reachedFiles) for (const e of r.endpoints) endpoints.add(e);
+
+    // The changed files' OWN routes — the most direct impact there is, and the one
+    // the walk above cannot see because it excludes them by design.
+    const changedFileFacts = await this.ownFacts(repoId, changedFiles);
+    for (const f of changedFileFacts) for (const e of f.endpoints) endpoints.add(e);
+
     return {
       changedSymbols,
-      callers: callers.slice(0, MAX_CALLERS_PER_SYMBOL),
-      impactedEndpoints: [...endpoints],
+      callers: capped,
+      impactedEndpoints: [...endpoints].sort(),
       factsByFile,
+      reachedFiles,
+      changedFileFacts,
+      callerCounts,
+      indexStatus: state.status,
+      indexedSha: state.lastIndexedSha,
       degraded: false,
     };
+  }
+
+  /**
+   * The endpoints and crons the changed files declare themselves.
+   *
+   * A plain `file_facts` read, kept as its own method so the two callers cannot
+   * disagree about it. Only files that actually have facts come back.
+   */
+  private async ownFacts(
+    repoId: string,
+    changedFiles: string[],
+  ): Promise<Array<{ file: string; endpoints: string[]; crons: string[] }>> {
+    const facts = await this.repo.getFileFacts(repoId, changedFiles);
+    return facts
+      .filter((f) => f.endpoints.length > 0 || f.crons.length > 0)
+      .map((f) => ({ file: f.filePath, endpoints: f.endpoints, crons: f.crons }))
+      .sort((a, b) => a.file.localeCompare(b.file));
+  }
+
+  /**
+   * Files that (transitively) import any changed file, up to `BFS_DEPTH` hops,
+   * with the endpoints/crons the index recorded for each.
+   *
+   * Direction: `getImporters` filters on `to_file` and selects `from_file`, so each
+   * hop answers "who imports this" — never "what does this import". Getting that
+   * backwards is the one mistake that makes the whole feature confidently wrong, and
+   * it would still return a plausible-looking list, which is why it is asserted
+   * directly in the tests.
+   *
+   * Breadth-first and bounded twice over: `BFS_DEPTH` hops, and a `seen` set so a
+   * cyclic import graph terminates. Pure reads — one indexed query per hop, no
+   * clone access and no parsing.
+   */
+  private async reverseImpact(
+    repoId: string,
+    changedFiles: string[],
+  ): Promise<BlastReachedFile[]> {
+    const out: BlastReachedFile[] = [];
+    // Changed files are their own origin and must never be reported as their own
+    // downstream, so they seed `seen` as well as the frontier.
+    const seen = new Set(changedFiles);
+    // Nearest origin per reached file: BFS order guarantees the first arrival is
+    // the shallowest, so this is written once and never overwritten.
+    let frontier = changedFiles.map((f) => ({ file: f, origin: f }));
+
+    for (let depth = 1; depth <= BFS_DEPTH; depth += 1) {
+      if (frontier.length === 0) break;
+      const edges = await this.repo.getImporters(
+        repoId,
+        frontier.map((f) => f.file),
+      );
+      const originOf = new Map(frontier.map((f) => [f.file, f.origin]));
+      const next: Array<{ file: string; origin: string }> = [];
+      for (const e of edges) {
+        if (seen.has(e.fromFile)) continue;
+        seen.add(e.fromFile);
+        const origin = originOf.get(e.toFile) ?? e.toFile;
+        next.push({ file: e.fromFile, origin });
+        out.push({ file: e.fromFile, depth, viaFile: origin, endpoints: [], crons: [] });
+      }
+      frontier = next;
+    }
+
+    if (out.length === 0) return out;
+    const facts = await this.repo.getFileFacts(
+      repoId,
+      out.map((r) => r.file),
+    );
+    const byPath = new Map(facts.map((f) => [f.filePath, f]));
+    for (const r of out) {
+      const f = byPath.get(r.file);
+      if (!f) continue;
+      r.endpoints = f.endpoints;
+      r.crons = f.crons;
+    }
+    // Shallowest first, then a total order so the list is stable across reads.
+    out.sort(
+      (a, b) => a.depth - b.depth || a.file.localeCompare(b.file) || a.viaFile.localeCompare(b.viaFile),
+    );
+    return out;
   }
 
   /**
@@ -730,6 +904,48 @@ const JUNK_PATH_PATTERNS = [
 function isJunkPath(path: string): boolean {
   const lower = path.toLowerCase();
   return JUNK_PATH_PATTERNS.some((p) => lower.includes(p));
+}
+
+/**
+ * A changed symbol's identity: its NAME and the file it is declared in.
+ *
+ * One PR can change `createTask` in both `repo.ts` and `service.ts`; keying caller
+ * groups on the name alone gave both rows the same callers and counted every caller
+ * twice (measured on a real PR: 10 reported as 20). `\u0000` cannot occur in a path
+ * or an identifier, so the two halves cannot run together.
+ *
+ * PRIVATE on purpose. The format is this module's business — what crosses the
+ * boundary is `callerCounts`, a list of explicit `{symbol, file}` pairs, so no
+ * consumer has to reproduce this string.
+ */
+function symbolKey(name: string, file: string): string {
+  return `${name}\u0000${file}`;
+}
+
+/**
+ * TOTAL order over blast callers: importance first, then a deterministic tail.
+ *
+ * `rank DESC` alone is not enough, and the failure is the one
+ * `server/INSIGHTS.md` (2026-08-06) records for `listCandidates`: ranks tie
+ * constantly here — every file the indexer never ranked shares `0`, and the whole
+ * ripgrep fallback path is `rank: 0` by construction — so tied rows come back in
+ * whatever order the scan happened to read them. Two consequences specific to this
+ * list, both worse than a wobbling UI: the per-symbol cap TRUNCATES, so ties decide
+ * which callers a reviewer is shown at all, and the same request can answer
+ * differently twice with no write in between.
+ *
+ * `file` then `line` then `viaSymbol` is provably total for these rows: the dedup
+ * key upstream is `file|symbol|viaSymbol`, so no two survivors can agree on all
+ * three of these plus rank.
+ */
+function compareCallers(a: BlastCallerRow, b: BlastCallerRow): number {
+  return (
+    b.rank - a.rank ||
+    a.file.localeCompare(b.file) ||
+    a.line - b.line ||
+    a.viaSymbol.localeCompare(b.viaSymbol) ||
+    a.viaFile.localeCompare(b.viaFile)
+  );
 }
 
 /** Enclosing top-level (bare-name) symbol for a line, from persistent rows. */

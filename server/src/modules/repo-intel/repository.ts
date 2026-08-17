@@ -126,6 +126,15 @@ export interface FullSymbolRow {
 export interface ResolvedCallerRow {
   fromPath: string;
   toSymbol: string;
+  /**
+   * The file the referenced symbol is DECLARED in.
+   *
+   * Load-bearing whenever two changed files declare the same name: without it a
+   * caller can only be attributed to a symbol NAME, and every changed symbol sharing
+   * that name claims the same callers. Non-null on this path by construction — the
+   * query filters `declFile` to the changed files.
+   */
+  declFile: string | null;
   line: number;
   rank: number;
 }
@@ -436,6 +445,27 @@ export class RepoIntelRepository {
       .where(eq(t.fileEdges.repoId, repoId));
   }
 
+  /**
+   * REVERSE import lookup: the files that import any of `files` — one hop.
+   *
+   * The direction is the whole point and is the opposite of `getEdges`' natural
+   * reading: blast radius asks "who depends on the changed file", never "what does
+   * the changed file depend on". Selecting `fromFile` while filtering on `toFile`
+   * is what makes it reverse, and `file_edges_repo_to_idx` on
+   * `(repo_id, to_file)` exists to serve exactly this predicate — so the walk is
+   * an index scan per hop rather than the full-table read `getEdges` does.
+   *
+   * `toFile` is returned alongside so the caller can attribute a reached file to
+   * the changed file it came from without a second query.
+   */
+  async getImporters(repoId: string, files: string[]): Promise<IndexerEdgeRow[]> {
+    if (files.length === 0) return [];
+    return this.db
+      .select({ fromFile: t.fileEdges.fromFile, toFile: t.fileEdges.toFile })
+      .from(t.fileEdges)
+      .where(and(eq(t.fileEdges.repoId, repoId), inArray(t.fileEdges.toFile, files)));
+  }
+
   /** `{path, percentile}` for the given paths (smart-diff / run-executor). */
   async getFileRankFor(repoId: string, paths: string[]): Promise<FileRankRow[]> {
     if (paths.length === 0) return [];
@@ -510,6 +540,7 @@ export class RepoIntelRepository {
       .select({
         fromPath: t.references.fromPath,
         toSymbol: t.references.toSymbol,
+        declFile: t.references.declFile,
         line: t.references.line,
         rank: t.fileRank.rank,
       })

@@ -31,6 +31,8 @@ import { ReviewRepository } from '../modules/reviews/repository.js';
 import { SkillsService } from '../modules/skills/service.js';
 import { IntentService } from '../modules/intent/service.js';
 import { SmartDiffService } from '../modules/smart-diff/service.js';
+import { BlastService } from '../modules/blast/service.js';
+import { PriorPrsService } from '../modules/prior-prs/service.js';
 import { resolveFeatureModel } from '../modules/settings/feature-models.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
@@ -83,6 +85,8 @@ export class Container {
   private _skills?: SkillsService;
   private _intent?: IntentService;
   private _smartDiff?: SmartDiffService;
+  private _blast?: BlastService;
+  private _priorPrs?: PriorPrsService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -165,6 +169,33 @@ export class Container {
    */
   get smartDiff(): SmartDiffService {
     return (this._smartDiff ??= new SmartDiffService(this));
+  }
+
+  /**
+   * Blast Radius (L04). Like Smart Diff: the SERVICE, with no repository of its
+   * own — `pull_requests` and `pr_files` already belong to `reviewRepo`, and every
+   * codebase fact comes from the `repoIntel` facade below.
+   *
+   * `BlastDeps` declares TWO ports and no more, so this getter's `this` is
+   * satisfied by `reviewRepo` and `repoIntel` alone. The second one is why the
+   * feature costs nothing to serve: it reads index rows the clone/fetch pipeline
+   * already wrote, so the route re-parses no AST and rebuilds no import graph.
+   * And there is still no LLM port in reach — see the note on `smartDiff`.
+   */
+  get blast(): BlastService {
+    return (this._blast ??= new BlastService(this));
+  }
+
+  /**
+   * Prior PRs (L04) — the history half of the Blast Radius card.
+   *
+   * The narrowest service in this container: `PriorPrsDeps` declares ONE port, so
+   * this getter's `this` is satisfied by `reviewRepo` alone. Not even `repoIntel`
+   * is in reach, which is the wiring saying what the feature is — a query over
+   * `pr_files` of other pull requests, with no codebase analysis and no model.
+   */
+  get priorPrs(): PriorPrsService {
+    return (this._priorPrs ??= new PriorPrsService(this));
   }
 
   /**

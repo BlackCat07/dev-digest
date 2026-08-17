@@ -86,8 +86,10 @@ src/test/setup.ts             jsdom shims
   `http://localhost:3001`), so changing it needs a dev-server restart, not just a reload.
 - `src/test/setup.ts` stubs `ResizeObserver` — recharts/mermaid need it under jsdom.
   A new chart component failing in tests usually wants a shim here, not a mock.
-- **`messages/en/` carries namespaces no screen uses yet** (blast, eval, memory, skills,
-  compose, ci, …). They belong to later lessons — not dead files to delete.
+- **`messages/en/` carries namespaces no screen uses yet** (eval, memory, compose, ci, …).
+  They belong to later lessons — not dead files to delete. `blast` is no longer one of
+  them: L04's card reads it, and the placeholder keys it shipped with (`stat.*`, `view.*`,
+  `callerCount`, `noDownstream`, `graph.*`) were extended rather than replaced.
 
 ## Do not touch
 

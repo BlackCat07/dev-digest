@@ -1,0 +1,8 @@
+{
+  "// why": "Two jobs. (1) ESLint's type-aware rules need every linted file inside a TS project, and the main tsconfig includes only src/** (what `npm run typecheck` compiles), so test/** and the root config files would not parse. (2) Unlike server/, this include is wide from day one so `tsc --noEmit -p tsconfig.eslint.json` really does typecheck test/** — a narrow include there means no gate ever looks at a test file (server/INSIGHTS.md, 2026-08-10). Lint-only in CI; emits nothing.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "*.ts"]
+}

@@ -39,6 +39,18 @@ deduplicated. Paths are repo-relative, as step 0's `git diff --name-status` and
 | `server/test/**`, `**/*.it.test.ts` | no skill — `../TESTING.md` + `DDG-TEST-001` |
 | `reviewer-core/src/**` | `onion-architecture` (core purity), `typescript-expert`, `zod` |
 
+### MCP server — `mcp-server/`
+
+| Path | Skills |
+|---|---|
+| `mcp-server/src/**` | `typescript-expert`, `zod` (every HTTP response is `safeParse`d with a `@devdigest/shared` schema — no `as` on a boundary) |
+| `mcp-server/src/api/**`, `mcp-server/src/config.ts`, `mcp-server/src/index.ts` | + `security` (the network boundary, the one `process.env` reader, and the composition root) |
+| `mcp-server/test/**` | no skill — `mcp-server/CLAUDE.md` + `../TESTING.md` |
+
+`onion-architecture` deliberately does **not** route here: its own scope is `server/` and
+`reviewer-core/`, this package is an HTTP client of the API, and the `depcruise` gate runs
+`src ../reviewer-core/src` from `server/`. Do not add it to make the package look reviewed.
+
 ### Cross-cutting — keyed on the changed hunk, not the filename
 
 | Condition | Skills |
@@ -47,7 +59,7 @@ deduplicated. Paths are repo-relative, as step 0's `git diff --name-status` and
 | hunk has `z.object(` / `z.enum(` / `.safeParse(` | `zod` |
 | hunk touches auth, a token, `process.env`, `octokit`, `child_process`, `simple-git`, an upload, or an SSE endpoint | `security` |
 | hunk adds a generic, a conditional type, `as`, or a non-null `!` | `typescript-expert` |
-| any `.ts`/`.tsx` in `server/` or `reviewer-core/` | `DDG-WIRE-002` (ESM `.js` extension) |
+| any `.ts`/`.tsx` in `server/`, `reviewer-core/` or `mcp-server/` | `DDG-WIRE-002` (ESM `.js` extension) |
 | **every run** | `engineering-insights` (read at step 2, append at the end) |
 
 ### Not code

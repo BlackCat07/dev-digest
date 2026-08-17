@@ -178,18 +178,38 @@ export function extractReferences(content: string, symbol: string): ExtractedRef
  * Heuristic endpoint detector: HTTP route registrations in a file.
  * Catches Fastify/Express style `app.get('/path', ...)`, `router.post(...)`,
  * `app.get<...>('/path')`, and `route({ method, url })`. Returns "METHOD /path".
+ *
+ * **Scans the whole file, not line by line, and that is a fix rather than a
+ * refactor.** The patterns already tolerate `\s` between the call and its path, but
+ * matching them against one line at a time meant the verb and the path had to share
+ * a line — and this repository's own routes, as prettier formats them, do not:
+ *
+ *     app.get(
+ *       '/repos/:id/index-state',
+ *       { schema: { params: IdParams } },
+ *
+ * Measured on the real index of this very repository: 21 files had endpoint facts and
+ * every one of them was a client hook (`api.get(\`/agents\`)` fits on a line), while
+ * every `modules/*\/routes.ts` — the actual HTTP surface — recorded none. Blast
+ * Radius reads these facts to answer "which endpoints could this change reach", so
+ * the whole endpoint half of that answer was empty on any server formatted this way.
+ * Nothing caught it because `test/extract.test.ts`'s fixture is single-line.
+ *
+ * Only whitespace is allowed between `(` and the path literal, so this stays
+ * conservative: a computed or variable path still does not match, which is correct —
+ * an unresolvable path is not a fact worth reporting.
  */
 export function extractEndpoints(content: string): string[] {
   const out = new Set<string>();
-  const lines = content.split('\n');
   const verbRe =
-    /\b(?:app|router|fastify|server|api)\.(get|post|put|patch|delete|options|head)\s*(?:<[^>]*>)?\s*\(\s*(['"`])([^'"`]+)\2/i;
-  const routeObjRe = /method\s*:\s*['"`](GET|POST|PUT|PATCH|DELETE)['"`][\s\S]*?url\s*:\s*['"`]([^'"`]+)['"`]/i;
-  for (const raw of lines) {
-    const m = raw.match(verbRe);
-    if (m) out.add(`${m[1]!.toUpperCase()} ${m[3]}`);
-    const r = raw.match(routeObjRe);
-    if (r) out.add(`${r[1]!.toUpperCase()} ${r[2]}`);
+    /\b(?:app|router|fastify|server|api)\.(get|post|put|patch|delete|options|head)\s*(?:<[^>]*>)?\s*\(\s*(['"`])([^'"`]+)\2/gi;
+  const routeObjRe =
+    /method\s*:\s*['"`](GET|POST|PUT|PATCH|DELETE)['"`][\s\S]{0,200}?url\s*:\s*['"`]([^'"`]+)['"`]/gi;
+  for (const m of content.matchAll(verbRe)) {
+    out.add(`${m[1]!.toUpperCase()} ${m[3]}`);
+  }
+  for (const r of content.matchAll(routeObjRe)) {
+    out.add(`${r[1]!.toUpperCase()} ${r[2]}`);
   }
   return [...out];
 }

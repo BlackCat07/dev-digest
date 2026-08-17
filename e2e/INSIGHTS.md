@@ -62,7 +62,30 @@ Approaches and solutions that worked and should be reused.
 
 <!-- append below -->
 
-_No entries yet._
+- **2026-08-15** — **`../scripts/e2e.sh` is NOT a mirror of CI, and the difference is the one
+  that matters for a CI-only red: it serves the app with `next dev`, while `e2e-web.yml`
+  serves a `next build` + `next start`.** So "12/12 locally" from the hermetic script does not
+  clear a production-only failure, and the cheapest next step is a hand-rolled mirror rather
+  than a push-and-watch loop: an ephemeral Postgres on a free port, `tsx src/db/migrate.ts` +
+  `tsx src/db/seed.ts` against it, `tsx src/server.ts` on :3101, then
+  `NEXT_PUBLIC_API_BASE=http://localhost:3101 next build && next start -p 3100`, then
+  `E2E_BASE_URL=http://localhost:3100 tsx run.ts`. It reproduced a failure the dev-server run
+  could not (flows 04/05, see Recurring Errors 2026-08-06) on the first attempt. Two
+  housekeeping notes: `client/.next` now holds a PRODUCTION build, so delete it before the next
+  `next dev` (2026-08-05, this section's neighbour), and the run must not overlap a live dev
+  server for the same reason. Evidence: `../.github/workflows/e2e-web.yml` ("Build + start web
+  (:3000)"), `../scripts/e2e.sh` (`next dev -p "$WEB_PORT"`).
+
+- **2026-08-15** — **The 2026-08-06 prescription for flows 04/05 was applied and holds.** Those
+  two were the only flows still clicking the PR row straight after `wait --url`, with no settle
+  and no `wait --text` — the shape flows 02 and 11 already avoid, and the one `find` cannot
+  survive because it never polls. Under the CI mirror above they failed on the first run
+  (both, same step) and passed on the second with two lines added to each: `wait --load
+  networkidle` for the list's live-GitHub round-trip, then `wait --text` on the row itself.
+  No assertion changed. Worth stating because a red 04/05 has now been misread as a
+  regression twice: they fail on the PR LIST, before any PR-detail feature renders, so a diff
+  touching the detail screen cannot be the cause. Evidence:
+  `specs/04-pr-findings.flow.json`, `specs/05-pr-diff.flow.json` (the two inserted steps).
 
 ## What Doesn't Work
 
@@ -275,6 +298,31 @@ An error string, its real cause, and the fix.
   anomaly is ever resolved. Supersedes 2026-08-12 (the detachment entry above) as the
   diagnosis; the probe pattern and the `url at failure:` runner line it introduced stay.
   Evidence: `specs/12-pr-smart-diff.flow.json` (description), run 31605913685's artifact.
+
+- **2026-08-15** — **Third instance of the CI-only swallowed click, and the first one on
+  `find text` — so the anomaly is not confined to `find role`.** Flow 11's
+  `find text "Auth surface touched" click` exits 0 on CI and the step after it times out at
+  30 s (runs 31887724598 and 31888941824, two different commits, 2/2). The 2026-08-12 Open
+  Question explicitly recorded that `find text` clicks WORKED in the runs where
+  `find role button` did not; that no longer holds. Four local environments cannot reproduce
+  it, and this time each competing mechanism was measured rather than argued.
+  **The sticky header:** at the CI viewport (1280x577, which is what the browser reports) the
+  chip starts at `top: 659`, and after the scroll `document.elementFromPoint` at its centre
+  returns a node INSIDE the button — so the mechanism the 2026-08-12 geometry fix addresses is
+  not this one. **Visibility of the assertion:** `wait --text` matched a string sitting at
+  `top: 847` in that same 577px viewport instantly, so a disclosure panel opening below the
+  fold cannot explain the timeout. **Timing:** every settle passes, and replaying the flow's
+  own commands against the same build at the same viewport opens the panel every time.
+  **The diff under review:** `OverviewTab/styles.ts` sets `alignItems: "start"`, so the L04
+  card beside `IntentCard` growing taller cannot move the chip at all. Resolved the way flow 12
+  was: the click left the flow, the contract stayed in `RiskAreas.test.tsx` ("opens a chip to
+  reveal its explanation and the files it cites"), and the flow's description names the one
+  seam that leaves unpinned. For whoever picks the root cause up: `agent-browser click <sel>`
+  is a DIFFERENT code path from `find … click` and documents that it reports a covering element
+  instead of mis-dispatching — but the chip is a bare `<button>` with no id, testid or title,
+  and this CLI's XPath did not match it, so using it means adding a handle to the component
+  first. Evidence: `specs/11-pr-intent.flow.json` (description),
+  `../client/src/app/repos/[repoId]/pulls/[number]/_components/IntentCard/_components/RiskAreas/RiskAreas.tsx`.
 
 ## Session Notes
 

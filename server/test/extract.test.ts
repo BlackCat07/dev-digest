@@ -90,6 +90,47 @@ app.get<{ Params: { id: string } }>('/pulls/:id/blast', blast);
     expect(eps).toContain('GET /pulls/:id/blast');
   });
 
+  it('detects a route whose path is on the NEXT line, as prettier formats them', () => {
+    // This is how every `modules/*/routes.ts` in this repository is actually written.
+    // A line-by-line scan finds none of them, which left the endpoint half of Blast
+    // Radius empty on real data while this suite stayed green.
+    const src = `
+  app.get(
+    '/repos/:id/index-state',
+    { schema: { params: IdParams } },
+    async (req) => container.repoIntel.getIndexState(req.params.id),
+  );
+
+  app.post(
+    '/repos/:id/resync',
+    { schema: { params: IdParams } },
+    async (req, reply) => reply.code(202),
+  );
+`;
+    const eps = extractEndpoints(src);
+    expect(eps).toContain('GET /repos/:id/index-state');
+    expect(eps).toContain('POST /repos/:id/resync');
+  });
+
+  it('finds every route in a file, not just the first of each verb', () => {
+    const src = `
+app.get('/a', h);
+app.get('/b', h);
+app.post('/c', h);
+`;
+    expect(extractEndpoints(src).sort()).toEqual(['GET /a', 'GET /b', 'POST /c']);
+  });
+
+  it('does not invent a path it cannot resolve', () => {
+    // A variable or computed path is not a fact. Only whitespace may sit between the
+    // call and a literal, so these must not match.
+    const src = `
+app.get(ROUTE_PATH, handler);
+app.get(buildPath('x'), handler);
+`;
+    expect(extractEndpoints(src)).toEqual([]);
+  });
+
   it('detects cron expressions and background job kinds', () => {
     const src = `
 cron.schedule('*/5 * * * *', poll);

@@ -18,6 +18,46 @@ interface PrDetailHeaderProps {
   onRunsStarted: () => void;
 }
 
+/**
+ * The pull request's row uuid, shown and copyable.
+ *
+ * The route addresses a PR as `/repos/:repoId/pulls/:number`, so this id appears
+ * in no URL — yet it is what the MCP tools take as `pr_id`. Without this chip the
+ * only way to obtain one is a query against the API, which is not something a
+ * reader of this screen should have to do.
+ *
+ * Local rather than its own folder, matching `ConventionCard`'s `CopySnippet`: it
+ * has one caller, and the "copied" flash is state only this button owns.
+ */
+function PrIdChip({ prId }: { prId: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const label = copied ? "Copied" : "Copy pull request id";
+
+  return (
+    <span style={s.idChip}>
+      <span style={s.idLabel}>id</span>
+      <span className="mono" style={s.idValue}>
+        {prId}
+      </span>
+      <button
+        type="button"
+        title={label}
+        aria-label={label}
+        style={s.idCopy(copied)}
+        onClick={() => {
+          // Optional-chained: jsdom and non-secure origins have no clipboard, and
+          // a missing one must not throw inside the header.
+          void navigator.clipboard?.writeText(prId);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1200);
+        }}
+      >
+        {copied ? <Icon.Check size={12} /> : <Icon.Copy size={12} />}
+      </button>
+    </span>
+  );
+}
+
 export function PrDetailHeader({
   pr,
   prId,
@@ -79,6 +119,7 @@ export function PrDetailHeader({
             <Badge dot bg="transparent" color={statusColor}>
               {pr.status}
             </Badge>
+            {prId && <PrIdChip prId={prId} />}
           </div>
         </div>
         <div style={s.actions}>

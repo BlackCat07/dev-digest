@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "devdigest": {
+      "type": "stdio",
+      "command": "bash",
+      "args": ["../scripts/mcp.sh"],
+      "env": {
+        "DEVDIGEST_MCP_RUN_TIMEOUT_MS": "300000"
+      },
+      "requestTimeout": 310000
+    }
+  }
+}

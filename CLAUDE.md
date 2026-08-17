@@ -6,7 +6,7 @@ adds one feature.
 ## Before answering
 
 Search the curated docs FIRST — they may already answer it — then read code. In each
-package (`client`, `server`, `reviewer-core`, `e2e`):
+package (`client`, `server`, `reviewer-core`, `e2e`, `mcp-server`):
 
 - `INSIGHTS.md` — dated, file-grounded findings; always present
 - `docs/` — curated deep-dives; start at `docs/README.md`
@@ -21,6 +21,9 @@ One nested doc: `server/src/modules/repo-intel/README.md`.
 **One exception:** `e2e/specs/` holds **browser flows** (`NN-name.flow.json`), which
 `e2e/run.ts` loads — not feature specs. That package documents itself in `e2e/docs/`
 and has no specs directory.
+
+**And one gap:** `mcp-server/` has `INSIGHTS.md`, `specs/` and `CLAUDE.md` like the rest,
+but **no `docs/`** — read `mcp-server/README.md` instead.
 
 ## Session protocol (engineering-insights loop)
 
@@ -50,6 +53,10 @@ The `engineering-insights` skill carries the full procedure for both halves of t
   cross-package code is shared through tsconfig path aliases.
 - Modules are registered **statically** in `server/src/modules/index.ts` (no filesystem
   autoload).
+- **`mcp-server/` is an HTTP client of the API, not a server module** — it talks to
+  `http://localhost:3001` over HTTP, never imports `platform/container.ts` and never
+  touches Postgres, so it is deliberately **absent** from `server/src/modules/index.ts`.
+  Its absence there is by design, not a missed registration.
 - **ESM:** relative imports carry the `.js` extension.
 
 ## Do-not-touch
@@ -72,7 +79,7 @@ Never hand-edit:
 
 - Stack, commands, architecture, how to run → read `README.md`
 - Working inside a package → read that package's CLAUDE.md: `server/CLAUDE.md`,
-  `client/CLAUDE.md`, `reviewer-core/CLAUDE.md`, `e2e/CLAUDE.md`
+  `client/CLAUDE.md`, `reviewer-core/CLAUDE.md`, `e2e/CLAUDE.md`, `mcp-server/CLAUDE.md`
 - Agent prompt templates → read `docs/agent-prompts/`
 - Skill bodies meant to be **imported** rather than seeded → read `docs/skills/`
 - Writing a feature spec → read `docs/specs-convention.md`
