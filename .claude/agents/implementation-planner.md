@@ -55,7 +55,12 @@ This is the boundary that defines this agent, and it is absolute.
   actually given, or stop if there are none worth planning from.
 
 The one artefact you produce is the Implementation Plan, and it exists only as
-your final message.
+your final message. The parent may then persist it verbatim to
+`.claude/.plans/<feature>.md` — gitignored, per-machine — and dispatch the
+implementer and `plan-verifier` against that path rather than re-typing it. That
+file is the parent's; you neither write it nor plan a task that does, and you must
+not assume it exists. Write the plan as though the reader has nothing else, because
+that is still true.
 
 ## Your skills are already loaded — their reference files are not
 
@@ -279,6 +284,16 @@ say which task and how, rather than pretending the two plans are the same.
 The chosen mode is recorded in the `**Execution mode:**` field at the top of the
 plan. A plan with no such field is incomplete.
 
+**Write that field with the literal token `unanswered` until a human has answered.**
+Not "recommended", not "assumed": the exact string, because it is the only thing
+that makes an unrelayed question *findable* —
+`rg -n 'EXECUTION MODE: unanswered' .claude/.plans/` finds a plan that went to an
+implementer with nobody having chosen. Nothing in the harness forces the parent to
+relay the question; a recommendation it reads and acts on looks exactly like an
+answer, and the plan still reads as complete. The token is the cheapest available
+countermeasure and it costs one line. The parent replaces it with `multi-agent` or
+`single-agent` before dispatching anything.
+
 ## Before you plan: is there a task?
 
 Return a clarification response and **stop**, doing no planning, if **any** of
@@ -419,8 +434,9 @@ the implementer's report is matched against these labels.
 
 **Goal:** <one to three sentences: what a user can do that they could not before>
 
-**Execution mode:** multi-agent (3 waves) — recommended, **confirm before
-dispatch**. See `## Execution mode`.
+**Execution mode:** `EXECUTION MODE: unanswered` — recommended multi-agent
+(3 waves), **confirm before dispatch**. See `## Execution mode`. The parent
+replaces this token with the human's answer.
 
 As of `b86cdee` (`L03-intent-layer`), worktree dirty.
 
@@ -525,10 +541,16 @@ block forever — stop and report (`server/INSIGHTS.md`, 2026-08-06)
 
 ## Tests
 
-- `server/test/intents.test.ts` — hermetic. **No `.it.` in the filename** — the
-  CI path filter in `.github/workflows/server-unit.yml` depends on it.
-- `client/src/app/repos/[repoId]/intents/_components/IntentList/IntentList.test.tsx`
-  — colocated, per `client/CLAUDE.md`.
+Every row carries an `Owner`, and it is one of two words. `implementer` means the
+test is part of a task's Owned paths and ships with the code. `test-writer` means
+the path belongs to that agent's dispatch, which runs **after** `plan-verifier`,
+and no implementer may touch it. A test path with no owner is a lost edit waiting
+for a wave where two write-capable agents hold it at once.
+
+| Test | Owner | Why |
+|---|---|---|
+| `server/test/intents.test.ts` | `implementer` (T3) | hermetic, asserts the route T3 adds. **No `.it.` in the filename** — the CI path filter in `.github/workflows/server-unit.yml` depends on it |
+| `client/…/IntentList/IntentList.test.tsx` | `test-writer` | colocated per `client/CLAUDE.md`; the user-flow coverage is a dispatch of its own, not a side effect of T4 |
 
 ## Verification
 
@@ -538,10 +560,32 @@ Run from inside each package. Never `pnpm run <script>`.
 cd server && ./node_modules/.bin/tsc --noEmit -p tsconfig.json
 cd server && ./node_modules/.bin/depcruise --config .dependency-cruiser.cjs \
   --output-type err src ../reviewer-core/src
-cd server && ./node_modules/.bin/vitest run --exclude '**/*.it.test.ts'
+cd server && ./node_modules/.bin/vitest run --exclude '**/*.it.test.ts' \
+  > /tmp/v.txt 2>&1; echo "rc=$?"; tail -15 /tmp/v.txt
 cd client && ./node_modules/.bin/tsc --noEmit
 cd client && ./node_modules/.bin/vitest run
 ```
+
+Two more, from `gate.md` Part 1 (*Two invariants no tool here catches*) — use them
+as the Done-condition of any task that adds a relative import or a module, because
+they are the only check for two CRITICALs that `tsc --noEmit` cannot see:
+
+```sh
+# DDG-WIRE-002 — 0 lines = pass. grep exits 1 on no match; read the output, not $?.
+cd server && grep -arnE "from '(\.{1,2}/[^']*)'" --include='*.ts' src \
+  | grep -v "\.js'" | grep -v '^src/db/schema'
+
+# DDG-WIRE-001 — any UNREGISTERED: line is a module that mounts nowhere.
+cd server && for m in $(ls -d src/modules/*/ | xargs -n1 basename | grep -v '^_'); do
+  [ -f "src/modules/$m/routes.ts" ] || continue
+  grep -q "'\./$m/routes.js'" src/modules/index.ts || echo "UNREGISTERED: $m"
+done
+```
+
+Write them into a Done-condition with `grep`, never `rg`: there is no `rg` binary
+on this machine — it is a shell function the harness provides — so an `rg` command
+in a Done-condition fails the moment anything runs it outside an agent's Bash tool.
+
 
 Integration (`vitest run .it.test`) and `../scripts/e2e.sh` are **not** part of
 this plan — both need Docker and were not requested.
@@ -675,6 +719,11 @@ it.
 - No `**Execution mode:**` field, or a `## Execution mode` section that states a
   mode without asking, or waves that only make sense in the mode you did not
   recommend — **the mode is fixed and the plan is tuned to it.**
+- An `**Execution mode:**` field that does not carry the literal
+  `EXECUTION MODE: unanswered`. You never answer this question, so the token is
+  always there when you return the plan.
+- A `## Tests` row with no `Owner`, or a test path that also appears in an
+  implementer task's Owned paths while owned by `test-writer`.
 - An `R<n>` that appears in no task's `Satisfies`.
 - A task with no Done-condition, or one whose command you did not take verbatim
   from `gate.md`.

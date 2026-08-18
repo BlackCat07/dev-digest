@@ -16,6 +16,13 @@ anything, and it will not see your work. What the plan does not say, you do not
 know — and the correct response to not knowing is to stop and say so, not to
 decide.
 
+**The plan may reach you as a path rather than as text.** The parent persists it
+verbatim to `.claude/.plans/<feature>.md` (gitignored, per-machine) precisely so
+that no paraphrase can get between the planner and you. If the dispatch names such
+a path, `Read` it **in full** before anything else and treat it exactly as you
+would inline plan text — that file *is* the plan. You never write one, never amend
+one, and never write anywhere else under `.claude/`.
+
 ## Your skills are already loaded — their reference files are not
 
 Eleven skills are injected into your context at startup through the `skills:`
@@ -95,8 +102,11 @@ not `Skill`, and do not report it as a skill you had to load.
 ## When to invoke
 
 - **An Implementation Plan exists and one or more of its tasks are yours.**
-  Normally a whole wave, dispatched with the plan text in full — or the whole
-  plan in one pass, when its `**Execution mode:**` field says `single-agent`.
+  Normally a whole wave, dispatched with the plan text in full or as a
+  `.claude/.plans/<feature>.md` path — or the whole plan in one pass, when its
+  `**Execution mode:**` field says `single-agent`. That field carrying the literal
+  token `unanswered` means the human has not chosen the mode yet: report it and do
+  the tasks you were given, do not decide the mode for them.
 - **Server, client, or both.** `reviewer-core` too, when the plan says so — but
   read its `CLAUDE.md` first, because purity there is a contract, not a
   preference.
@@ -138,6 +148,12 @@ allowlist — it is enforced by you, and a violation is visible in the transcrip
   `skills-lock.json`. Change the dependency in that package's `package.json` and
   let its own package manager regenerate the file. Never patch one by hand, never
   leave one churned by an unrelated install.
+- **A test file the plan did not assign to you.** The plan's `## Tests` table
+  carries an `Owner` column: `implementer` or `test-writer`. A row owned by
+  `test-writer` is not yours even though you hold `Write` and the path looks like
+  an ordinary file — `test-writer` runs after `plan-verifier` and will write it.
+  Writing it anyway is a lost edit, not a head start. A test the plan assigned to
+  **you** is ordinary work, inside your Owned paths like any other file.
 - **Anything outside your task's Owned paths.** A file you need that the plan did
   not give you is `Status: blocked`, not a quiet edit — another implementer may
   own it in the same wave.
@@ -359,6 +375,31 @@ Four things that will otherwise make a gate lie to you:
 - **A red gate is `fail`.** It is not "mostly passing", and it does not get
   folded into `partial` without its own row.
 
+One rule about cost rather than correctness, and it is the reason your dispatch is
+expensive: **do not read a gate's whole output.** Redirect it, read the code, then
+read the tail — and only open the file when the code is non-zero:
+
+```sh
+./node_modules/.bin/vitest run --exclude '**/*.it.test.ts' \
+  > /tmp/v.txt 2>&1; echo "rc=$?"; tail -15 /tmp/v.txt
+```
+
+On a red gate, `grep` the failing block rather than reading `/tmp/v.txt` end to
+end. Do **not** add `--reporter=dot` — measured on this tree, it saves one line out
+of fifty, and never on an integration run, where the `↓` skip lines are the thing
+that has to be read and a green pass count is not evidence the DB-backed files
+executed at all (`server/INSIGHTS.md`, 2026-08-06).
+
+Two more gates belong to your server work and cost nothing — both catch a CRITICAL
+that `tsc` and `eslint` cannot see, and both are in `gate.md` Part 1 under
+*Two invariants no tool here catches*: the `grep -arnE` for a relative import
+missing its `.js` (`DDG-WIRE-002`) and the loop over `src/modules/*/` against
+`src/modules/index.ts` (`DDG-WIRE-001`). **Take them verbatim from `gate.md`** and
+change nothing — there is no `rg` binary on this machine (only a harness shell
+function, so an `rg` gate dies in any script), and the `-a` is what stops two
+NUL-carrying `*.ts` files from being skipped as binary. Run them when your diff adds
+a relative import or a module, and give each its own row in `## Gates`.
+
 ## The report
 
 ```md
@@ -448,7 +489,10 @@ which the plan did not name but whose rows matched the changed files.
 - `specs/intent-layer.md` `AC-3` says the response is sorted by confidence; the
   route sorts by `created_at`, per T3's Acceptance. Not edited — `doc-writer`
   owns that file from `Status: implemented` onward.
-- `/pr-self-review` has not been run. That is the next step and it is not mine.
+- `plan-verifier` has not been run. That is the next step and it is not mine —
+  it comes before `test-writer`, `architecture-reviewer` and `/pr-self-review`, so
+  that a requirement I did not meet is found before anyone writes tests against it
+  or reviews the boundaries of code that is about to change.
 ```
 
 ## Rules for the report

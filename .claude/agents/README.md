@@ -83,17 +83,33 @@ them:
 ## The pipeline
 
 ```
-             ┌── researcher ──┐   (optional, either side: an external question
+             ┌── researcher ──┐   (optional, anywhere: an external question
              │                │    the implementation-planner cannot answer)
              │                │
-change ─► spec-creator ─► implementation-planner ─► implementer ─► plan-verifier ─► /pr-self-review ─► gh pr create
-request   (spec, draft)   (plan: how, not what)       (diff)     (per-item verdict)   (verdict)       (hook-gated)
-               ▲                    │      ▲                │
-          human approves            │  execution mode:      ├─► test-writer           (tests, test paths only)
-          draft → approved          │  human answers        ├─► architecture-reviewer (boundaries, read-only)
-                                    │  before dispatch      └─► doc-writer            (specs, docs, diagrams)
-                                    └─► questions + recommendations back to the human
+change ─► spec-creator ─► implementation-planner ─► implementer ─► plan-verifier
+request   (spec, draft)   (plan: how, not what)       (diff)     (per-item verdict)
+               ▲                    │      ▲                          │
+          human approves            │  execution mode:                │  any no / partial
+          draft → approved          │  human answers                  │  → re-dispatch the
+                                    │  before dispatch                │     implementer, then
+                                    │                                 │     verify the delta
+                                    │                                 ▼
+                                    │                         test-writer            (tests, test paths only)
+                                    │                                 ▼
+                                    │                         architecture-reviewer  (boundaries, read-only)
+                                    │                                 ▼
+                                    │                         doc-writer             (approved → implemented)
+                                    │                                 ▼
+                                    │                         /engineering-insights  (the last write of all)
+                                    │                                 ▼
+                                    └─► questions            /pr-self-review ─► gh pr create
+                                        back to the human        (verdict)       (hook-gated)
 ```
+
+Two properties of that order are load-bearing rather than aesthetic: everything
+that **writes a file** happens above `/pr-self-review`, and `plan-verifier` runs
+**before** the three review agents rather than after them. Both are explained
+below.
 
 `spec-creator` is in the chain but **not automatic**: a change request that
 arrives already specified goes straight to `implementation-planner`. Its output
@@ -126,13 +142,83 @@ exist because a subagent has no channel to a person:
 `/pr-self-review` is a **skill**, not an agent, and a `PreToolUse` hook denies
 `gh pr create` / `gh pr merge` until its verdict is fresh and CRITICAL-free.
 
-Of the four later agents, only `plan-verifier` sits in the chain: it answers *did
-we build what the plan said*, which is a different question from *is this diff
-safe to merge*, and answering it first means `/pr-self-review` is not the place a
-missing requirement is discovered. The other three are dispatched on demand.
-`architecture-reviewer` is deliberately placed **before** `/pr-self-review` — a
-misplaced file is cheap to move while the diff is still local and expensive once
-a verdict has been recorded against it.
+**The half of the chain below the plan has a runner:
+[`/run-plan`](../skills/run-plan/SKILL.md).** It is a skill, not an agent — the
+orchestration has to sit in the parent, because only the parent can schedule a wave,
+relay a plan by path, and convert a reviewer's finding into something an
+`implementer` will accept.
+
+**It starts at the plan, and the two agents above the plan are deliberately outside
+it.** `spec-creator` and `implementation-planner` are dispatched by hand, because
+each ends in a decision only a human makes — approving acceptance criteria, and
+choosing the execution mode — and each costs a large dispatch on its own. A runner
+that swallowed them would hide both the cost and the moment a human was supposed to
+read something. What the runner adds below that line is plan validation before any
+dispatch, the wave schedule, a run directory that survives a `/clear`, and a bounded
+remediation loop with a ledger where every finding ends in `fixed`, `blocked`,
+`escalated` or `accepted`.
+
+Two agents are currently **not** dispatched by it: `test-writer` (cost — the plan's
+`## Tests` rows carry `Owner: implementer` instead) and `researcher` (on demand, as
+always). Both cuts are recorded in that skill's `README.md` with what they cost.
+
+**All four later agents now have a place in the chain, in the order the diagram
+shows** — they used to be "dispatched on demand", and the cost of that was a
+sequence decided fresh every feature. `plan-verifier` answers *did we build what
+the plan said*, which is a different question from *is this diff safe to merge*, so
+answering it first means `/pr-self-review` is not the place a missing requirement is
+discovered. `architecture-reviewer` sits **before** `/pr-self-review` because a
+misplaced file is cheap to move while the diff is still local and expensive once a
+verdict has been recorded against it. `doc-writer` sits last of the three because it
+writes, and every write moves the tree fingerprint the verdict is pinned to.
+
+The order is a default, not a lock: a diff that touches no boundaries needs no
+`architecture-reviewer`, and a change with no spec needs no `doc-writer`. Skipping
+one is a decision to state, and reordering two of them is not — `plan-verifier`
+before the other two, and every writer before the verdict, are the two edges that
+carry a real cost.
+
+### Why `plan-verifier` runs first of the four
+
+It is the **cheapest** of them (no `skills:`, read-only, it mostly re-runs commands
+the plan already wrote) and the only one that can invalidate the others' work. Three
+concrete costs of running it last instead:
+
+- **`architecture-reviewer` judges only the changed hunks.** A `no` from the
+  verifier sends the implementer back into the code, and the boundary review is then
+  stale — a second opus dispatch bought nothing.
+- **`test-writer` writes tests against requirements.** Under an unmet or
+  differently-met `R<n>`, the tests assert the wrong behaviour, and that is the most
+  expensive rework in the chain, not the cheapest.
+- **A new test breaks a Done-condition retroactively.** The plan's Done-conditions
+  are commands like `vitest run`; once `test-writer` has added files, a red *new*
+  test fails a `T<n>` the implementer saw green, and the report can no longer
+  distinguish *the task was not done* from *a new test found a bug*.
+
+What the order costs, stated so nobody reads it as free: verifying before the tests
+exist denies the verifier its `test` method (*an automated test asserts it, and I
+saw it pass this run*), so more rows come back `inspection` or `analysis`. The delta
+pass after a re-dispatch, and `/pr-self-review`'s own gates, are where that is
+recovered.
+
+### Everything that writes a file finishes before the verdict
+
+`scripts/diff-hash.sh` fingerprints the base diff, `git diff HEAD`,
+`git status --porcelain -uall` **and the content of every untracked file**, and
+excludes exactly one path — `.claude/.pr-self-review`. So any write after the
+verdict is recorded makes it stale, and `check-gate.sh` then denies
+`gh pr create`.
+
+Two ways this bites in practice, and both look like a broken gate rather than a
+sequencing mistake:
+
+- **`doc-writer` after `/pr-self-review`** — the spec write invalidates the
+  verdict it was supposed to accompany.
+- **`/engineering-insights` after `/pr-self-review`** — the session protocol in
+  the root `CLAUDE.md` says to run it at the end of the session, and an
+  `INSIGHTS.md` append is a tracked-file change. The two protocols collide. Run
+  the journal append **before** the verdict, or accept that the PR opens after a
+  re-review.
 
 ### Who answers which question
 
@@ -162,6 +248,30 @@ So **the parent relays the plan verbatim** — not a summary, not "see above". T
 is also why `implementation-planner.md` requires *quoting* the `INSIGHTS.md` entry
 or skill rule that binds, rather than pointing at the file: a pointer is read
 differently by someone who did not do the reading.
+
+**Relay it as a file, not as a message.** The parent writes the plan verbatim to
+`.claude/.plans/<feature>.md` — gitignored, per-machine, the same status as
+`.claude/.pr-self-review/` — and dispatches with that path. Every agent in the set
+holds `Read`. Three things this buys, none of them available while the plan lives
+only in the parent's context:
+
+- **Verbatim fidelity.** A path cannot be paraphrased; a relayed message can, and
+  a verifier handed a paraphrase verifies the paraphrase.
+- **The parent stops re-emitting it.** Six hundred lines × every implementer and
+  verifier dispatch is most of what a three-wave feature costs the parent.
+- **It survives a `/clear` or a compaction.** The plan is otherwise a message, and
+  four downstream agents need it verbatim after it is gone.
+
+The file is the **parent's**, not an agent's: `implementation-planner` still
+produces the plan as its final message and writes nothing, and no agent here may
+create or edit one.
+
+It has to be **gitignored**, not merely uncommitted. `diff-hash.sh` hashes
+`git status --porcelain -uall` and the content of every untracked file, so a
+visible plan file moves the tree fingerprint and every `/pr-self-review` verdict is
+born stale. Gitignored it is invisible to the hash —
+`git ls-files --others --exclude-standard` skips it, and `git status --porcelain`
+without `--ignored` does too.
 
 Two consequences of adding four more agents to this handoff:
 
@@ -826,11 +936,17 @@ Known limits:
   every task carrying Owned paths and a Done-condition, most of the work is
   mechanical. It is `opus` because `DDG-WIRE-002` (ESM `.js` extension) and
   `DDG-WIRE-004` (a port bound in `container.ts`) are both CRITICAL and both
-  invisible to `tsc --noEmit`. First knob to turn if the cost bites. **That now
-  covers five opus agents** — `test-writer`, `architecture-reviewer` and
-  `plan-verifier` too, each carrying its own justification and its own
-  "sonnet is the knob" note in-file. Whether to turn one is a cost decision, not
-  a correctness one.
+  invisible to `tsc --noEmit`. First knob to turn if the cost bites.
+  **Turned, for two of them, on 2026-08-18:** `architecture-reviewer` and
+  `plan-verifier` now run `sonnet`, each carrying an in-file paragraph on what that
+  tier changes about how it works — the reviewer leans on its precision bar and its
+  reference files instead of on confidence, the verifier leans on four
+  parent-checkable invariants instead of on care. That leaves **four opus agents** —
+  `spec-creator`, `implementation-planner`, `implementer` and `test-writer`, the
+  last of which `/run-plan` does not dispatch at all, so its tier costs nothing
+  today. The signal to move a reviewer
+  back is rising false positives, not a feeling; it is a cost decision, not a
+  correctness one.
 - **`model: sonnet` is pinned on `researcher` and `doc-writer`, not inherited.** A
   parent running Opus gets Sonnet research and Sonnet documentation. That is the
   intent — breadth-first searching and prose-from-supplied-material are the jobs,
@@ -873,12 +989,36 @@ Known limits:
   features will have to pick a side.
 - **Confidence is model output.** The `How to check:` requirement at ≥0.8 makes an
   unfounded high-confidence claim cheap to disprove, not impossible to make.
+- **Every write after the verdict invalidates it — including an `INSIGHTS.md`
+  append.** Documented under `## The pipeline`. The collision between the ordering
+  this file prescribes and the root `CLAUDE.md` session protocol (run
+  `/engineering-insights` at the end of the session) is real, silent, and resolved
+  only by ordering: the journal append is a write like any other.
+- **Two of the three CRITICALs that justify `model: opus` on `implementer` are now
+  gates.** `DDG-WIRE-002` (ESM `.js` extension) and `DDG-WIRE-001` (static module
+  registration) are one `rg` and one shell loop in `gate.md` Part 1, both measured
+  clean on this tree 2026-08-18. `DDG-WIRE-004` (a port bound in
+  `platform/container.ts`) is the residual and is still model-judged, so the opus
+  argument now covers only waves that touch `platform/`. The field was
+  **deliberately left at `opus`**: flipping it is a separate change, so a
+  regression can be attributed to the flip rather than to these gates.
+- **`skills:` slimming is blocked on one of the two fat skills, by the lockfile.**
+  `postgresql-table-design` (2 176 words, 0 sibling files) is vendored from
+  `wshobson/agents` and pinned by `computedHash` over its `SKILL.md` in
+  `skills-lock.json`, which the root `CLAUDE.md` lists as never-hand-edit —
+  reshaping it into an index drifts that hash. `react-testing-library`
+  (2 557 words) has **no** lock entry: it was rewritten in this repo against a
+  recorded source list, so it is the one to slim first. That inverts the order
+  recorded earlier, which named `postgresql-table-design` as the cheap start
+  because it has no siblings; siblings were never the constraint, the pin is.
 - **No caching.** Two dispatches on the same question repeat the same searches.
 
 ## Versions
 
 | Date | Change |
 |---|---|
+| 2026-08-18 | **`/run-plan`, and two reviewers to `sonnet`.** The chain below the plan got a runner — plan validation, waves, a parent-run Done-condition sweep, `plan-verifier` ‖ `architecture-reviewer` in parallel when that sweep is green, a bounded fix loop with two exits (`--max-fix`, default 2, and *no progress*), `doc-writer`, `/engineering-insights`, then the verdict. `spec-creator` and `implementation-planner` stay **outside** it, run by hand, so their cost and their two human decisions stay visible. `architecture-reviewer` and `plan-verifier` moved `opus` → `sonnet`, each gaining an in-file paragraph on what that tier changes: the reviewer leans on its precision bar and opens its reference files instead of reasoning from a rule's name; the verifier leans on four invariants a parent can check in seconds (one row per item, counts add up, every `yes` carries a locator, every `fail` an excerpt). `test-writer` is not dispatched on this configuration — the obligation moves to `Owner: implementer` test rows, and a missing test resurfaces as a `/pr-self-review` finding rather than disappearing. |
+| 2026-08-18 | **Ordering, not agents.** `plan-verifier` moved ahead of `test-writer` / `architecture-reviewer` / `doc-writer`, with the three costs of the old order written out and the one cost of the new one (fewer `test` verification methods) stated rather than hidden. Everything that writes a file — `doc-writer` and `/engineering-insights` included — now finishes **before** `/pr-self-review`, because `diff-hash.sh` covers untracked content and excludes only `.claude/.pr-self-review`. The plan is relayed as a **gitignored file** (`.claude/.plans/<feature>.md`) instead of a re-emitted message: verbatim fidelity, no per-dispatch re-send, and it survives a compaction. `DDG-WIRE-001` and `DDG-WIRE-002` became deterministic gates in `gate.md` (measured clean), leaving `DDG-WIRE-004` as the only model-judged CRITICAL behind `model: opus` on `implementer` — the field itself was left untouched on purpose. Gate output is now redirected-and-tailed, with `--reporter=dot` for the hermetic suite only. Smaller: `test-writer` cites the originating `AC-n` beside the `R<n>` and gained the test-typecheck gate, `implementation-planner`'s execution-mode question carries a findable `unanswered` token and its `## Tests` table an `Owner` column, `architecture-reviewer` reads the `depcruise` baseline from `enforcement.md` instead of holding a copy of it, and `plan-verifier` reports how many Done-condition commands looked wrong. |
 | 2026-08-08 | First agent. `researcher` — two research modes, shared report spine, clarification path, `sonnet`, no write tools, no `Skill` / `Task`. |
 | 2026-08-08 | `planner` + `implementer`. Read-only planner, write-capable implementer, the plan as the only handoff. Eleven skills injected into both via `skills:`. Parallelism by disjoint Owned paths and waves — `isolation: worktree` rejected, `node_modules` is not carried into a worktree. Implementer verifies one thing: the existing tests still pass. Both `opus`, both without `Task`. |
 | 2026-08-10 | Both `skills:` agents gained a "your skills are loaded — their reference files are not" section, after a no-tools self-check confirmed injection works but inlines `SKILL.md` only. This README reshaped into a map: inputs/outputs per agent, a permissions matrix, and the grounding sources for `planner` and `implementer` broken out. |

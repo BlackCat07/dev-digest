@@ -26,3 +26,8 @@ test-results/
 
 # pr-self-review verdict + report + runs log (per-machine, per-branch state)
 .claude/.pr-self-review/
+
+# Implementation Plans relayed to subagents (per-machine scratch, never committed).
+# MUST stay ignored: diff-hash.sh hashes untracked file content, so a visible plan
+# file would move the tree fingerprint and make every verdict stale.
+.claude/.plans/

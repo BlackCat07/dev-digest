@@ -35,6 +35,54 @@ non-TTY invocations proceed.
 | unit tests | `./node_modules/.bin/vitest run --exclude '**/*.it.test.ts'` | **CRITICAL** |
 | integration | `./node_modules/.bin/vitest run .it.test` | **only on request** — needs Docker |
 
+### Two invariants no tool here catches (`server/`, `reviewer-core/`)
+
+Both are CRITICAL, both are invisible to every gate above, and both are one
+command — so they are gates, not review judgement. `eslint.config.js` deliberately
+polices no boundaries and carries no import-extension rule (`.dependency-cruiser.cjs`
+owns the boundaries, "one law, one enforcer"), and `tsc --noEmit` sees neither.
+
+Measured on this tree 2026-08-18: both clean.
+
+```sh
+# DDG-WIRE-002 — relative imports carry the .js extension. 0 lines = pass.
+# src/db/schema* is the one named exception: 54 extensionless imports live there
+# and are loaded by drizzle-kit, not by the running ESM server.
+grep -arnE "from '(\.{1,2}/[^']*)'" --include='*.ts' src \
+  | grep -v "\.js'" | grep -v '^src/db/schema'
+
+# DDG-WIRE-001 — every module with a routes.ts is registered in modules/index.ts.
+# Any UNREGISTERED: line is a module that mounts nowhere and 404s with no error.
+for m in $(ls -d src/modules/*/ | xargs -n1 basename | grep -v '^_'); do
+  [ -f "src/modules/$m/routes.ts" ] || continue
+  grep -q "'\./$m/routes.js'" src/modules/index.ts || echo "UNREGISTERED: $m"
+done
+```
+
+Run the first from `reviewer-core/` as well — also 0 lines there. It has no
+`db/schema`, so drop the last `grep -v`.
+
+**`grep`, not `rg`, and that is deliberate.** Measured 2026-08-18: this machine has
+**no `rg` binary at all** — `rg` resolves to a shell function the Claude Code
+harness defines, so an `rg` gate works inside an agent's Bash tool and fails with
+`rg: command not found` in plain `bash -c`, in any script, and in CI. A gate command
+that only runs in one shell is not a gate. `grep -arnE` is POSIX and available
+everywhere.
+
+**The `-a` is load-bearing, and dropping it makes this check lie.** Two `*.ts` files
+in `server/src` contain a literal NUL byte — a composite `Set` key written as
+`` `${from}\0${to}` `` with the actual byte rather than the escape:
+`src/adapters/depgraph/index.ts` (`buildEdges`) and
+`src/modules/repo-intel/pipeline/repo-map.ts` (`renderRepoMap`). `file(1)` calls both
+`data`, and without `-a` GNU/BSD `grep` prints `Binary file … matches` and **shows no
+lines** — so the check quietly scans 2 files fewer than it claims, and both of them
+are real source in the adapters and repo-intel rings. With `-a` they are read as
+text and both come back clean. Any future `grep -r` gate over this tree needs the
+same flag.
+
+**Read the output, not the exit code:** `grep` exits 1 when it matches nothing,
+which is the *passing* case for the first check. `0 lines = pass`.
+
 ### `client/` (pnpm), from `client/`
 
 | Gate | Command | Failure → |
@@ -91,6 +139,24 @@ Three traps, all measured here, all of which silently manufacture a "pass":
 - **`-nt` differs by shell** — nanoseconds in zsh, whole seconds in macOS bash
   3.2. Never decide freshness with it; that is what `scripts/diff-hash.sh` is
   for.
+
+A fourth rule, about cost rather than correctness: **do not pour a gate's whole
+output into an agent's context.** Redirect, read the code, then read the tail, and
+on a red gate `grep` the failing block rather than reading the file:
+
+```sh
+./node_modules/.bin/vitest run --exclude '**/*.it.test.ts' \
+  > /tmp/v.txt 2>&1; echo "rc=$?"; tail -15 /tmp/v.txt
+```
+
+**Do not reach for `--reporter=dot` — measured, it buys nothing here.** On this
+tree 2026-08-18 the server hermetic suite printed **50 lines** with the default
+reporter and **49** with `dot`, because vitest's dot reporter still emits one line
+per test file and this package has forty of them. The saving is the `tail`, not the
+flag; an extra flag that changes nothing is one more thing to get wrong. And never
+put it on an integration run in any case — there the `↓` skip lines are the thing
+you have to read, and a green pass count is not evidence the DB-backed files ran at
+all (`server/INSIGHTS.md`, 2026-08-06).
 
 ### Scoping and pre-existing debt
 

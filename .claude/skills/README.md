@@ -9,6 +9,7 @@ Subagents are the neighbouring concept and live in [`../agents/`](../agents/READ
 | Skill | Scope | Description |
 |-------|-------|-------------|
 | [engineering-insights](engineering-insights/SKILL.md) | Meta | Reads a package's `INSIGHTS.md` before the work, appends what was learned after it |
+| [run-plan](run-plan/SKILL.md) | Workflow | Executes an existing Implementation Plan — implementer waves → Done-conditions → verify ‖ boundaries → bounded fix loop → docs → verdict. Starts at the plan; `spec-creator` and `implementation-planner` are run by hand |
 | [pr-self-review](pr-self-review/SKILL.md) | Workflow | Reviews the open local diff before a PR is opened, routes each file to the skills that own it, blocks the merge on a CRITICAL |
 | [fastify-best-practices](fastify-best-practices/SKILL.md) | Backend | Fastify routes, plugins, JSON-schema validation, error handling |
 | [drizzle-orm-patterns](drizzle-orm-patterns/SKILL.md) | Backend | Drizzle schema, queries, relations, transactions, migrations |
@@ -24,11 +25,22 @@ Subagents are the neighbouring concept and live in [`../agents/`](../agents/READ
 | [security](security/SKILL.md) | Full-stack | OWASP Top 10:2025, auth, injection, uploads, secrets |
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
 
-`engineering-insights`, `frontend-ui-architecture`, `onion-architecture`,
-`product-ui-language` and `pr-self-review` are authored in
-this repo. Every other
-skill is vendored from GitHub and pinned by hash in `../../skills-lock.json` —
-locally-authored skills have no upstream and do not belong in that lockfile.
+`engineering-insights`, `run-plan`, `frontend-ui-architecture`,
+`onion-architecture`, `product-ui-language` and `pr-self-review` are authored in
+this repo. Vendored
+skills are pulled from GitHub and pinned by hash in `../../skills-lock.json`;
+locally-authored ones have no upstream and do not belong in that lockfile.
+
+**Three skills sit in neither group, and the difference decides whether their
+`SKILL.md` may be reshaped.** `react-testing-library`, `react-best-practices` and
+`security` carry **no entry in `skills-lock.json`** — `react-testing-library` was
+rewritten here against a source list recorded in its own `README.md`, so it is
+effectively authored in this repo and free to restructure. Everything that *does*
+have a lock entry (`postgresql-table-design`, `zod`, `typescript-expert`,
+`fastify-best-practices`, `next-best-practices`, `drizzle-orm-patterns`, …) is
+pinned by `computedHash` over its `SKILL.md`: reshaping one drifts that hash, and
+the root `CLAUDE.md` lists the lockfile as never-hand-edit. Check the lockfile
+before editing a `SKILL.md`, not after.
 
 `pr-self-review` is the only skill that ships executables and the only one wired
 into the harness: `pr-self-review/scripts/` holds the tree fingerprint and the
