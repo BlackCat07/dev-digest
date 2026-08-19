@@ -30,4 +30,18 @@ test-results/
 # Implementation Plans relayed to subagents (per-machine scratch, never committed).
 # MUST stay ignored: diff-hash.sh hashes untracked file content, so a visible plan
 # file would move the tree fingerprint and make every verdict stale.
-.claude/.plans/
+# Written as `/*` rather than `/` so the one exception below can re-include a
+# directory: git cannot re-include anything whose PARENT directory is excluded.
+.claude/.plans/*
+
+# ONE exception, on purpose: the SDD pipeline artefacts for SPEC-02, which are the
+# lesson's deliverable and are meant to be read from the repository rather than from
+# one machine's scratch. The rule above still holds for every other plan.
+#
+# The constraint it trades against is real, so it is written down: an un-ignored file
+# enters diff-hash.sh's fingerprint, as untracked CONTENT while it is uncommitted and
+# as part of `base...HEAD` once it is committed. So each artefact here is COMMITTED
+# BEFORE a /pr-self-review verdict is recorded. Committed, it is stable and the
+# verdict stays fresh; left uncommitted and edited, it would move the hash under an
+# already-recorded verdict — which is exactly what the rule above exists to prevent.
+!.claude/.plans/onboarding-generator/
