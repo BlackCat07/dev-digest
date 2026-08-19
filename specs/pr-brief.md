@@ -252,9 +252,13 @@ open a pull request, read why and how risky, click a review-focus row, land on t
   What is stored instead is AC-57's requirement, kept separate because a correct status with a
   wasted call is the expensive half and it is the half no status assertion can see.*
 - **AC-17** — The changed-file list placed in the input **shall** be capped at **200** paths,
-  with the number of files omitted reported alongside it.
+  applied **after** the role ordering of AC-60, with the number of files omitted reported
+  alongside it.
   `Verify: test` — *observable: a 400-file pull request contributes 200 paths and a stated
-  remainder of 200, and the card can say so rather than implying the model saw everything.*
+  remainder of 200, and the card can say so rather than implying the model saw everything. The
+  cap is applied after the ordering and never before it — that sequence is the whole of the
+  decision (OQ-7): capping an unordered list spends the budget on whatever `pr_files` happened
+  to return, which on a large pull request is dominated by generated and vendored files.*
 
 **The call**
 
@@ -319,13 +323,15 @@ open a pull request, read why and how risky, click a review-focus row, land on t
   `Verify: test` — *observable: a response carrying one `high` and two `low` risks stores
   `high`; a response whose every risk was dropped stores `low`. Derived rather than taken from
   the model, so the badge and the list below it cannot disagree — the same reason the onboarding
-  tour's section order is the contract's and not the model's (**OQ-5**).*
+  tour's section order is the contract's and not the model's. Decided on 2026-08-19 (OQ-5); the
+  model is not asked for a level and a level it volunteers is ignored.*
 - **AC-27** — IF the stored what equals the pull request's title after case and whitespace
   normalisation, THEN the system **shall** store no what and mark the brief partial.
   `Verify: test` — *observable: a response whose what is `Add rate limiting to public API
   endpoints` for a pull request of that title stores a null what. The requirement asks for what
   changed "without restating the pull request's title", and an exact restatement is the one form
-  of it that can be checked rather than judged (**OQ-8**).*
+  of it that can be checked rather than judged. Decided on 2026-08-19 (OQ-8): stored as null
+  rather than kept, and not reprompted — a second round-trip would contradict AC-19.*
 
 **Degradation, provenance and scope**
 
@@ -347,8 +353,9 @@ open a pull request, read why and how risky, click a review-focus row, land on t
   entries.
   `Verify: test` — *observable: a degraded brief carries the four figures and three empty
   fields. A deterministic review-focus list is deliberately **not** synthesised: a
-  review-focus row is advice plus a reason, and the reason is the only part a model produces
-  (**OQ-9**).*
+  review-focus row is advice plus a reason, and the reason is the only part a model produces.
+  Decided on 2026-08-19 (OQ-9), including the rejected alternative — Smart Diff's `core` group
+  by churn — which would have put rows on the card with nothing beside them.*
 - **AC-31** — WHERE no intent has been derived for the pull request, or its derivation failed,
   the system **shall** generate the brief without it and mark the brief partial.
   `Verify: test` — *observable: a pull request with no intent row still produces a brief, and
@@ -415,7 +422,12 @@ open a pull request, read why and how risky, click a review-focus row, land on t
   scroll margin is read from the measured sticky-header height rather than a constant — that
   header is roughly 128 px, ~156 px on a merged or closed pull request and taller again when its
   meta row wraps, so any single value lands some pull requests underneath it
-  (`client/INSIGHTS.md`, 2026-08-11).*
+  (`client/INSIGHTS.md`, 2026-08-11). Decided on 2026-08-19 (OQ-11): the file is what the row
+  promises and what AC-24 grounds; the line is a convenience and is **explicitly ungrounded** —
+  the model never sees a hunk body (AC-11), so nothing checks that the number means anything,
+  and this criterion is written against the anchor rather than against the line's correctness.
+  A row that scrolls to a plausible but wrong line is within spec; a row that scrolls to the
+  wrong **file** is not (AC-24, AC-41).*
 - **AC-43** — IF a targeted file is not present in the rendered diff, THEN the client **shall**
   say so on the diff tab rather than leaving the reader on an unchanged view.
   `Verify: test` — *observable: targeting a path absent from the file list renders a notice
@@ -475,15 +487,15 @@ open a pull request, read why and how risky, click a review-focus row, land on t
   (`client/INSIGHTS.md`, 2026-08-19), so the automated half asserts reachability and accessible
   name and the activation is demonstrated.*
 
-### AC-54 … AC-59 — server, added after the first draft
+### AC-54 … AC-61 — server, added after the first draft
 
-These six are numbered after the client block because they were added at the end of writing:
+These eight are numbered after the client block because they were added at the end of writing:
 AC-54 … AC-56 when `## Traceability` showed US-10 served by nothing, AC-57 when AC-16 and
-AC-28 turned out to join two behaviours with an "and", and AC-58 … AC-59 on 2026-08-19 when
-OQ-2 and OQ-1 were decided and each turned a default into a requirement that no criterion yet
-stated. They are **server** criteria and belong beside AC-1 … AC-35; the identifiers are
-addresses a plan, a test and a review finding will cite, so they are not renumbered to sit in
-place.
+AC-28 turned out to join two behaviours with an "and", AC-58 … AC-59 on 2026-08-19 when OQ-2
+and OQ-1 were decided, and AC-60 … AC-61 on 2026-08-19 when OQ-7 and OQ-10 were decided —
+each of the last four turning a default into a requirement that no criterion yet stated. They
+are **server** criteria and belong beside AC-1 … AC-35; the identifiers are addresses a plan,
+a test and a review finding will cite, so they are not renumbered to sit in place.
 
 - **AC-54** — Every foreign input placed in the model input **shall** be wrapped as untrusted
   data.
@@ -525,6 +537,27 @@ place.
   2026-08-19 (OQ-1). This reuses the existing per-agent resolution rather than defining a
   second one — the alternative was a repository-wide walk with no relevance signal at all,
   which would put every document in the repository into a 8 000-token budget.*
+- **AC-60** — The changed-file list placed in the input **shall** be ordered by Smart Diff's
+  role — every `core` file, then every `wiring` file, then every `boilerplate` file — with
+  `pr_files` order preserved within each role.
+  `Verify: test` — *observable: a pull request whose `pr_files` order is
+  `pnpm-lock.yaml`, `src/server.ts`, `src/api/rate-limit.ts` contributes the two source files
+  before the lock file, and the lock file is last. Decided on 2026-08-19 (OQ-7). **No degraded
+  path is needed for this**, and that is the reason the ordering can bind the one input AC-15
+  says is never dropped: the role is a pure function of the path — no model call, no index, no
+  clone read and the patch is never opened — so there is no state in which the classification
+  is unavailable and no fallback ordering to specify. It is also why this does not become a
+  droppable source under AC-14: an ordering is not a source.*
+- **AC-61** — The `risk_brief` feature-model registry default **shall** name a provider that
+  the Settings feature-model picker can write.
+  `Verify: test` — *observable: the registry's `risk_brief` entry has
+  `defaultProvider: 'openrouter'`, and a workspace that has picked a model and then reverts to
+  the default lands back on a reachable one. Decided on 2026-08-19 (OQ-10). The entry ships as
+  `openai` / `gpt-4.1` today while the picker writes `provider: "openrouter"` for every pick,
+  so the moment anybody touches it the default can never be restored from the UI
+  (`client/INSIGHTS.md`, 2026-08-06) — and this feature is that entry's first consumer, so it
+  is the first change that would expose the defect to a user. The registry is declared in
+  **three** places that must move together — see `## Contracts`.*
 
 ## Edge cases
 
@@ -578,7 +611,9 @@ place.
   is a runtime configuration error rather than a boot failure.
 - **EC-23** — `risk_brief`'s registry default is an OpenAI model, while Settings → Feature
   Models can only ever write `provider: "openrouter"` — so once anybody touches the picker the
-  default can never be restored from the UI (`client/INSIGHTS.md`, 2026-08-06).
+  default can never be restored from the UI (`client/INSIGHTS.md`, 2026-08-06). **Closed by
+  AC-61 rather than accepted** (decided 2026-08-19, OQ-10): this feature is that entry's first
+  consumer, so it is the change that would first expose the defect to a user.
 - **EC-24** — A stored brief written under an earlier shape. A jsonb column read back by a cast
   rather than a parse arrives with keys **absent**, not null.
 - **EC-25** — The `pr_brief` table as it stands carries only a pull-request id and a json blob:
@@ -605,8 +640,15 @@ place.
 - **EC-34** — The migration that adds the brief's columns ships and is never applied: no
   hermetic test can tell "schema shipped" from "schema applied", and the first real request
   answers 500 on a route that exists.
-
-## Cross-module interactions
+- **EC-35** — A pull request whose changed paths the role classifier does not recognise. The
+  classifier's default role is `core` — the safe direction for its own feature — so a 400-file
+  pull request of unrecognised paths puts everything in one role and the ordering of AC-60 buys
+  nothing, leaving the cap to fall wherever `pr_files` order happens to place things.
+- **EC-36** — The role classifier normalises a path before matching — separators folded, a
+  leading `./` dropped, the whole thing lowercased — so two changed files differing only in
+  case classify identically. The paths the prompt carries, and the paths AC-22 and AC-24 ground
+  against, are the ones `pr_files` recorded; the normalised form exists only inside the
+  classifier, and the two must not be allowed to become the same comparison by accident.
 
 Two packages, one direction. `client` calls `server`; `server` reads its own derivations
 through the boundaries they already publish, the clone through the path-confined document
@@ -652,7 +694,10 @@ Three directions that must **not** exist:
 - **The brief module never reaches another feature module's internals.** Each derivation is
   reached through the facade or container binding that module already publishes; an
   `import type` of a sibling's internal type is a real violation and not a free one
-  (`server/INSIGHTS.md`, 2026-08-14).
+  (`server/INSIGHTS.md`, 2026-08-14). **AC-60 makes this concrete rather than abstract:** the
+  role classification it requires lives inside the smart-diff module today and has no published
+  boundary, so this feature needs one to exist. What that boundary is belongs to the plan; that
+  it must exist, and that reaching past it is not an option, belongs here.
 - **Nothing in this feature writes to the intent, blast or prior-PR records.** It is a reader of
   all three.
 
@@ -709,9 +754,17 @@ coordination only; a spec is where that agreement is recorded. Both copies move 
   `git-why`, the blame-timeline drawer. The field `why` on `PrRiskBrief` is fine; a type, a
   module or a contract file called `why` is not.
 - **`FeatureModelId` gains no member.** `risk_brief` is already there and this feature is its
-  first consumer. Its **default provider** is a separate matter — see OQ-10, and note that
-  changing it is a three-place edit (both contract copies plus the client's feature-model list),
-  because the Settings picker writes only one provider.
+  first consumer.
+- **`FEATURE_MODELS`' `risk_brief` entry changes its `defaultProvider` and `defaultModel`**
+  from `openai` / `gpt-4.1` to an OpenRouter model (AC-61). **Decided on 2026-08-19 (OQ-10).**
+  This is the one place this spec changes an existing symbol's **value** rather than adding a
+  new one, and it is deliberate: the rule that `vendor/shared` is extend-never-reshape is about
+  a symbol's *shape*, and this changes no field, no type and no name — the entry keeps every
+  key it has. It is nonetheless a **three-place coordinated edit**, and all three must land in
+  the same change or the copies drift: the registry in the server's contract copy, the
+  hand-made client copy of the same contract, and the client's own feature-model list, which is
+  a third declaration of the same registry (`client/INSIGHTS.md`, 2026-08-06). A planner owns
+  this as one task, not three.
 
 ## Non-functional
 
@@ -739,7 +792,8 @@ Every figure below is either taken from an existing constant — which is said w
 - **≤ 8 000 approximate tokens** of model input, counted by AC-12's rule. Above it, whole
   sources are dropped in the stated order (AC-14); if the core alone overruns, no call is made
   (AC-16).
-- **≤ 200** changed paths listed in the prompt, with the remainder reported as a count (AC-17).
+- **≤ 200** changed paths listed in the prompt, taken **after** the role ordering so the cap
+  falls on `boilerplate` first, with the remainder reported as a count (AC-17, AC-60).
 - **≤ 4 000** characters of the pull request's description and **≤ 8 000** of the linked issue's
   body — the intent classifier's `MAX_BODY_CHARS` and `MAX_SOURCE_CHARS`, so the two features
   read the same material at the same depth.
@@ -794,7 +848,7 @@ Every figure below is either taken from an existing constant — which is said w
 | Prior pull requests overlapping these files | the prior-PRs read over `pr_files` | us | **yes** — and in its `partial` state by default, because `pr_files` is sparse |
 | The linked issue's title and body | parsed from the description as `#n` or a same-repository URL, fetched live from GitHub | the issue's author — i.e. **not us** | **partly** — the intent layer already does exactly this and records only the metadata; **no issue body is stored anywhere**, which is why it cannot be in the cache key (EC-9) |
 | The relevant repository documents | the Project Context attachment resolution, taken over the repository's **enabled agents** and unioned (AC-59) | the repository being reviewed — i.e. **not us** | **partly** — the per-agent resolution exists and is reused unchanged; the union over enabled agents is new, and is what gives a brief — which has no agent of its own — a document set at all (decided 2026-08-19, OQ-1) |
-| Smart Diff's role classification of the changed files | the smart-diff derivation | us | **yes** — not consumed by this spec's criteria; see the proposal in OQ-7 |
+| Smart Diff's role classification of the changed files | the role classifier, a pure function of the path — no model call, no index, no patch read | us | **yes** — and it is now a **required** input, not an optional one: it orders the changed-file list before the cap (AC-60, AC-17). Decided 2026-08-19 (OQ-7). Because it is path-only, it is available the instant a pull request is imported, which is why it needs no fallback |
 | The model and provider | the workspace's `risk_brief` feature-model choice | the workspace | **yes**, with zero callers today (EC-23) |
 | Round-trips, tokens, cost | the structured result | us | **yes** — the result already carries all four |
 | The stored brief | the `pr_brief` table | us | **partly** — the table exists with a pull-request id and a json blob and **nothing else**; it needs the provenance and cache-key columns of `## Contracts` (EC-25) |
@@ -895,7 +949,11 @@ is data; none of it is an instruction.
 | AC-57 | US-8, G7, EC-1, EC-29 | server | test |
 | AC-58 | US-6, US-7, EC-2, EC-19 | server | test |
 | AC-59 | US-3, US-4, EC-11 | server | test |
+| AC-60 | US-4, US-9, scale cap, EC-29 | server | test |
+| AC-61 | US-9, EC-23 | server | test |
 | — | EC-16 | — | `accepted` — the caps in `## Non-functional` bound what is stored and excess is discarded whole; no criterion of its own, because the criterion it would duplicate is the cap itself. |
+| — | EC-35 | — | `accepted` — decided on 2026-08-19 (OQ-7): when every changed path is unrecognised they all classify `core`, the ordering of AC-60 is a no-op and the cap falls in `pr_files` order. That is the classifier's own designed default and correcting it here would mean a second, disagreeing definition of "the substance of a change" — the drift AC-60 exists to avoid. The remainder count of AC-17 still tells the reader the list was cut. |
+| — | EC-36 | — | `accepted` — the normalised form is internal to the classifier and never leaves it; the prompt and the grounding of AC-22 and AC-24 use the paths `pr_files` recorded. Listed because the two forms are one careless assignment apart, and a case-folded path reaching the grounding set would silently widen it. |
 | — | EC-24 | — | `accepted` — a brief stored under an earlier shape is read back through a validating parse rather than a cast, and a payload that does not parse is treated as no brief and offered for regeneration. Recorded as an edge case because the failure mode it prevents — an absent key, not a null one — has cost this repository twice. |
 | — | EC-25 | — | `accepted` — the existing `pr_brief` table is a name and a json column; the columns of `## Contracts` are new work, and `## Open questions` does not need to ask whether to add them. |
 | — | EC-26 | — | `accepted` — the card ships its own message namespace and does not read `brief.json`'s existing keys, which name a shape this feature does not produce. Changing or deleting the shipped file is a separate product decision; leaving it unread costs nothing, and reading it is exactly the mistake that put "Brief not available yet." on the Intent card. |
@@ -904,11 +962,13 @@ is data; none of it is an instruction.
 
 ## Open questions
 
-Twelve were asked. **The four blocking ones were answered by the user on 2026-08-19**, each on
-the default this spec proposed; they are kept below as a record that they were asked and how
-they closed, because a plan and a reviewer will want to see both. **Every decision now lives in
-the section that owns it** — the four entries below are an index into the body, not a second
-place to read the requirement from. Eight remain open at their stated value.
+Twelve were asked and **all twelve were answered by the user on 2026-08-19**. Ten closed on the
+default this spec proposed; **two changed it** — OQ-7 (the changed-file list is ordered by role
+before the cap) and OQ-10 (the `risk_brief` model default moves to a provider the UI can
+restore). They are kept below as a record that they were asked and how they closed, because a
+plan and a reviewer will want to see both. **Every decision now lives in the section that owns
+it** — the two tables below are an index into the body, not a second place to read a
+requirement from.
 
 **Decided — 2026-08-19**
 
@@ -919,46 +979,26 @@ place to read the requirement from. Eight remain open at their stated value.
 | OQ-3 | **A review-focus entry may cite only files in the pull request's changed set.** | Its whole contract is that it navigates into the `Files changed` tab, and that tab contains only changed files — a row that cannot navigate is worse than a missing row. **Consequence: the design's fourth review-focus row, `src/api/users.ts`, is a design bug rather than a feature**, and is recorded as one. A risk's file references are deliberately wider (AC-22), because a risk is not required to be clickable. | **AC-24**, AC-22, **N13**, EC-12 |
 | OQ-4 | **The verdict banner does not move.** It stays on the `Agent runs` tab; the brief card carries its own risk level, its own regenerate control and its own cost line. | The banner is review output and a brief exists before any agent has run, so on the `Overview` tab of an un-reviewed pull request it would be an empty headline. Duplicating a built component across two tabs is a separate product decision with its own cost. | **N2**, AC-36, EC-27, `## Traceability` (EC-27's row) |
 
-**Still open — the spec carries the stated value**
+**Decided — 2026-08-19, the remaining eight**
 
-- **OQ-5** — `[NEEDS CLARIFICATION: AC-26 risk-level source]` The spec derives the level from
-  the highest surviving risk severity, with no risks meaning `low`. *Alternative:* the model
-  returns the level directly, which lets it say "high" for a pull request whose individual risks
-  are each low — at the cost of a badge that can contradict the list beneath it.
-- **OQ-6** — `[NEEDS CLARIFICATION: AC-2 cache-key material]` The nine values are derived from
-  what the server can observe locally with no network call and no model call. Confirm the list —
-  in particular that the intent's derived-at time and the blast map's indexed SHA belong in it,
-  and that a document's byte size is an acceptable stand-in for its content (EC-10).
-- **OQ-7** — `[NEEDS CLARIFICATION: AC-17 changed-file cap and its ordering]` 200 paths is
-  proposed; at roughly 14 tokens a path that is about a third of the budget. The paths are
-  currently listed in `pr_files` order. *Proposal worth weighing:* order them by Smart Diff's
-  role — `core`, then `wiring`, then `boilerplate` — so a 400-file pull request spends the cap
-  on the files that carry the change rather than on its lock file.
-- **OQ-8** — `[NEEDS CLARIFICATION: AC-27 restated-title handling]` The spec stores no what and
-  marks the brief partial. *Alternatives:* store it anyway and let the reader judge; or reprompt
-  once, which costs a second round-trip and contradicts AC-19.
-- **OQ-9** — `[NEEDS CLARIFICATION: AC-30 degraded-card content]` The spec shows the
-  deterministic figures and no review-focus list. *Alternative:* synthesise a deterministic
-  review focus from Smart Diff's `core` group, highest churn first — useful, but each row would
-  have no reason beside it, and a reason is what a review-focus row is for.
-- **OQ-10** — `[NEEDS CLARIFICATION: the `risk_brief` default model]` It is registered as
-  `openai` / `gpt-4.1`, and Settings → Feature Models writes `provider: "openrouter"` for every
-  pick — so the moment anybody touches the picker the default can never be restored from the UI.
-  *Proposed default:* change it to an OpenRouter model, which is a **three-place** coordinated
-  edit (both `vendor/shared` copies and the client's feature-model list). *Alternative:* leave
-  it and accept EC-23.
-- **OQ-11** — `[NEEDS CLARIFICATION: AC-42 link precision]` The requirement says a review-focus
-  row leads to the **file**; the design draws `path:line`. The spec navigates to the file and
-  scrolls to the line when the entry carries one. Confirm that a line is wanted at all, since it
-  makes the model responsible for a number nothing grounds against a hunk.
-- **OQ-12** — `[NEEDS CLARIFICATION: `## Non-functional` figures]` The latency budgets, the
-  caps, the rate limits and the ≤ 8 KB stored size are proposals except where a figure is
-  identified as an existing constant. The one figure that is **not** a proposal is the 8 000
-  approximate tokens of AC-13, which comes from the requirement.
+Six were confirmed on the value the spec already carried. **Two changed it**, and they are
+marked: OQ-7 added a new required input, and OQ-10 turned an accepted defect into a
+requirement.
 
-`Status` stays **`draft`**. Eight questions are still open, and an empty `## Open questions` is
-the precondition for a human to promote a spec to `approved` — it is not the promotion, and no
-agent may grant it.
+| # | Decided | Because | Now lives in |
+|---|---|---|---|
+| OQ-5 | **The risk level is derived server-side** from the highest severity among the risks that survived grounding; no surviving risks means `low`. The model does not supply it. | A level the model states independently can contradict the list printed directly beneath it, and a reader has no way to tell which is wrong. Deriving it makes the badge a summary of the evidence rather than a second opinion about it — the same reason the onboarding tour's section order is the contract's and not the model's. | **AC-26**, EC-15 |
+| OQ-6 | **The cache key is the nine values as listed**, including the intent's derived-at time and the blast map's indexed SHA, with a document's byte size standing in for its content. | Every one is observable locally with no network call and no model call, which is what lets the key be computed on the pull-request detail path (AC-58) without a latency cost anybody would notice. The two things the size cannot catch — a re-edited issue body, a document rewritten to the same length — are exactly what the force path exists for (AC-6, EC-9, EC-10). | **AC-2**, AC-6, `## Non-functional` (perf) |
+| OQ-7 — **changed** | **The changed-file list is ordered by Smart Diff's role** — `core`, then `wiring`, then `boilerplate`, `pr_files` order preserved within each — and the 200-path cap is applied **after** that ordering. The remainder count stays. | Capping an unordered list spends the budget on whatever `pr_files` returned, which on a large pull request is dominated by generated and vendored files. The same inversion has already been measured here once: Smart Diff's own split suggestion ranked buckets by size and advised a too-big pull request to split its **lock file** out first (`server/INSIGHTS.md`, 2026-08-11) — if one signal is the feature's thesis, it has to be the primary sort key. The role is a pure function of the path, so this costs no model call, no index and no fallback. | **AC-60**, AC-17, `## Inputs (provenance)`, `## Non-functional` (scale), `## Cross-module interactions`, EC-35, EC-36 |
+| OQ-8 | **A what that restates the pull request's title is stored as no what, and the brief is marked partial.** | The requirement asks for what changed "without restating the title", and an exact restatement is the one form of that which can be checked rather than judged. Storing it anyway would let the card's most prominent line be a paraphrase of the heading directly above it; reprompting would cost a second round-trip and contradict AC-19. | **AC-27**, EC-14 |
+| OQ-9 | **The degraded card shows the deterministic figures and no review-focus list.** | A review-focus row is a path **plus a reason**, and the reason is the only part a model produces. A deterministic list would put rows on the card with nothing beside them, which reads as advice the system cannot actually justify — worse than an honest absence. | **AC-30**, AC-48 |
+| OQ-10 — **changed** | **The `risk_brief` feature-model default moves off `openai` / `gpt-4.1` to an OpenRouter model**, as a three-place coordinated edit. | Settings → Feature Models writes `provider: "openrouter"` for every pick, so the shipped default is one the UI can never restore once anybody touches the picker (`client/INSIGHTS.md`, 2026-08-06). This feature is that registry entry's **first consumer**, so it is the change that would first expose the defect to a user — which is what makes fixing it this feature's business rather than a tidy-up. | **AC-61**, `## Contracts`, EC-23 |
+| OQ-11 | **The link lands on the file and scrolls to the line when the model supplied one.** | The file is what the requirement promises and what the changed set can ground (AC-24); the line is a convenience. It stays **explicitly ungrounded**: the model never sees a hunk body (AC-11), so nothing checks that the line number means anything, and AC-42 is written against the anchor rather than against the correctness of the number. A reviewer should find that limitation stated here rather than discover it from a row that scrolls to the wrong place. | **AC-42**, AC-11, AC-24, EC-17 |
+| OQ-12 | **Every `## Non-functional` figure stands as written**, and each is now a requirement rather than a proposal. | The figures identified as existing constants were adopted so two features do not read the same material at two depths; the rest were proposed with their reasoning beside them and accepted as stated. The 8 000 approximate tokens of AC-13 was never a proposal — it is the requirement's own number, and AC-12 fixes the unit it is counted in. | `## Non-functional`, AC-12, AC-13 |
+
+`Status` stays **`draft`**. **Every question is now decided and this section holds no open
+item**, which is the precondition `docs/specs-convention.md` sets for `approved` — it is not
+the promotion itself, and no agent may grant that.
 
 ## History
 
@@ -971,3 +1011,12 @@ OQ-1. AC-36 gained the assertion that the verdict banner is absent from `Overvie
 narrowed from "automatic regeneration" to "scheduled regeneration", and the cache-key latency
 budget moved onto the pull-request detail path where the trigger now sits. OQ-5 … OQ-12 remain
 open. `Status` unchanged at `draft`.
+2026-08-19 — the remaining eight questions answered by the user. Six confirmed the stated
+value; **two changed the spec**. OQ-7 makes Smart Diff's role classification a required input
+that orders the changed-file list before the 200-path cap — **AC-60**, with AC-17 amended to
+apply the cap after it, a rewritten provenance row, a scale-cap line, a new boundary
+consequence under `## Cross-module interactions`, and EC-35 / EC-36 for the classifier's
+default role and its path normalisation. OQ-10 turns EC-23 from an accepted defect into
+**AC-61** plus a `## Contracts` entry recording the three-place coordinated edit to the
+`risk_brief` registry default. `## Open questions` now holds no open item, which is the
+precondition for approval. `Status` unchanged at `draft`.
