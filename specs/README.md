@@ -17,7 +17,7 @@ Format, naming, `Spec ID`, the `Status` lifecycle and the required sections:
 | Spec ID | Spec | Packages | Status | Covers |
 |---|---|---|---|---|
 | SPEC-01 | [`project-context.md`](project-context.md) | server, client, reviewer-core | implemented | Attaching a repository's markdown documents to agents and skills by hand, the token cost of each, the `## Project context` prompt slot they fill at run time, and what the run trace shows about them. |
-| SPEC-02 | [`onboarding-generator.md`](onboarding-generator.md) | server, client | draft | A five-part guided tour of an unfamiliar repository — architecture, critical paths, how to run locally, a rank-ordered reading path and first tasks — built from the repository index with one structured model call, and degrading to a deterministic skeleton with a named reason. |
+| SPEC-02 | [`onboarding-generator.md`](onboarding-generator.md) | server, client | approved | A five-part guided tour of an unfamiliar repository — architecture, critical paths, how to run locally, a rank-ordered reading path and first tasks — built from the repository index with one structured model call, and degrading to a deterministic skeleton with a named reason. |
 
 ## Why one file instead of one per package
 

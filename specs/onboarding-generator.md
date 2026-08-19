@@ -1,4 +1,4 @@
-# Spec: Onboarding Generator | Spec ID: SPEC-02 | Status: draft
+# Spec: Onboarding Generator | Spec ID: SPEC-02 | Status: approved
 Supersedes: —
 
 A developer who has never seen a repository can open one screen and get a grounded, five-part
@@ -743,3 +743,6 @@ promote a spec to `approved`; it is not the promotion, and no agent may grant it
 section that owns it, `## Non-functional` promoted from proposals to accepted requirements, and
 AC-46 (`Share link`) and AC-47 (`Open`) added for the two decisions that had no criterion.
 `Status` unchanged at `draft`.
+2026-08-19 — approved by the user. `## Open questions` was empty, which is the
+precondition; the promotion itself is the human decision `docs/specs-convention.md`
+reserves for a person.
