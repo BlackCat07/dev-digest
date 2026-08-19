@@ -33,6 +33,9 @@ import { IntentService } from '../modules/intent/service.js';
 import { SmartDiffService } from '../modules/smart-diff/service.js';
 import { BlastService } from '../modules/blast/service.js';
 import { PriorPrsService } from '../modules/prior-prs/service.js';
+import { ProjectContextService } from '../modules/project-context/service.js';
+import { ProjectContextRepository } from '../modules/project-context/repository.js';
+import type { ProjectContext } from '../modules/project-context/types.js';
 import { resolveFeatureModel } from '../modules/settings/feature-models.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
@@ -57,6 +60,11 @@ export interface ContainerOverrides {
   llm?: Partial<Record<'openai' | 'anthropic' | 'openrouter', LLMProvider>>;
   /** repo-intel facade (T1.1+) — tests inject mock RepoIntel implementations. */
   repoIntel?: RepoIntel;
+  /**
+   * Project Context (L05) — tests inject a fake so the review executor can be
+   * exercised without a database or a clone.
+   */
+  projectContext?: ProjectContext;
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
@@ -87,6 +95,7 @@ export class Container {
   private _smartDiff?: SmartDiffService;
   private _blast?: BlastService;
   private _priorPrs?: PriorPrsService;
+  private _projectContext?: ProjectContext;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -196,6 +205,29 @@ export class Container {
    */
   get priorPrs(): PriorPrsService {
     return (this._priorPrs ??= new PriorPrsService(this));
+  }
+
+  /**
+   * Project Context (L05) — the repository's documents, an owner's attachments,
+   * and the effective set one run carries.
+   *
+   * Exposed as the `ProjectContext` INTERFACE rather than the class, the shape
+   * `repoIntel` already has, so `ContainerOverrides.projectContext` can carry a
+   * fake with no database behind it — which is what lets the review executor be
+   * tested hermetically.
+   *
+   * This is also the one place that names the concrete repository: the service
+   * declares two ports (`ProjectContextDeps`) and knows nothing about Drizzle,
+   * so the composition root is what binds the two. `repoDocs` is the confined
+   * reader the intent module already uses — a third consumer of one adapter
+   * rather than a third copy of clone-path confinement.
+   */
+  get projectContext(): ProjectContext {
+    if (this.overrides.projectContext) return this.overrides.projectContext;
+    return (this._projectContext ??= new ProjectContextService({
+      store: new ProjectContextRepository(this.db),
+      repoDocs: this.repoDocs,
+    }));
   }
 
   /**

@@ -1,4 +1,4 @@
-/* SkillEditor — header + tab bar for one skill, and the four tab bodies.
+/* SkillEditor — header + tab bar for one skill, and the five tab bodies.
    Tab state lives in ?tab= so a link into a specific tab survives a reload. */
 "use client";
 
@@ -9,6 +9,7 @@ import { Badge, Icon, Tabs } from "@devdigest/ui";
 import type { SkillWithUsage } from "@devdigest/shared";
 import { SKILL_TYPE_COLOR } from "@/lib/skill";
 import { ConfigTab } from "./_components/ConfigTab";
+import { ContextTab } from "./_components/ContextTab";
 import { PreviewTab } from "./_components/PreviewTab";
 import { StatsTab } from "./_components/StatsTab";
 import { VersionsTab } from "./_components/VersionsTab";
@@ -53,6 +54,7 @@ export function SkillEditor({ skill }: { skill: SkillWithUsage }) {
       <div style={s.body}>
         {tab === "config" && <ConfigTab skill={skill} />}
         {tab === "preview" && <PreviewTab skill={skill} />}
+        {tab === "context" && <ContextTab skill={skill} />}
         {tab === "stats" && <StatsTab skill={skill} />}
         {tab === "versions" && <VersionsTab skill={skill} />}
       </div>

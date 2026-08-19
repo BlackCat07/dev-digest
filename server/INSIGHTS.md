@@ -241,6 +241,19 @@ valuable one — the code does not record what was tried and abandoned.
   (`reverseImpact`, `ownFacts`), `src/modules/blast/service.ts` (`mapLevelImpact`,
   `isTestPath`), `specs/blast-radius.md`.
 
+- **2026-08-19** — **A directory walk that skips every symlink passes an "escaping symlink is
+  not listed" test for the wrong reason, and the test cannot tell the difference.** The
+  confinement re-check never fires, so the assertion is satisfied by the blanket skip rather
+  than by the defence it is supposed to pin — and the defect only surfaces the day a symlink
+  *inside* the clone stops being listed, which no test would then be watching. The escape case
+  alone is therefore not a test of confinement; it needs its **pair**, an in-clone symlink that
+  must still appear. Same shape as any negative-only assertion over a security check: assert
+  what must be refused **and** what must be allowed, or a `return false` at the top of the
+  function is a passing implementation. Evidence:
+  `src/adapters/git/confined-doc.ts` (`collectCandidates`, the `isSymbolicLink` branch, and
+  `resolve`, which is what actually decides), `test/project-context-walk.test.ts`
+  ("omits a symlink that escapes the clone" + "keeps a symlink that stays inside the clone").
+
 ## Codebase Patterns
 
 Conventions and architectural decisions, each with the reason behind it.
@@ -434,6 +447,51 @@ Conventions and architectural decisions, each with the reason behind it.
   `src/modules/reviews/repository/pull.repo.ts` (`countPullCoverage`),
   `src/modules/prior-prs/service.ts` (`statusOf`), `specs/prior-prs.md` (States).
 
+- **2026-08-18** — **A feature can arrive four-fifths pre-wired across three packages with no
+  single name to grep for, and the parts get rebuilt.** Project Context already exists as:
+  `assemblePrompt`'s `specs` slot, which renders `## Project context` and — unlike `skills` —
+  wraps its own contents; `PromptAssembly.specs` and `RunTrace.specs_read` in **both** contract
+  copies; a `// ---- Project Context ----` block in `contracts/platform.ts` defining `SpecFile`
+  and `IndexStatus`; `useContextFiles` / `useReindexContext` already calling
+  `GET /repos/:id/context` and `POST /repos/:id/context/reindex`; `shell.nav.context` plus a
+  whole `client/messages/en/context.json`; and the trace drawer's "Specs read" row and specs
+  `PromptBlock`. Exactly one thing is missing — a server module: nothing named `context` is
+  registered in `modules/index.ts`, so **both client hooks 404 today** and the executor writes
+  `specs_read: []`. The lesson is the search order: before building an L05+ feature, grep the
+  **contracts** and the **message catalogues** for its product name first, not the module tree —
+  the module tree is the one place a pre-wired feature leaves no trace. Evidence:
+  `src/vendor/shared/contracts/platform.ts:265` (`SpecFile`), `src/modules/index.ts`,
+  `src/modules/reviews/run-executor.ts` (`specs_read: []`),
+  `../client/src/lib/hooks/core.ts:123` (`useContextFiles`).
+
+- **2026-08-18** — **The clone is a mirror that is periodically `reset --hard`, which rules out
+  any in-place write feature before it is designed.** `SimpleGitClient.sync` runs
+  `git fetch origin <branch> --depth <RESYNC_FETCH_DEPTH>` and then
+  `git reset --hard origin/<branch>`, justified in its own comment by "safe here because we
+  never commit to or run code from the clone" — and the `GitClient` port carries no write,
+  commit, branch or push method at all (clone, fetchPullHead, sync, currentHead, diff,
+  diffNameOnly, blame, log, readFile, clonePathFor). So a document-authoring UI over the clone
+  would ship a Save button whose work the Resync button beside it deletes silently, with no
+  error and nothing in the log; making an edit durable needs commit + branch + push + author
+  identity + a GitHub write scope + conflict handling on a **shallow** clone, which is a
+  separate feature rather than a tab. Found while specifying Project Context, whose design mock
+  drew `Preview | Edit` + Save + upload over exactly this directory. Evidence:
+  `src/adapters/git/simple-git.ts` (`sync`), `src/vendor/shared/adapters.ts` (`GitClient`).
+
+- **2026-08-19** — **"A listing that opens no files" and "a token figure counted from
+  characters" are contradictory requirements, and the contradiction is invisible until both are
+  written down.** `ConfinedRepoDocReader.list` deliberately reads no bytes — that is what makes
+  listing a large or hostile clone cheap, and it is why it returns `size` from `stat` only. But
+  `approxTokens` is `ceil(characters / 4)` and takes a **string**, and deriving the figure from
+  byte `size` instead is explicitly ruled out (a multi-byte document would over-count, which is
+  what makes the client's and the server's figures disagree). There is no third option: the list
+  path re-reads each document it reports, and the cost is real and accepted. The one exception
+  is a document past the 256 KB read cap, which is estimated from `size` because it is never
+  going to be sent whole anyway. Worth knowing before adding a second "cheap list" endpoint over
+  the same walk. Evidence: `src/modules/project-context/service.ts` (`tokensFor`),
+  `src/adapters/git/confined-doc.ts` (`list`), `src/adapters/tokenizer/index.ts`
+  (`approxTokens`), `../specs/project-context.md` (EC-16).
+
 ## Tool & Library Notes
 
 Dependency and tooling quirks.
@@ -557,6 +615,17 @@ Dependency and tooling quirks.
   exception. Evidence: `package.json` (`dependency-cruiser`), `tsconfig.json` (`paths`),
   `src/adapters/depgraph/index.ts`.
 
+- **2026-08-19** — **`drizzle-kit generate` ALWAYS rewrites `migrations/meta/_journal.json`, so
+  a migration-shape check written as "one new `.sql` and no `M` line" can never pass.** The
+  journal is append-only generated bookkeeping and every generate adds its `{"idx": N, "tag":
+  …}` object, which `git status --short` reports as `M`. A gate or a plan's Done-condition
+  phrased against "no `M` line" therefore fails on a perfectly correct run, and the tempting
+  reading — "something modified an existing migration" — is exactly wrong. The precise
+  formulation is **"no `M` line against a `.sql` file"**; the snapshot and the journal are
+  expected to move. Confirmed against history: commit `b86cdee` shows
+  `meta/_journal.json | 14 +` alongside its two new migrations. Evidence:
+  `src/db/migrations/meta/_journal.json`, `src/db/migrations/0017_safe_hannibal_king.sql`.
+
 ## Recurring Errors & Fixes
 
 An error string, its real cause, and the fix.
@@ -657,6 +726,22 @@ An error string, its real cause, and the fix.
   300-file index finished `done` in 6.4s, well inside `INDEX_SOFT_BUDGET_MS`. Evidence:
   `src/platform/jobs.ts` (`enqueue`), `src/modules/repos/service.ts` (`refresh`),
   `test/jobs.test.ts`.
+
+- **2026-08-19** — **A contract field declared `.nullish()` reads as "nullable" to whoever
+  writes a helper against it, and `expect(x).not.toBeNull()` followed by `x!` looks like it
+  closes the gap while covering only half of it.** `PromptAssembly.specs` is
+  `z.string().nullish()` — `string | null | undefined` — because `getRunTrace` returns
+  `row.trace as RunTrace`, a **cast, not a parse**, so a trace persisted before a field existed
+  arrives with the key *absent*. A test helper typed `(specs: string | null)` and guarding on
+  `=== null` therefore fails to compile at its call sites, and a `!` at a second call site
+  silently accepts the very value the whole thing is about. Narrow with `== null` (loose, covers
+  both) and prefer an explicit `if (x == null) throw` over `!`, so the failure is a readable
+  message rather than a crash inside `.split`. This cost a remediation round because **no gate
+  typechecks `test/`** (see 2026-08-10, Tool & Library Notes): `vitest run` was 559/559 green
+  with two real `error TS` in the file. Related: 2026-08-02, this file, for the cast. Evidence:
+  `test/project-context-run.test.ts` (`specOpenings`, `specBodies`),
+  `src/vendor/shared/contracts/trace.ts` (`PromptAssembly.specs`),
+  `src/modules/reviews/repository/run.repo.ts` (`getRunTrace`).
 
 ## Session Notes
 

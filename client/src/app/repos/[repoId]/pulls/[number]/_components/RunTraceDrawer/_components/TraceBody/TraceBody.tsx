@@ -19,6 +19,12 @@ import { Row, Stat } from "../atoms";
 export function TraceBody({ trace, findings }: { trace: RunTrace; findings: FindingRecord[] }) {
   const t = useTranslations("runs");
   const stats = trace.stats;
+  // A stored trace reaches the client by a CAST, not a Zod parse (`getRunTrace`
+  // does `row.trace as RunTrace` and `GET /runs/:id/trace` declares no response
+  // schema), so whatever sits in the `run_traces.trace` jsonb arrives verbatim:
+  // a trace written before this key existed carries it ABSENT, not null, and
+  // `.length` on it throws. Tolerate `undefined`, exactly like `cost_usd` below.
+  const specsRead = trace.specs_read ?? [];
   return (
     <>
       <TraceSection icon="Settings" title={t("trace.configuration")}>
@@ -38,10 +44,10 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
           </Row>
           <Row label={t("trace.config.specsRead")}>
             <div style={s.specsWrap}>
-              {trace.specs_read.length === 0 ? (
+              {specsRead.length === 0 ? (
                 <span style={s.specsNone}>{t("trace.config.none")}</span>
               ) : (
-                trace.specs_read.map((sp, i) => (
+                specsRead.map((sp, i) => (
                   <span key={i} className="mono" style={s.spec}>
                     {sp}
                   </span>

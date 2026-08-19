@@ -19,6 +19,10 @@
  *  - contracts/prior-prs  PriorPr, PriorPrsCoverage, PrPriorPrs (L04; the history
  *                         half of the Blast Radius card, deliberately its own
  *                         document rather than a field on PrBlastRadius)
+ *  - contracts/project-context ProjectDoc, ProjectDocList, ContextAttachment,
+ *                         ContextAttachmentInput, EffectiveContextDoc (L05; new
+ *                         symbols only — SpecFile, IndexStatus and
+ *                         RunTrace.specs_read are consumed unchanged)
  *  - contracts/trace      RunTrace, RunEvent, RunLogLine (single-document trace)
  *  - contracts/platform   Settings, ConnTestResult, Repo, PrMeta/PrDetail, SpecFile, …
  *  - adapters             adapter interfaces + ModelInfo
@@ -36,6 +40,7 @@ export * from './contracts/conventions.js';
 export * from './contracts/intent.js';
 export * from './contracts/blast.js';
 export * from './contracts/prior-prs.js';
+export * from './contracts/project-context.js';
 export * from './contracts/trace.js';
 export * from './contracts/platform.js';
 export * from './contracts/why.js';

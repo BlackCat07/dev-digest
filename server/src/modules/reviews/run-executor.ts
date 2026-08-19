@@ -64,6 +64,33 @@ type PendingIntent = {
 };
 
 /**
+ * L05 — the project context of one run, as this consumer reads it.
+ *
+ * Declared HERE rather than imported from `modules/project-context/types.ts`,
+ * for the reason `modules/blast/types.ts` states: a types-only import of a
+ * sibling module's internals is still a real `no-cross-module-internals`
+ * violation and `import type` does not exempt it (`server/INSIGHTS.md`,
+ * 2026-08-14, measured 22 → 24 warnings). The real `RunContextResolution`
+ * satisfies this structurally with no `implements`, and the narrower view
+ * documents exactly what the executor depends on: text, the paths that go with
+ * it, what was left out, and a token figure for the log.
+ *
+ * `texts` and `paths` are index-aligned BY CONSTRUCTION on the producing side,
+ * which is what lets `specs_read` be written from `paths` alone and still be a
+ * true statement about the prompt (AC-20).
+ */
+type RunProjectContext = {
+  /** Raw document text in effective order. UNWRAPPED — the engine wraps it. */
+  texts: string[];
+  /** The same documents' paths, in the same order. */
+  paths: string[];
+  /** Every attachment that did not reach the prompt, with the reason (AC-22). */
+  skipped: { path: string; reason: string }[];
+  /** Approximate tokens the kept documents carry, for the run log. */
+  tokens: number;
+};
+
+/**
  * How long a review is willing to WAIT for an intent it does not have yet.
  *
  * The derivation runs CONCURRENTLY with the diff load rather than after it, so
@@ -282,6 +309,12 @@ export class ReviewRunExecutor {
       // module only decides that a run wants them.
       const skills = await this.resolveSkills(agent.id, runLog);
 
+      // L05 — the agent's effective project-context documents, read from the
+      // clone as it currently stands. Best-effort like `resolveSkills` above:
+      // a lookup that fails must not fail the review (AC-21), and degrading to
+      // nothing reproduces the pre-L05 prompt exactly (AC-25).
+      const projectContext = await this.resolveProjectContext(agent.id, repo, pull.repoId, runLog);
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -315,6 +348,17 @@ export class ReviewRunExecutor {
         // the pre-L02 one: assemblePrompt drops the whole "## Skills / rules"
         // section rather than emitting an empty heading.
         ...(skills.bodies.length ? { skills: skills.bodies } : {}),
+        // L05 — the agent's effective project-context documents, passed RAW
+        // and UNWRAPPED. `assemblePrompt` wraps this slot itself
+        // (`parts.specs.map((s, i) => wrapUntrusted(`spec-${i}`, s))`), which
+        // is the mirror image of `skills`: that one the skills service wraps
+        // before handing it over, because only the service knows a body's
+        // source. Wrapping here would DOUBLE-wrap and make the block read to
+        // the model as data about data — a CRITICAL defect no gate in this
+        // repo can see (`DDG-SEC-002`, AC-18, `server/INSIGHTS.md` 2026-08-05).
+        // The omit-when-empty spread matches the `skills` line above it and is
+        // what makes AC-25's byte-identical no-attachment prompt true.
+        ...(projectContext.texts.length ? { specs: projectContext.texts } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -389,7 +433,11 @@ export class ReviewRunExecutor {
         ],
         raw_output: outcome.raw,
         memory_pulled: [],
-        specs_read: [],
+        // AC-20 — one entry per document whose text ACTUALLY reached the
+        // prompt, so `specs_read.length` equals the number of
+        // `<untrusted source="spec-` blocks in `prompt_assembly.specs`. A
+        // skipped document is named in the log instead (AC-22), never here.
+        specs_read: projectContext.paths,
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
@@ -605,6 +653,66 @@ export class ReviewRunExecutor {
       runLog.info(`skills: resolution failed — ${(err as Error).message}`);
       return { bodies: [], used: [] };
     }
+  }
+
+  /**
+   * L05 — the agent's effective project-context documents for this run, and the
+   * clone commit they were read at.
+   *
+   * Best-effort exactly like `resolveSkills` above and its repo-intel siblings:
+   * anything short of a usable resolution emits ONE `runLog.info` and returns
+   * nothing. It must NEVER reach `failAll` — a review without project context is
+   * a worse review, not a broken one (AC-21) — and returning nothing reproduces
+   * the pre-L05 prompt byte for byte, because the caller's spread then omits the
+   * slot entirely (AC-25).
+   *
+   * Everything logged here is a PATH, a REASON, a count and a commit sha. No
+   * document text: `RunLogger.event` forwards its payload verbatim into pino and
+   * this server configures no `redact`, so what is passed here is what lands in
+   * the log.
+   */
+  private async resolveProjectContext(
+    agentId: string,
+    repo: typeof schema.repos.$inferSelect,
+    repoId: string,
+    runLog: RunLogger,
+  ): Promise<RunProjectContext> {
+    let resolved: RunProjectContext;
+    try {
+      resolved = await this.container.projectContext.resolveForRun(agentId, repoId);
+    } catch (err) {
+      runLog.info(`project context: resolution failed — ${(err as Error).message}`);
+      return { texts: [], paths: [], skipped: [], tokens: 0 };
+    }
+
+    // AC-22 / AC-23 — one line per skipped document, naming its path and the
+    // reason (missing, unreadable, refused by confinement, over the size cap,
+    // over the token budget, or attached to another repository, named). Paired
+    // with `specs_read` above, the two together say exactly what the model did
+    // and did not see, so a document absent from a review is never
+    // indistinguishable from one that was never attached.
+    for (const skip of resolved.skipped) {
+      runLog.info(`project context: skipped ${skip.path} — ${skip.reason}`);
+    }
+
+    if (resolved.texts.length > 0) {
+      // AC-17 / EC-7 — the documents are read at whatever the clone currently
+      // holds, which may not be the pull request's head, so the log names the
+      // commit that was. Best-effort within the best effort: a git failure
+      // costs the line, never the documents.
+      let head: string | undefined;
+      try {
+        head = await this.container.git.currentHead({ owner: repo.owner, name: repo.name });
+      } catch (err) {
+        runLog.info(`project context: clone commit unavailable — ${(err as Error).message}`);
+      }
+      runLog.info(
+        `project context: ${resolved.texts.length} document(s), ~${resolved.tokens} token(s) attached to the prompt` +
+          (head ? ` (clone at ${head})` : ''),
+      );
+    }
+
+    return resolved;
   }
 
   private async buildRepoMapDigest(

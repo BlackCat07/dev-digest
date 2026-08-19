@@ -88,6 +88,27 @@ Approaches and solutions that worked and should be reused.
   `../learning-platform/frontend/src/test/tokens.test.ts` (the sibling implementation),
   `.claude/skills/product-ui-language/references/tokens.md`.
 
+- **2026-08-19** — **A `vi.mock` factory can read a MUTABLE module-level variable, which is what
+  lets one test file cover several vintages of a persisted record.** `RunTraceDrawer.test.tsx`
+  mocked `useRunTrace` with a single frozen `const TRACE`, so a second trace shape was
+  untestable in that file — and the shapes matter here, because a trace is read back by a cast
+  rather than a parse, so an old one arrives with keys **absent**. Declaring `let current = …`
+  and having the factory return `current`, then resetting it in `afterEach`, covers the current
+  shape, a populated one and a key-deleted legacy one in the same file. It works because the
+  factory returns closures evaluated at render time, after the module body has run — the usual
+  "cannot reference a variable in `vi.mock`" hoisting complaint applies to the *factory's own*
+  initialisation, not to a value it reads later. Evidence:
+  `_components/RunTraceDrawer/RunTraceDrawer.test.tsx` (`current`, `LEGACY_TRACE`).
+
+- **2026-08-19** — **`AppShell` mounts cleanly in jsdom with only `vi.mock("next/navigation")`,
+  a `QueryClient` and the `shell` namespace** — `useTheme` and `useActiveRepo` both have working
+  default contexts and `next/link` needs no router provider. That is worth knowing because it
+  makes "the rest of the screen is still usable" assertable against the **real** sidebar and
+  breadcrumb instead of a faked shell: an inline-error state can be checked for the thing it
+  actually promises, that navigation still works, rather than only for the error text. No
+  existing `*View` test did this before. Evidence:
+  `src/app/repos/[repoId]/context/_components/ContextView/ContextView.test.tsx` (`tree`).
+
 ## What Doesn't Work
 
 Dead ends and antipatterns, and why they fail. The most-skipped section and the most
@@ -361,6 +382,19 @@ Conventions and architectural decisions, each with the reason behind it.
   half only). Evidence: `_components/ConventionCard/ConventionCard.tsx`,
   `ConventionCard.test.tsx`.
 
+- **2026-08-19** — **The two editors reach their tab bodies differently, and copying a test from
+  one to the other does not work.** `AgentEditor` takes `tab` / `onTab` as **props**, while
+  `SkillEditor` reads `?tab=` itself through `useSearchParams` — so a test that exercises a panel
+  switch in the skill editor has to mock `next/navigation` with a **mutable** `URLSearchParams`,
+  where the agent editor's equivalent just passes a prop. Second trap in the same file: do not
+  let a `SkillEditor` test land on the default `config` tab, because `ConfigTab` calls
+  `useToast()`, which **throws** outside `<ToastProvider>` — mount on `?tab=preview` (or whichever
+  tab is under test) instead. Third, minor but it wastes a run: query the tab strip by role,
+  because `skills.previewTab.title` is also the word "Preview" and a text query matches two
+  nodes. Evidence: `src/app/skills/_components/SkillEditor/SkillEditor.tsx`,
+  `src/lib/toast.tsx` (`useToast`),
+  `src/app/skills/_components/SkillEditor/_components/ContextTab/ContextTab.test.tsx`.
+
 ## Tool & Library Notes
 
 Dependency and tooling quirks.
@@ -380,6 +414,20 @@ Dependency and tooling quirks.
   `SeverityFilter.test.tsx` already uses for `[aria-disabled]`. Evidence:
   `package.json` (devDependencies), `src/lib/hooks/intent.test.tsx`,
   `src/vendor/ui/primitives/Skeleton.tsx`.
+
+- **2026-08-19** — **jsdom dispatches no `click` for Enter on a focused native `<button>`, so
+  with `fireEvent` and no `user-event` a keyboard-operability requirement cannot be asserted the
+  way it reads.** The browser synthesizes that click; jsdom does not, and `user-event` — which
+  models it — is not a dependency here (2026-08-10, this section). Two shapes work, and the
+  choice says something about the design. For a control whose activation is *native*, assert the
+  load-bearing half directly — that it is a real, tab-reachable element with an accessible name
+  (`el.focus(); expect(el).toHaveFocus()`), not a `div` with an `onClick` — and then dispatch the
+  activation separately, disclosing the split in the test. For behaviour with **no** native
+  keyboard equivalent (a reorder, a custom navigation), put it on an explicit `onKeyDown` and the
+  test drives a genuine `keyDown` with no click at all. Prefer the second where you can: it is
+  both more assertable and the accessible design. Evidence:
+  `src/app/agents/[id]/_components/AgentEditor/_components/ContextTab/ContextTab.test.tsx`
+  ("attaches a document and moves it one position up without a pointer").
 
 ## Recurring Errors & Fixes
 

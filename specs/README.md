@@ -16,7 +16,7 @@ Format, naming, `Spec ID`, the `Status` lifecycle and the required sections:
 
 | Spec ID | Spec | Packages | Status | Covers |
 |---|---|---|---|---|
-| — | _none yet_ | | | |
+| SPEC-01 | [`project-context.md`](project-context.md) | server, client, reviewer-core | implemented | Attaching a repository's markdown documents to agents and skills by hand, the token cost of each, the `## Project context` prompt slot they fill at run time, and what the run trace shows about them. |
 
 ## Why one file instead of one per package
 
