@@ -10,14 +10,20 @@
    Teaching the primitive headings is the wrong fix and not ours to make:
    `vendor/ui` is extend-by-new-file, and a rationale containing `##` would
    suddenly grow a heading in every findings panel (`INSIGHTS.md`, What Doesn't
-   Work, 2026-08-05). So this feature ships its own renderer.
+   Work, 2026-08-05). So the app ships its own renderer, and this is it.
 
-   It is a near-sibling of `app/skills/_components/SkillBody`, which made the
-   same call for a skill body. They are NOT shared: sibling route subtrees do
-   not import each other, and this one additionally has to render tables — a
-   spec's acceptance-criteria matrix is routinely one — which a skill body has
-   never needed. If a third consumer appears, the promotion target is
-   `src/components/`, not either feature. */
+   It lives in `src/components/` — cross-cutting chrome, not a feature unit —
+   because it now has two consumers in different route subtrees: Project
+   Context's `DocPreview`, which renders a repository document, and the
+   Onboarding Tour's section bodies. Sibling route subtrees never import each
+   other, so the shallowest folder both can reach is the only home that avoids
+   a second copy; the previous version of this comment named that promotion as
+   the rule to follow when a third consumer appeared, and this move is it.
+
+   It remains a near-sibling of `app/skills/_components/SkillBody`, which made
+   the same call for a skill body. They are still NOT shared: that one has
+   never needed tables — a spec's acceptance-criteria matrix is routinely one —
+   and folding it in here is a separate decision nobody has taken. */
 "use client";
 
 import React from "react";

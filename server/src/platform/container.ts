@@ -36,6 +36,8 @@ import { PriorPrsService } from '../modules/prior-prs/service.js';
 import { ProjectContextService } from '../modules/project-context/service.js';
 import { ProjectContextRepository } from '../modules/project-context/repository.js';
 import type { ProjectContext } from '../modules/project-context/types.js';
+import { OnboardingService, type OnboardingTours } from '../modules/onboarding/service.js';
+import { OnboardingRepository } from '../modules/onboarding/repository.js';
 import { resolveFeatureModel } from '../modules/settings/feature-models.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
@@ -65,6 +67,12 @@ export interface ContainerOverrides {
    * exercised without a database or a clone.
    */
   projectContext?: ProjectContext;
+  /**
+   * Onboarding Tour (L05) — tests inject a fake service, or construct the real
+   * one over fake ports, so a generation can be exercised with no Postgres, no
+   * clone and no provider.
+   */
+  onboarding?: OnboardingTours;
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
@@ -96,6 +104,7 @@ export class Container {
   private _blast?: BlastService;
   private _priorPrs?: PriorPrsService;
   private _projectContext?: ProjectContext;
+  private _onboarding?: OnboardingTours;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -227,6 +236,36 @@ export class Container {
     return (this._projectContext ??= new ProjectContextService({
       store: new ProjectContextRepository(this.db),
       repoDocs: this.repoDocs,
+    }));
+  }
+
+  /**
+   * Onboarding Tour (L05) — the repository's five-part tour, and the one
+   * structured call that writes it.
+   *
+   * The one place that names the concrete repository, as it is for
+   * `projectContext`: `OnboardingDeps` declares seven ports and knows nothing
+   * about Drizzle, so the composition root is what binds them. Two of them are
+   * worth reading as wiring rather than as plumbing — `featureModel` is the
+   * arrow property below, which is what lets the module resolve the workspace's
+   * model choice while importing nothing from `modules/settings/`; and
+   * `repoDocs` is the confined reader the intent and project-context modules
+   * already use, a fourth consumer of one adapter rather than a fourth copy of
+   * clone-path confinement.
+   *
+   * Exposed as the `OnboardingTours` INTERFACE so `ContainerOverrides.onboarding`
+   * can carry a fake with no database behind it.
+   */
+  get onboarding(): OnboardingTours {
+    if (this.overrides.onboarding) return this.overrides.onboarding;
+    return (this._onboarding ??= new OnboardingService({
+      store: new OnboardingRepository(this.db),
+      index: this.repoIntel,
+      repoDocs: this.repoDocs,
+      featureModel: this.featureModel,
+      llm: (id) => this.llm(id),
+      jobs: this.jobs,
+      tokenizer: this.tokenizer,
     }));
   }
 

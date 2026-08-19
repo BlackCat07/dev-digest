@@ -22,11 +22,20 @@ export function isTextInput(el: EventTarget | null): boolean {
   );
 }
 
+/**
+ * Repo-scoped Onboarding Tour route. Deliberately anchored rather than a
+ * `includes("/onboarding")` test: `/onboarding` is the ADD-A-REPOSITORY screen
+ * (`src/app/onboarding/page.tsx`), which is not a WORKSPACE screen and must not
+ * light up the sidebar's Onboarding Tour entry. `/onboarding` falls through the
+ * ladder to `""` — no entry active — which is correct for it.
+ */
+const ONBOARDING_TOUR_ROUTE = /^\/repos\/[^/]+\/onboarding/;
+
 /** Derive the active sidebar key from the current pathname. */
 export function activeKeyFor(pathname: string): string {
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.includes("/multi-agent")) return "multi-agent";
-  if (pathname.includes("/onboarding")) return "onboarding-tour";
+  if (ONBOARDING_TOUR_ROUTE.test(pathname)) return "onboarding-tour";
   if (pathname.includes("/context")) return "context";
   if (pathname.includes("/conventions")) return "conventions";
   if (pathname.includes("/pulls")) return "pulls";

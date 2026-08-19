@@ -17,7 +17,7 @@ import { EmptyState, ErrorState, Skeleton } from "@devdigest/ui";
 import type { ProjectDoc } from "@devdigest/shared";
 import { useProjectDoc } from "@/lib/hooks/project-context";
 import { formatAge } from "@/lib/format";
-import { DocumentMarkdown } from "../DocumentMarkdown";
+import { DocumentMarkdown } from "@/components/document-markdown";
 import { s } from "./styles";
 
 export function DocPreview({

@@ -41,8 +41,15 @@ import type { GitClient, RepoRef } from '@devdigest/shared';
  *
  * Everything the walk is bounded by — which roots to search, which directory
  * names to skip, how many directory entries to visit, how many documents to
- * return — arrives as a PARAMETER. `src/adapters/**` must import nothing from
- * `src/modules/**` (`adapters-are-leaves`), so the caller owns those values.
+ * return, and WHICH FILENAMES COUNT — arrives as a PARAMETER.
+ * `src/adapters/**` must import nothing from `src/modules/**`
+ * (`adapters-are-leaves`), so the caller owns those values. That is why the
+ * candidate rule is an optional `match` predicate rather than a list of
+ * feature-specific filenames baked in here: onboarding needs `package.json`,
+ * `Makefile` and `docker-compose*.yml`, Project Context needs `*.md`, and
+ * neither vocabulary belongs to this ring. A predicate cannot widen
+ * confinement — it only proposes candidates, and every candidate still goes
+ * through `resolve` before it is reported.
  */
 
 /** Either the document's text, or the reason it was refused — never a throw. */
@@ -81,6 +88,19 @@ export interface RepoDocWalkOptions {
   maxEntries: number;
   /** Maximum number of documents returned; `total` still reports the pre-cap count. */
   limit: number;
+  /**
+   * Which files count, replacing the default `*.md`-under-a-root rule entirely.
+   *
+   * `name` is the entry's basename, `rel` its repo-relative, forward-slash path.
+   * Omit it and the default rule applies verbatim, so every existing caller —
+   * `modules/project-context` — is behaviour-identical.
+   *
+   * The predicate does NOT need the excluded-directory set: the walk prunes
+   * those before a candidate is ever offered to it. Nor does it decide safety:
+   * `resolve` still refuses an escaping symlink, so a permissive predicate
+   * widens what is LISTED, never what is reachable.
+   */
+  match?: (name: string, rel: string) => boolean;
 }
 
 /**
@@ -136,11 +156,13 @@ export class ConfinedRepoDocReader {
   /**
    * List the documents in `repo`'s clone, or explain why there are none.
    *
-   * Two match rules, and the second is load-bearing rather than a convenience:
-   * any `*.md` under one of `options.roots`, PLUS any file named `INSIGHTS.md`
-   * anywhere outside the excluded directories. This repository keeps no
-   * `insights/` directory — its insights live as an `INSIGHTS.md` at each
-   * package root — so a roots-only walk would find none of them.
+   * Two match rules by default, and the second is load-bearing rather than a
+   * convenience: any `*.md` under one of `options.roots`, PLUS any file named
+   * `INSIGHTS.md` anywhere outside the excluded directories. This repository
+   * keeps no `insights/` directory — its insights live as an `INSIGHTS.md` at
+   * each package root — so a roots-only walk would find none of them. A caller
+   * that supplies `options.match` replaces both rules with its own; a caller
+   * that does not gets exactly the behaviour above.
    *
    * Every candidate goes through `resolve` before it is reported, so a `*.md`
    * whose real path leaves the clone is omitted and no byte of it is read. The
@@ -160,6 +182,7 @@ export class ConfinedRepoDocReader {
     await collectCandidates(realRoot, realRoot, {
       roots: normalizeRoots(options.roots),
       excluded: new Set(options.excludedDirs),
+      match: options.match,
       budget,
       out: candidates,
     });
@@ -252,6 +275,8 @@ type NormalizedRoots = string[] | null;
 interface CollectArgs {
   roots: NormalizedRoots;
   excluded: ReadonlySet<string>;
+  /** Caller-supplied candidate rule; `undefined` means the default one. */
+  match?: (name: string, rel: string) => boolean;
   budget: EntryBudget;
   out: string[];
 }
@@ -301,7 +326,21 @@ function isUnderRoot(rel: string, roots: NormalizedRoots): boolean {
   return roots.some((root) => rel.startsWith(`${root}/`) || rel.includes(`/${root}/`));
 }
 
-function isCandidate(name: string, rel: string, roots: NormalizedRoots): boolean {
+/**
+ * The default rule is unchanged and applies whenever no `match` is supplied, so
+ * a caller that passes none walks exactly the tree it walked before. A supplied
+ * predicate replaces the rule outright — including `ALWAYS_MATCHED_FILENAME`,
+ * which stays a constant of the default rule rather than becoming an option,
+ * because it exists for Project Context's any-depth `INSIGHTS.md` and means
+ * nothing to a caller looking for `package.json`.
+ */
+function isCandidate(
+  name: string,
+  rel: string,
+  roots: NormalizedRoots,
+  match?: (name: string, rel: string) => boolean,
+): boolean {
+  if (match) return match(name, rel);
   if (name === ALWAYS_MATCHED_FILENAME) return true;
   return path.extname(name).toLowerCase() === '.md' && isUnderRoot(rel, roots);
 }
@@ -316,7 +355,7 @@ function isCandidate(name: string, rel: string, roots: NormalizedRoots): boolean
  * budget is spent, recording that it did so.
  */
 async function collectCandidates(realRoot: string, dir: string, args: CollectArgs): Promise<void> {
-  const { roots, excluded, budget, out } = args;
+  const { roots, excluded, match, budget, out } = args;
   if (budget.left <= 0) {
     budget.exhausted = true;
     return;
@@ -346,7 +385,7 @@ async function collectCandidates(realRoot: string, dir: string, args: CollectArg
     if (!entry.isFile() && !entry.isSymbolicLink()) continue;
 
     const rel = path.relative(realRoot, full).split(path.sep).join('/');
-    if (!isCandidate(entry.name, rel, roots)) continue;
+    if (!isCandidate(entry.name, rel, roots, match)) continue;
     out.push(rel);
   }
 }

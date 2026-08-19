@@ -127,6 +127,13 @@
       "when": 1787135968351,
       "tag": "0017_safe_hannibal_king",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787159421922,
+      "tag": "0018_wide_morbius",
+      "breakpoints": true
     }
   ]
 }
