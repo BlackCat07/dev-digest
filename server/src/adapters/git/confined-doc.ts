@@ -280,9 +280,25 @@ function normalizeRoots(roots: readonly string[]): NormalizedRoots {
   return out;
 }
 
+/**
+ * A root matches at ANY depth, not only at the top of the tree.
+ *
+ * `specs/` therefore selects `specs/a.md` and `server/specs/a.md` alike. That is
+ * the originating requirement's any-depth glob over `specs`, `docs` and
+ * `insights`, and the
+ * prefix-only reading it replaced (2026-08-19) was measurably wrong here: this
+ * repository requires every package to keep its own `specs/` and `docs/`, so the
+ * old rule missed eight of the twenty-five documents on the very repository the
+ * feature is demonstrated against.
+ *
+ * Both arms are anchored on `/` so a root is matched as a whole path SEGMENT:
+ * without that, root `specs` would also select `myspecs/a.md`. Excluded
+ * directories are pruned by the walk before this is ever reached, so
+ * `node_modules/p/docs/x.md` cannot arrive here to match `docs`.
+ */
 function isUnderRoot(rel: string, roots: NormalizedRoots): boolean {
   if (roots === null) return true;
-  return roots.some((root) => rel.startsWith(`${root}/`));
+  return roots.some((root) => rel.startsWith(`${root}/`) || rel.includes(`/${root}/`));
 }
 
 function isCandidate(name: string, rel: string, roots: NormalizedRoots): boolean {

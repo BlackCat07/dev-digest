@@ -469,7 +469,17 @@ export function classifyDoc(
 ): { root: string; doc_type: ProjectDocType } {
   for (const root of roots) {
     const normalized = normalizeRoot(root);
-    if (normalized === '' || docPath.startsWith(`${normalized}/`)) {
+    // Matched as a path SEGMENT at any depth, exactly as the walk matches it
+    // (`isUnderRoot` in `adapters/git/confined-doc.ts`) — the two rules have to
+    // agree or a document the walk listed would report a root it was not found
+    // under. So `server/specs/README.md` groups under `specs/` beside
+    // `specs/public-api.md`, which is what makes the grouping a statement about
+    // KIND rather than about which package happened to own the file.
+    if (
+      normalized === '' ||
+      docPath.startsWith(`${normalized}/`) ||
+      docPath.includes(`/${normalized}/`)
+    ) {
       return { root, doc_type: docTypeForRootName(normalized) };
     }
   }

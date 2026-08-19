@@ -146,12 +146,25 @@ request, and check that the reviewer's finding cites that document.
   **shall** answer one entry per `*.md` file found by a recursive walk of the configured
   search roots inside that repository's clone, **plus** one entry per file named
   `INSIGHTS.md` found anywhere in that clone outside the excluded directories.
+  A search root is matched as a whole path **segment at any depth**, so `specs/` selects
+  `specs/a.md` and `server/specs/a.md` alike.
   `Verify: test` — *observable: for a clone holding `specs/a.md`, `docs/sub/b.md`,
-  `src/c.md` and `pkg/INSIGHTS.md`, the response holds the first two and the last, and not
+  `server/specs/README.md`, `client/docs/deep/note.md`, `myspecs/no.md`, `src/c.md` and
+  `pkg/INSIGHTS.md`, the response holds the first four and the last, and neither
+  `myspecs/no.md` — a directory that merely contains a root's name is not that root — nor
   `src/c.md`. The filename rule is load-bearing rather than a convenience: this repository has
   **no `insights/` directory anywhere**, keeping its insights as an `INSIGHTS.md` at each
   package root, so without it the third default root of AC-2 matches nothing at all here
   (EC-1).*
+  *Amended 2026-08-19 — the criterion previously matched a root only as a **top-level
+  prefix**, and its observable had no case for a nested one, so neither the tests nor
+  `plan-verifier` could see the gap. Measured on this repository, which requires every package
+  to keep its own `specs/` and `docs/`: 17 documents were returned where 25 exist, and the
+  eight missing were every per-package `specs/README.md` and `docs/README.md` — precisely the
+  class of document the feature exists to attach. The originating requirement had said
+  `**/{specs,docs,insights}/**/*.md`; the narrowing was the spec's, not the requirement's.
+  Fixed in `isUnderRoot` (the walk) and `classifyDoc` (the grouping), which must agree or a
+  listed document would report a root it was not found under.*
 - **AC-2** — WHERE the workspace has configured no search roots, the system **shall** use
   `specs/`, `docs/` and `insights/`, and **shall** report the roots it searched.
   `Verify: test` — *observable: the response's `roots` field equals those three for a
@@ -935,3 +948,17 @@ behaviour (AC-29's "the list does not shift when data lands") are unverified.
   prohibition (AC-35) still holds — the design's `Preview | Edit` toggle, its
   `+ / folder / upload / refresh` row and its COVERAGE ring remain non-goals and do not
   ship — and the client suite stayed at 353 passing throughout.
+- 2026-08-19 — **AC-1 amended: a search root now matches at any depth**, by the user's
+  decision after the feature was run against a real repository. The criterion had matched a
+  root only as a top-level prefix and its observable carried no nested case, so the
+  implementation was correct against the spec and neither the tests nor `plan-verifier` could
+  see the gap — the divergence was between AC-1 and the originating requirement's
+  `**/{specs,docs,insights}/**/*.md`. Measured before and after on this repository:
+  **17 documents → 25**, the eight recovered being every per-package `specs/README.md` and
+  `docs/README.md`. Two functions changed and they have to agree: `isUnderRoot` in
+  `adapters/git/confined-doc.ts` (what the walk lists) and `classifyDoc` in the module's
+  service (which root a listed document reports), both matching a root as a whole path
+  segment anchored on `/` at both ends — so `myspecs/` is still not `specs/`. Four tests were
+  added, and the walk case was checked by mutation: reverting to the prefix rule fails it and
+  nothing else. Grouping now reads as a statement about the KIND of document rather than
+  about which package happened to own it.

@@ -254,6 +254,28 @@ valuable one — the code does not record what was tried and abandoned.
   `resolve`, which is what actually decides), `test/project-context-walk.test.ts`
   ("omits a symlink that escapes the clone" + "keeps a symlink that stays inside the clone").
 
+- **2026-08-19** — **An acceptance criterion whose *observable* omits a case makes that case
+  invisible to every downstream check, and the implementation will be correct against the
+  spec while being wrong against the requirement.** Project Context's AC-1 said "a recursive
+  walk of the configured search roots" and illustrated it with `specs/a.md`, `docs/sub/b.md`,
+  `src/c.md`, `pkg/INSIGHTS.md` — no case for a root nested under a package. So the walk was
+  built to match a root as a **top-level prefix**, the tests were written from the observable
+  and passed, and `plan-verifier` correctly returned `yes`. Measured on this repository, whose
+  own `CLAUDE.md` requires every package to keep its own `specs/` and `docs/`: **17 documents
+  returned where 25 exist**, the eight missing being every per-package `specs/README.md` and
+  `docs/README.md` — the exact class the feature exists to attach. The originating requirement
+  had said `**/{specs,docs,insights}/**/*.md`; the narrowing happened in the spec and nothing
+  downstream could question it, because a spec's examples become the tests. Two things to
+  carry: when a criterion enumerates examples, ask which case is **absent** rather than
+  whether the listed ones pass; and a rule about paths needs a case at depth, because
+  top-level and nested are different code paths in every implementation of it. The fix has to
+  land in **both** the walk (`isUnderRoot`) and the grouping (`classifyDoc`) or a listed
+  document reports a root it was not found under. Evidence:
+  `src/adapters/git/confined-doc.ts` (`isUnderRoot`),
+  `src/modules/project-context/service.ts` (`classifyDoc`),
+  `test/project-context-walk.test.ts` ("matches a root at any depth"),
+  `../specs/project-context.md` (AC-1, amended).
+
 ## Codebase Patterns
 
 Conventions and architectural decisions, each with the reason behind it.
@@ -742,6 +764,24 @@ An error string, its real cause, and the fix.
   `test/project-context-run.test.ts` (`specOpenings`, `specBodies`),
   `src/vendor/shared/contracts/trace.ts` (`PromptAssembly.specs`),
   `src/modules/reviews/repository/run.repo.ts` (`getRunTrace`).
+
+- **2026-08-19** — **A feature can pass every gate, every reviewer and a 559-test suite and
+  still 500 on its first real request, because nothing in the pipeline applies the migration
+  it ships.** `CLAUDE.md` already says migrations never run on boot; what it does not say is
+  that **no hermetic test can tell "schema shipped" from "schema applied"** — services take
+  their repository through `ContainerOverrides`, so the suite proves the call shape against a
+  fake and never touches Postgres. Project Context shipped `0017_*.sql`, `DDG-WIRE-003` was
+  satisfied, `/pr-self-review` recorded a clean verdict, and the screen answered
+  `500 internal_error` the moment it was opened. **Read the status code first: `404` means the
+  module is not registered in `modules/index.ts`; `500` on a route that exists, right after a
+  feature that adds a table, means the migration was never applied.** Confirm in one query —
+  `select table_name from information_schema.tables where table_name in (…)` — rather than by
+  reading code, then `./node_modules/.bin/tsx src/db/migrate.ts`. Neither the implementation
+  plan nor `/run-plan` has a step for this, and a task is normally told **not** to migrate
+  (applying one is not the task's job), so the gap is structural rather than anybody's
+  oversight. Evidence: `src/db/migrations/0017_safe_hannibal_king.sql`,
+  `src/db/migrate.ts`, `src/modules/project-context/repository.ts` (`countAgentsByPath`, the
+  query that failed).
 
 ## Session Notes
 

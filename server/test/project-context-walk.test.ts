@@ -89,6 +89,34 @@ describe('ConfinedRepoDocReader.list', () => {
     expect(result.entryBudgetExhausted).toBe(false);
   });
 
+  it('matches a root at any depth, not only at the top of the tree', async () => {
+    // AC-1, amended 2026-08-19. The originating requirement is
+    // an any-depth glob over specs, docs and insights, and the prefix-only reading it
+    // replaced was measurably wrong: on this repository, which requires every
+    // package to keep its own specs/ and docs/, it returned 17 of 25 documents.
+    await writeFileAt(root, 'specs/top.md', '# top');
+    await writeFileAt(root, 'server/specs/README.md', '# server spec');
+    await writeFileAt(root, 'client/docs/deep/note.md', '# client doc');
+    // Anchored on `/` at BOTH ends, so a directory that merely contains a root's
+    // name is not a root. Without these two the widened rule would quietly match
+    // far more than it was asked to.
+    await writeFileAt(root, 'myspecs/no.md', '# no');
+    await writeFileAt(root, 'a/specsuite/no.md', '# no');
+    // And pruning still beats the widened match: an excluded directory is never
+    // descended into, so its nested `docs/` cannot be reached to match at all.
+    await writeFileAt(root, 'node_modules/p/docs/x.md', '# no');
+
+    const result = await reader.list(REPO, optionsFor());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.docs.map((d) => d.path)).toEqual([
+      'client/docs/deep/note.md',
+      'server/specs/README.md',
+      'specs/top.md',
+    ]);
+  });
+
   it('descends into no excluded directory, whatever its depth', async () => {
     // AC-7 / EC-2. Each excluded name is planted BOTH at the clone root and
     // nested under a search root, because the rule is on the directory name and

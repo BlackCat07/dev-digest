@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ProjectContextService,
   applyTokenBudget,
+  classifyDoc,
   mergeEffectiveAttachments,
 } from '../src/modules/project-context/service.js';
 import type {
@@ -130,6 +131,43 @@ describe('mergeEffectiveAttachments — AC-19', () => {
     // contradict its own `specs_read` entry.
     expect(merged.effective.map((d) => d.path)).toEqual(['specs/x.md']);
     expect(merged.foreign).toEqual([]);
+  });
+});
+
+describe('classifyDoc — AC-1 (amended 2026-08-19), AC-33', () => {
+  const ROOTS = ['specs/', 'docs/', 'insights/'];
+
+  it('groups a per-package document under the root it was found in, not its package', () => {
+    // The walk matches a root at any depth; this has to agree with it, or a
+    // document the walk listed would report a root it was not found under.
+    expect(classifyDoc('specs/public-api.md', ROOTS)).toEqual({
+      root: 'specs/',
+      doc_type: 'spec',
+    });
+    expect(classifyDoc('server/specs/README.md', ROOTS)).toEqual({
+      root: 'specs/',
+      doc_type: 'spec',
+    });
+    expect(classifyDoc('client/docs/deep/note.md', ROOTS)).toEqual({
+      root: 'docs/',
+      doc_type: 'doc',
+    });
+  });
+
+  it('does not treat a directory that merely contains a root name as that root', () => {
+    // `myspecs/` is not `specs/`. Falling through to the filename rule is the
+    // correct outcome, not a match on the nearest-looking root.
+    expect(classifyDoc('myspecs/a.md', ROOTS).root).not.toBe('specs/');
+    expect(classifyDoc('a/specsuite/b.md', ROOTS).root).not.toBe('specs/');
+  });
+
+  it('reports an INSIGHTS.md outside every root as its own group', () => {
+    // EC-1: this repository keeps insights at each package root rather than in
+    // an `insights/` directory, so this is the normal case here.
+    expect(classifyDoc('server/INSIGHTS.md', ROOTS)).toEqual({
+      root: 'INSIGHTS.md',
+      doc_type: 'insight',
+    });
   });
 });
 
