@@ -1,4 +1,4 @@
-# Spec: PR Brief (Why + Risk) | Spec ID: SPEC-03 | Status: draft
+# Spec: PR Brief (Why + Risk) | Spec ID: SPEC-03 | Status: approved
 Supersedes: —
 
 A reviewer opening a pull request can read, in one card above the diff, what the change does
