@@ -141,6 +141,21 @@ the `## Waves` list. There is no schema and no parser. Two consequences:
   read as three paths when it meant four schedules an implementer to edit a file
   another one owns, and nothing downstream catches it. Ask.
 
+**Settle the questions before you dispatch. You are the only one who can ask.**
+No agent in `.claude/agents/` can reach a human — the harness refuses
+`AskUserQuestion` inside a subagent (measured 2026-08-18) — so every question an
+implementer, verifier or reviewer would have asked becomes a **default it invented
+and recorded quietly**, if it records it at all. You hold the tool. Before Phase 1:
+
+- Re-read the plan's `## Open questions & recommendations` and `## Assumptions`, and
+  `rg -n 'assumed default — confirm|NEEDS CLARIFICATION|BLOCKING' <plan> <spec>`.
+- Ask, in one round, anything whose answer changes **a contract, a threshold, or the
+  shape of the deliverable**. One round costs seconds; the same gap discovered
+  inside a dispatch costs that dispatch — reckon 70–90k tokens and half an hour per
+  implementer, per the budget below.
+- Anything that does not meet that bar is not worth a round trip: let the agent take
+  the plan's stated default, and note it in the run report.
+
 Then print the run plan — waves, dispatch count, and the budget below — and write
 `run.md`. On `--dry-run`, stop here.
 

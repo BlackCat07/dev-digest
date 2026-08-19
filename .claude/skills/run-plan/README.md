@@ -121,7 +121,12 @@ Adopted from them: a configurable fix limit, the *no progress* exit condition,
 The first run should be `--dry-run` on a real plan (it validates, prints the waves
 and the budget, and dispatches nothing), then a single-wave plan, then a real one.
 
-Two things it cannot check about itself: whether `AskUserQuestion` from the parent
-reaches a human in the way the gates assume, and whether a `sonnet`
-`architecture-reviewer` holds its precision bar on a real diff. Both want an eval
-before they want more prose.
+One thing it cannot check about itself: whether a `sonnet`
+`architecture-reviewer` holds its precision bar on a real diff. That wants an eval
+before it wants more prose.
+
+The other used to be whether `AskUserQuestion` from the parent reaches a human.
+Half of that is now settled: it does **not** work from inside a subagent (measured
+2026-08-18, `docs/retro/2026-08-18-project-context-spec.md`), which is why Phase 0
+makes the parent settle every contract- or threshold-shaping question **before** it
+dispatches. The parent's own `AskUserQuestion` runs in the main loop and works.

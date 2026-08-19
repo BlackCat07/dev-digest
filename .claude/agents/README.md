@@ -23,7 +23,7 @@ themselves live in the agent files. Read the agent file before changing an agent
 | [architecture-reviewer](architecture-reviewer.md) | `opus` | Read, Grep, Glob, Bash | no | Checks architectural boundaries and returns findings with `path:line`, quoted code and the rule violated. Emits **no** merge verdict |
 | [plan-verifier](plan-verifier.md) | `opus` | Read, Grep, Glob, Bash | no | Checks each `R<n>` and each Done-condition one at a time against the finished diff, with a verdict, a verification method and evidence per item |
 | [doc-writer](doc-writer.md) | `sonnet` | Read, Grep, Glob, Bash, Write, Edit | **yes — doc paths only** | Turns a plan, report or diff into the document the conventions call for, in the one place they name, with diagrams. Owns a spec from `Status: implemented` onward |
-| [spec-creator](spec-creator.md) | `opus` | Read, Grep, Glob, Bash, Write, Edit, AskUserQuestion, Agent | **yes — one spec file + its index row** | Writes the feature spec **before** the code: interrogates the request across six fixed categories, analyses the design for gaps and corner cases, and lands EARS acceptance criteria as `Status: draft` |
+| [spec-creator](spec-creator.md) | `opus` | Read, Grep, Glob, Bash, Write, Edit, Agent | **yes — one spec file + its index row** | Writes the feature spec **before** the code: interrogates the request across six fixed categories, analyses the design for gaps and corner cases, and lands EARS acceptance criteria as `Status: draft` |
 
 ## Inputs and outputs
 
@@ -57,17 +57,27 @@ apart by the first line, and by the absence of the normal document's headings.
 | `doc-writer` | `# Documentation report — …` | `# Cannot document — nothing implemented to document` |
 | `spec-creator` | `# Spec written — …` | `# Clarification needed — no spec written` |
 
-**A stop-and-ask response means go back to the human.** For seven of the eight,
-a subagent has no channel to a person, so: relay the questions **verbatim**,
-then re-dispatch with the answers. Do not read it as findings and do not answer
-on the human's behalf. Re-dispatching without answers makes the agent proceed on
-stated defaults, recorded under `## Assumptions`.
+**A stop-and-ask response means go back to the human.** For **all eight**, a
+subagent has no channel to a person, so: relay the questions **verbatim**, then
+re-dispatch with the answers. Do not read it as findings and do not answer on the
+human's behalf. Re-dispatching without answers makes the agent proceed on stated
+defaults, recorded under `## Assumptions`.
 
-Those seven ask **at most once**, at most four questions, each with its own
-default. **`spec-creator` is the exception**: it declares `AskUserQuestion` and
-is told to ask a *blocking* gap directly, up to two rounds of four, keeping the
-artefact for the case where there is nothing to specify at all — or where the
-tool turns out not to work. Whether it does is unverified; see Known limits.
+All eight ask **at most once**, at most four questions, each with its own default.
+`spec-creator` was the one exception while it declared `AskUserQuestion`; that
+grant is **gone**, because the tool cannot work from inside a subagent — measured
+2026-08-18, `No such tool available: AskUserQuestion. AskUserQuestion is not
+available inside subagents.` It keeps its clarification artefact and now also
+leads its report with any blocking gap, marked BLOCKING with a proposed default.
+
+**So the questions are the parent's to ask, and asking them late is expensive.**
+Any question whose answer changes a contract, a threshold, or the shape of the
+deliverable is asked **before** the dispatch — the parent holds `AskUserQuestion`
+and one round of it costs seconds, where the same gap found inside a 30-minute
+dispatch costs that dispatch. Measured 2026-08-18: a `spec-creator` run drafted
+four blocking questions it could not ask; three were answered only because the
+parent asked them independently, and the fourth was still open when the spec was
+handed back.
 
 Two acceptance checks the parent owes every report, because nothing else enforces
 them:
@@ -79,6 +89,24 @@ them:
 - **No agent may append to an `INSIGHTS.md`.** Anything worth recording comes back
   under `## For the parent` or `## Open questions`, and the **parent** runs
   `/engineering-insights`.
+
+And two things the parent owes the dispatch, before it is sent:
+
+- **Quote the journal entries you have already read; do not merely cite the path.**
+  The read half of the protocol applies to every participant, so a dispatch that
+  says "see `server/INSIGHTS.md`" buys a second full read of it — and a third, once
+  that agent fans out. Measured 2026-08-18: `server/INSIGHTS.md` (~49 KB) was
+  opened **8 times across 3 participants** in one run, to use four entries the
+  parent already held. Paste the relevant entries into the brief and say the file
+  was read; the agent still emits its receipt, and `0 relevant` is a real answer.
+  This is the same rule `implementation-planner.md` already applies to a
+  requirement's `Source:`, generalised to the dispatch.
+- **Carry the design, do not refer to it.** No agent inherits the parent's chat
+  images (see Known limits), so a mock that exists only as a pasted screenshot is
+  invisible downstream. Save it and pass the path, or describe it in prose in the
+  brief — and know that a prose description bounds what the agent can find: every
+  design finding it returns rests on what you wrote down, and neither side can
+  name what you left out.
 
 ## The pipeline
 
@@ -306,7 +334,7 @@ At eight agents this reads better agent-per-row. `✗` means **not granted**;
 | `architecture-reviewer` | ✗ | ✗ | ✗ | ✗ | ✗ |
 | `plan-verifier` | ✗ | ✗ | ✗ | ✗ | ✗ |
 | `doc-writer` | **granted, doc paths only** | ✗ | ✗ | ✗ | ✗ |
-| `spec-creator` | **granted, spec paths only** | ✗ | ✗ | **granted — `researcher` only** | **granted — unverified** |
+| `spec-creator` | **granted, spec paths only** | ✗ | ✗ | **granted — `researcher` only** | ✗ |
 
 What each column costs:
 
@@ -336,9 +364,10 @@ What each column costs:
   `researcher`: the restriction to it is **prose**, and a `spec-creator` that
   dispatched `implementer` would have escaped its own write scope entirely.
   See Known limits.
-- **`AskUserQuestion`.** `spec-creator` only, and its effect is **unverified** —
-  see Known limits. The other seven have a stop-and-ask artefact instead, and
-  `spec-creator` keeps one too, as the fallback for an unavailable tool.
+- **`AskUserQuestion`.** **Granted to none of the eight**, and it cannot be: the
+  harness refuses it inside a subagent (measured 2026-08-18). `spec-creator` held
+  the grant until then and lost it; every agent uses the stop-and-ask artefact
+  instead, and the parent does the asking.
 
 `Bash` is granted to **all eight**, because `git log`, `git log -S`, `git blame`,
 `rg` and `gh pr view` are most of what repo work is — and because three of them
@@ -841,17 +870,19 @@ Known limits:
   and produces a plausible report against rules you have already changed. Check
   the process start time against the file mtime (`ls -lT`) before trusting any
   behavioural test of an edited agent, and re-run it after a full restart.
-- **`spec-creator`'s `AskUserQuestion` is declared but not yet verified.** It is
-  the only agent in the set granted the tool, on the grounds that closing
-  ambiguity before code is written is the whole job. Whether a subagent's
-  `AskUserQuestion` actually reaches a human here is **unproven** — the first
-  test hit the stale-definition trap above. The agent file carries a fallback
-  (an unavailable tool must produce the clarification artefact plus a
-  `## Deviations` line, never a silent default), because this is the one tool
-  whose failure is invisible: an agent that cannot ask looks exactly like an
-  agent with no questions. Until a post-restart test confirms it, treat the
-  sentence *"A subagent has no channel to a person — no `AskUserQuestion`"*
-  above as describing the other seven agents.
+- **`AskUserQuestion` does not work inside a subagent — settled, and the grant is
+  withdrawn.** This was the set's longest-standing open question. It is closed by
+  measurement rather than by argument: on 2026-08-18 a `spec-creator` dispatch
+  called the tool and received `No such tool available: AskUserQuestion.
+  AskUserQuestion is not available inside subagents.` — a harness rule, not the
+  stale-definition trap above. The grant is gone from both the agent file and the
+  permissions table, and the sentence *"A subagent has no channel to a person"*
+  now describes all eight. **The residual risk moved rather than disappeared**: an
+  agent that cannot ask looks exactly like an agent with no questions, so a
+  blocking gap must lead its report, and a parent that dispatches without settling
+  the contract-shaping questions first will get defaults it never chose. Both
+  halves are now written into `spec-creator.md` and into *Inputs and outputs*
+  above.
 - **`spec-creator` can spawn `researcher`, and only prose says so.** The
   allowlist grants `Agent`, not `Agent(researcher)` — the harness has no such
   form. The safety argument (a read-only target cannot widen the dispatch) is
@@ -1026,3 +1057,4 @@ Known limits:
 | 2026-08-17 | `spec-creator` (`opus`, `blue` — a second forced duplicate, shared with `implementation-planner`), taking the set to eight. Writes the spec **before** the code, at the head of the pipeline: six fixed interrogation categories, four design-analysis findings, EARS acceptance criteria with `AC-n` IDs. Two rules carry most of its value and both are prose — it may not write `Status: approved`, and it may not invent a threshold. Its write scope is one spec file plus one index row; `skills:` is `product-ui-language` + `mermaid-diagram` (2 203 words), with `security` excluded and the reason recorded. Shipped with a reshaped `docs/specs-convention.md` — the EARS skeleton merged into the existing one, `Spec ID`, a four-value `Status` that also decides file ownership, and `Acceptance criteria (EARS)` replacing `Behaviour` — plus a new root `specs/` for cross-module features (`specs/README.md`), a `routing.md` row for it, and the `spec-creator` / `doc-writer` boundary written into both agent files. |
 | 2026-08-10 | Four agents, taking the set to seven. `test-writer` (`opus`, `green` — a forced duplicate, the palette holds six values) writes only inside test paths; `doc-writer` (`sonnet`, `magenta`) only inside doc paths. `architecture-reviewer` (`opus`, `red`) and `plan-verifier` (`opus`, `yellow`) are read-only by allowlist and carry the full named-construct prohibition. `plan-verifier` declares **no** `skills:` as a design choice — a rubric it holds is a rubric it applies. Narrow justified `skills:` lists become the default: full fan-out costs 38 962 injected words instead of 75 125. Permissions matrix transposed to agent-per-row. Four external practice sets cited in the provenance section — subagent design, LLM-generated-test failure modes, requirements verification, and documentation/diagram conventions. |
 | 2026-08-17 | `planner` → **`implementation-planner`**, and the artefact `Development Plan` → **`Implementation Plan`**. The agent now plans **how**, never **what**: a new `## You do NOT own the specification` section forbids writing, amending or *planning* a spec, ticket or acceptance criterion, and the plan's `## Specs` section is gone. Two mandatory steps run before any planning — **Step 1, verify the requirements** (restate each as an `R<n>` with a `Source:` of a spec `AC-n`, the dispatch, or `assumed default — confirm`; find gaps as numbered questions with defaults; recommend a cleaner/safer/cheaper route as advice, never as an edit) and **Step 2, ask the execution mode** (`multi-agent` waves versus a `single-agent` linear pass, recommended-but-confirmed, with both orderings written out so the answer is free). New sections: `## Execution mode`, `Requirements (verified)`, `## Open questions & recommendations`, and a `## Red-flags check` the agent runs before returning. Spec ownership now stops at two agents: `implementer` lost its spec-writing step entirely (`specs/**` added to its do-not-touch list, a contradiction goes to `## For the parent`), leaving `spec-creator` before the code and `doc-writer` after it — recorded in `docs/specs-convention.md` too. References updated in `implementer.md`, `plan-verifier.md` (whose `## Requirements` table gained a `Source` column), `doc-writer.md`, `spec-creator.md` and `test-writer.md`. |
+| 2026-08-19 | **`AskUserQuestion` withdrawn from `spec-creator`, and with it the last claim that any agent here can ask a human.** Closed by measurement, not argument: the harness answers `AskUserQuestion is not available inside subagents`. The agent now returns blocking gaps to the parent — numbered, defaulted, leading its report and marked BLOCKING — and keeps the clarification artefact for the case where they make the spec unwritable. *Inputs and outputs* gains two rules the parent owes every dispatch: quote the `INSIGHTS.md` entries you have already read instead of citing the path (measured: 8 opens of a 49 KB journal across 3 participants in one run), and carry a design as a saved path or as prose, because no agent inherits chat images. Source: `docs/retro/2026-08-18-project-context-spec.md`. |

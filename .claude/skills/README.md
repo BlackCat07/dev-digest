@@ -11,6 +11,7 @@ Subagents are the neighbouring concept and live in [`../agents/`](../agents/READ
 | [engineering-insights](engineering-insights/SKILL.md) | Meta | Reads a package's `INSIGHTS.md` before the work, appends what was learned after it |
 | [run-plan](run-plan/SKILL.md) | Workflow | Executes an existing Implementation Plan — implementer waves → Done-conditions → verify ‖ boundaries → bounded fix loop → docs → verdict. Starts at the plan; `spec-creator` and `implementation-planner` are run by hand |
 | [pr-self-review](pr-self-review/SKILL.md) | Workflow | Reviews the open local diff before a PR is opened, routes each file to the skills that own it, blocks the merge on a CRITICAL |
+| [workflow-retro](workflow-retro/SKILL.md) | Meta | Post-mortem for a multi-agent run — what it cost, where the agents struggled, which context was read twice, and the named edits to make before the next run |
 | [fastify-best-practices](fastify-best-practices/SKILL.md) | Backend | Fastify routes, plugins, JSON-schema validation, error handling |
 | [drizzle-orm-patterns](drizzle-orm-patterns/SKILL.md) | Backend | Drizzle schema, queries, relations, transactions, migrations |
 | [postgresql-table-design](postgresql-table-design/SKILL.md) | Backend | Postgres schema design, data types, indexing, constraints |
@@ -25,7 +26,7 @@ Subagents are the neighbouring concept and live in [`../agents/`](../agents/READ
 | [security](security/SKILL.md) | Full-stack | OWASP Top 10:2025, auth, injection, uploads, secrets |
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
 
-`engineering-insights`, `run-plan`, `frontend-ui-architecture`,
+`engineering-insights`, `run-plan`, `workflow-retro`, `frontend-ui-architecture`,
 `onion-architecture`, `product-ui-language` and `pr-self-review` are authored in
 this repo. Vendored
 skills are pulled from GitHub and pinned by hash in `../../skills-lock.json`;
@@ -42,7 +43,14 @@ pinned by `computedHash` over its `SKILL.md`: reshaping one drifts that hash, an
 the root `CLAUDE.md` lists the lockfile as never-hand-edit. Check the lockfile
 before editing a `SKILL.md`, not after.
 
-`pr-self-review` is the only skill that ships executables and the only one wired
+`workflow-retro` ships one executable too — `scripts/collect.py`, stdlib-only,
+which reads the session and subagent transcripts and writes nothing. It is
+deliberately **not** wired into a hook and is never chained onto another skill: a
+retro on every `Stop` would fire on one-line turns and train everyone to skip it.
+Its reports and its append-only ledger live in [`docs/retro/`](../../docs/retro/),
+outside `.claude/`, because they are read by people and not by the harness.
+
+`pr-self-review` is the only skill wired
 into the harness: `pr-self-review/scripts/` holds the tree fingerprint and the
 merge gate, and the `PreToolUse` entry in `../settings.json` calls the latter to
 block `gh pr create` / `gh pr merge` until that skill has recorded a fresh,
