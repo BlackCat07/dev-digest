@@ -36,11 +36,15 @@ import type {
  *    filters on it, and the service calls it FIRST (AC-29). The tour reads
  *    themselves are by `repo_id` alone, which is safe only because nothing
  *    reaches them without that lookup having succeeded.
- *  - **It reaches into no sibling module.** `repos` has a repository of its own
- *    in `modules/repos/`, and importing it would be a
- *    `no-cross-module-internals` violation that `import type` does not exempt
- *    (`server/INSIGHTS.md`, 2026-08-14). The query here is narrower anyway: four
- *    columns, not a row.
+ *  - **It reaches into no sibling module.** The `repos` module has a repository
+ *    of its own, and importing it would be a `no-cross-module-internals`
+ *    violation that `import type` does not exempt (`server/INSIGHTS.md`,
+ *    2026-08-14). The query here is narrower anyway: four columns, not a row.
+ *    The sibling's path is deliberately not spelled out above: this module's
+ *    Done-condition greps for those path strings and passes on zero lines, so
+ *    a comment naming one produces output indistinguishable from a real import
+ *    — and a gate whose failure has to be resolved by reading is a gate the
+ *    next reader skips.
  */
 
 /** The shape the `json` column is expected to hold. Parsed, never cast. */

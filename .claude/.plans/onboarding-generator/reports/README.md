@@ -35,6 +35,7 @@ are [`specs/onboarding-generator.md`](../../../../specs/onboarding-generator.md)
 | [`stage3-wave6-t10.md`](stage3-wave6-t10.md) | 3 — build | `implementer` | default | The screen and its 16-line route entry. Full-tree verification and the applied migration are recorded at the end |
 | [`stage4-architecture-reviewer.md`](stage4-architecture-reviewer.md) | 4 — review the code | `architecture-reviewer` | default | **0 CRITICAL, 1 WARNING, 0 SUGGESTION.** `depcruise` baseline verified line-for-line against the parent commit: zero new violations |
 | [`stage4-test-writer.md`](stage4-test-writer.md) | 4 — test | `test-writer` | default | Nine test files from the criteria, not from the code. Server 563 → 618, client 353 → 388, each key assertion proved failable by mutation |
+| [`stage5-plan-verifier.md`](stage5-plan-verifier.md) | 5 — verify | `plan-verifier` | default | **44 yes, 1 yes (differently), 1 partial, 1 not checked, 0 no** across the 47 criteria; 10/10 Done-conditions pass. The two rows that do not close end to end lead the report |
 
 ## What each stage was committed as
 
@@ -44,3 +45,4 @@ are [`specs/onboarding-generator.md`](../../../../specs/onboarding-generator.md)
 | 2 — the plan | `a64a1b0` |
 | 3 — the code | `401e8d6` |
 | 4 — tests and reviews | see the commit that carries these reports |
+| 5 — verification | the commit that carries [`stage5-plan-verifier.md`](stage5-plan-verifier.md) |
