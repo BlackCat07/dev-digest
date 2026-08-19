@@ -67,6 +67,29 @@ valuable one — the code does not record what was tried and abandoned.
 
 <!-- append below -->
 
+- **2026-08-19** — **A `grep`-based Done-condition that passes on zero lines is failed by a
+  DOC-COMMENT, and the pressure that creates is to bend the code around a text search.**
+  Measured across the Onboarding Generator's ten tasks. The gates are
+  `grep -rn "node:fs" src/modules/<name>/ # 0 lines = pass` and
+  `grep -rnE "child_process|execFile|spawn\(|exec\(" # 0 lines = pass`. Written the plain
+  way, prose explaining *why* this module does not import Node's filesystem module returned
+  six comment hits, and `RegExp.prototype.exec` returned two — output an implementer cannot
+  distinguish from a real violation. Two implementers independently responded by wording
+  every doc-comment around the forbidden strings, and one wrote `String.prototype.match`
+  where `.exec()` was natural. The prose half is fine and `modules/project-context/types.ts`
+  already did it ("Node's own filesystem module"); the API half is the line — a control-flow
+  or API choice made to satisfy a text search is a finding, and it was only harmless here
+  because neither regex carries `/g`, so the two calls are behaviourally identical. The same
+  gate then failed again at verification time on a *different* file, because a consolidation
+  moved a comment naming `modules/repos/` into a directory the gate scans. Two rules follow:
+  when adding a grep gate over a directory, scope it to import statements (or exclude
+  comment lines) rather than to the whole file; and when one fires, fix the prose rather
+  than annotating the gate as a known false positive — a gate whose failure has to be
+  resolved by reading is a gate the next reader skips. Evidence:
+  `src/modules/onboarding/repository.ts` (the reworded sibling-module paragraph),
+  `src/modules/onboarding/commands.ts` (`line.match(MAKE_TARGET)`),
+  `.claude/.plans/onboarding-generator/plan.md` (T6 and T8 Done-conditions).
+
 - **2026-08-11** — **Ranking a derived list by SIZE inverts the feature whose whole purpose
   is that size is not importance.** Smart Diff's split suggestion bucketed the changed files
   and sorted the buckets by changed lines, which is the obvious ordering and reads fine in
@@ -281,6 +304,35 @@ valuable one — the code does not record what was tried and abandoned.
 Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
+
+- **2026-08-19** — **This server has TWO prompt-template renderers and they disagree about
+  what a missing variable does, silently.** `modules/conventions/prompt.ts`'s
+  `renderTemplate` replaces an unmatched `{{name}}` with the **empty string**;
+  `platform/prompts.ts`'s replaces nothing and leaves the literal `{{name}}` in the prompt.
+  A feature that copies the conventions shape — the obvious precedent, since it is the one
+  with a worked example — and then switches to the platform loader (which it must, because
+  the module-local one imports Node's filesystem module and a feature module may not) has
+  changed what a missing variable sends to the model, with no type error and no gate.
+  Neither behaviour is wrong; not knowing which one you have is. Check which loader you
+  hold before relying on a placeholder being optional, and supply every variable regardless.
+  Evidence: `src/modules/conventions/prompt.ts` (`renderTemplate`), `src/platform/prompts.ts`
+  (`renderTemplate`), `src/modules/onboarding/prompt.ts` (the consumer that switched).
+
+- **2026-08-19** — **Inside a module, WHICH file a port lives in is decided by the direction
+  of the existing type-only edges, not by taste — and `dependency-cruiser` counts a
+  type-only edge.** Two instances, one week apart, same mechanism. A facade row type that
+  reuses `IndexerFileFactsRow` from `repo-intel/repository.ts` cannot live in
+  `repo-intel/types.ts`, because `repository.ts` already imports `./types.js` — so the
+  facade declares its own mirror row instead, which is what that file's header already
+  asks for. And consolidating the onboarding module's ports into `types.ts` could not
+  leave `TokenCounter` in `prompt.ts`: `prompt.ts` imports `OnboardingFacts` from
+  `types.js`, so `OnboardingDeps.tokenizer` importing the type back would have closed a
+  cycle and moved the 22-warning baseline. The port has to move **with** the deps
+  interface, never be imported by it. Generalises: before placing a shared type, check
+  which way the import already runs between the two files. Related: 2026-08-14, this file,
+  for `import type` not exempting a CROSS-module edge — this is the same accounting one
+  level down. Evidence: `src/modules/repo-intel/types.ts` (`FileFactsRow`),
+  `src/modules/onboarding/types.ts` (`TokenCounter`), `src/modules/onboarding/prompt.ts`.
 
 - **2026-08-11** — **When an acceptance criterion is UNIVERSAL over a set ("a lock file is
   always boilerplate"), the set has to be a named constant and the guard has to sit outside
@@ -519,6 +571,17 @@ Conventions and architectural decisions, each with the reason behind it.
 Dependency and tooling quirks.
 
 <!-- append below -->
+
+- **2026-08-19** — **`grep` without `-a` reports NOTHING on two of this package's own source
+  files, and prints no warning worth noticing.** `src/modules/project-context/service.ts` and
+  `src/modules/onboarding/service.ts` contain a literal NUL byte, so `grep` treats them as
+  binary: `grep -n "^export" src/modules/project-context/service.ts` returns empty while
+  `grep -an` on the same file returns seven lines. The failure mode is the dangerous
+  direction — a search for something forbidden comes back clean because the file was never
+  scanned, not because the thing is absent. `gate.md` already uses `-a` for the ESM-extension
+  check and that is why; the same applies to every ad-hoc grep over `src/modules/`, including
+  the ones written into a plan's Done-conditions. Evidence: `src/modules/onboarding/service.ts`,
+  `src/modules/project-context/service.ts`, `.claude/skills/pr-self-review/gate.md`.
 
 - **2026-08-10** — **No test file in this package is typechecked by any gate, so a test can
   carry a real type error while `vitest` is fully green.** `tsconfig.json`'s `include` is

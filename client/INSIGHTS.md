@@ -401,6 +401,27 @@ Dependency and tooling quirks.
 
 <!-- append below -->
 
+- **2026-08-19** — **`eslint` on a path under `src/vendor/` exits 0 while linting nothing, and
+  a command listing it beside real files reads as a pass for both.** The config ignores
+  `src/vendor/**`, so `eslint src/vendor/ui/nav.ts src/components/app-shell/helpers.ts` exits
+  `0` having parsed only the second file, emitting `File ignored because of a matching ignore
+  pattern` as a *warning* among the output. Anyone writing a Done-condition that names a
+  vendor path — which happens exactly when a change enters that zone under a carve-out, i.e.
+  when the lint mattered most — records a green gate over an unlinted file. Assert the change
+  a different way (`git diff --stat -- src/vendor/ui/` showing exactly one file is the check
+  that actually holds), and keep vendor paths out of an `eslint` invocation whose exit code
+  someone will read as coverage. Evidence: `eslint.config.js`, `src/vendor/ui/nav.ts`.
+
+- **2026-08-19** — **Under fake timers, a TanStack Query `refetchInterval` refetch fires on the
+  timer but its data commits on the render AFTER it, so the obvious flush sees the new call
+  count and the OLD data.** `await flush(TOUR_POLL_MS)` advances the timer, the request goes
+  out and the call count moves — and the assertion on the rendered payload still reads the
+  previous value. A zero-millisecond second flush is still one turn early; `flush(1)` is what
+  lands it. Measured while asserting that the tour poll starts on `generation_state ===
+  "running"` and stops when it changes. Worth knowing before concluding the hook's interval
+  predicate is wrong: the call count is the honest signal, the rendered data lags it by one
+  commit. Evidence: `src/lib/hooks/onboarding.test.tsx`.
+
 - **2026-08-10** — **`@testing-library/user-event` is NOT a dependency of this package**, so the
   usual "always `userEvent`, never `fireEvent`" advice is unreachable here — importing it fails
   at collect time, and `client/node_modules/@testing-library/` holds only `react` and
@@ -434,6 +455,18 @@ Dependency and tooling quirks.
 An error string, its real cause, and the fix.
 
 <!-- append below -->
+
+- **2026-08-19** — **`getByRole(…, { name })` cannot match text containing consecutive spaces
+  — the accessible-name computation normalises whitespace — so a control whose name embeds a
+  verbatim string will never be found by that string.** Hit while asserting that a copy
+  control writes a shell command out exactly: the command is `npm run dev  # starts it` with
+  two spaces, the button's accessible name collapses them to one, and
+  `getByRole("button", { name: /npm run dev {2}#/ })` matches nothing while the clipboard
+  receives the original. Split the two concerns — query the control by a normalised prefix,
+  and assert the verbatim string on the clipboard, which is where the requirement actually
+  lives. This bites any test that treats an accessible name as a byte-for-byte echo of
+  content: paths, commands and code snippets are where it shows up. Evidence:
+  `src/app/repos/[repoId]/onboarding/_components/TourSection/TourSection.test.tsx`.
 
 - **2026-08-12** — **`TypeError: rootRef.current?.scrollIntoView is not a function` means
   jsdom, not your ref — and the blast radius is every test that merely RENDERS the
