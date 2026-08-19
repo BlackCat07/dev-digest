@@ -1,9 +1,16 @@
 /**
- * Ports and row shapes for the Onboarding Tour module.
+ * Ports and row shapes for the Onboarding Tour module — every one of them, here.
  *
  * Types only — no runtime code — so nothing here can join an import cycle and the
  * whole module's dependency surface is readable in one file. The blast and
  * smart-diff modules' own `types.ts` state the same rationale.
+ *
+ * ONE home, which is what the two modules this one is modelled on actually do:
+ * `modules/project-context/types.ts` declares `ProjectContextStore`, the module's
+ * public face and `ProjectContextDeps` together, and `modules/intent/sources.ts`
+ * declares `IntentStore`, `FeatureModelResolver` and `IntentDeps` together. The
+ * list of what a feature needs from the outside world stops being readable in one
+ * sitting the moment it is split across three files.
  *
  * NOTHING HERE IMPORTS A SIBLING MODULE, and that is the point of the file. A
  * types-only import of the repo-intel module's `types.ts` would be a real
@@ -18,14 +25,33 @@
  *  - {@link OnboardingDocReader} is satisfied by `ConfinedRepoDocReader`
  *    (`adapters/git/confined-doc.ts`, reached as `container.repoDocs`);
  *  - {@link FeatureModelResolver} is satisfied by the composition root's own
- *    `featureModel` arrow property.
+ *    `featureModel` arrow property;
+ *  - {@link OnboardingJobQueue} is satisfied by `platform/jobs.ts`'s runner and
+ *    {@link OnboardingLogger} by Fastify's `app.log`;
+ *  - {@link TokenCounter} is satisfied by the tokenizer adapter, which no file
+ *    under this module imports.
+ *
+ * {@link OnboardingStore} and {@link OnboardingTours} are the exceptions, and only
+ * to the "structurally" part: this module implements both itself, so
+ * `OnboardingRepository` and `OnboardingService` do name them in an `implements`
+ * clause. They belong here for the other reason — a port declared beside its
+ * implementation reads as a property of that implementation, while the container,
+ * the routes and every test see nothing but the interface.
  *
  * A second benefit beyond the linter, and the reason to keep the views narrow even
  * if the rule were relaxed: what is declared here IS the list of index facts this
  * feature depends on. A reader can see the whole input surface without opening
  * `repo-intel`.
  */
-import type { FeatureModelChoice, FeatureModelId, OnboardingReason, OnboardingStatus } from '@devdigest/shared';
+import type {
+  FeatureModelChoice,
+  FeatureModelId,
+  LLMProvider,
+  OnboardingReason,
+  OnboardingStatus,
+  OnboardingTour,
+  OnboardingTourSection,
+} from '@devdigest/shared';
 
 /* ─── the index reads ─────────────────────────────────────────────────────── */
 
@@ -247,4 +273,138 @@ export interface OnboardingFacts {
   repoMap: string;
   /** Endpoint and cron facts for the highest-ranked files that declare any (N11). */
   endpointFacts: OnboardingFileFacts[];
+}
+
+/* ─── the persistence ─────────────────────────────────────────────────────── */
+
+/** A repository, narrowed to what a generation needs. No Drizzle row escapes. */
+export interface OnboardingRepoRow {
+  id: string;
+  owner: string;
+  name: string;
+  fullName: string;
+}
+
+/** Everything a generation records, in one write. */
+export interface StoredTourWrite {
+  sections: OnboardingTourSection[];
+  status: OnboardingTour['status'];
+  reason: OnboardingTour['reason'];
+  indexedSha: string | null;
+  filesIndexed: number;
+  filesSkipped: number;
+  provider: string | null;
+  model: string | null;
+  attempts: number | null;
+  tokensIn: number | null;
+  tokensOut: number | null;
+  costUsd: number | null;
+  error: string | null;
+}
+
+/** The stored row, with its body already parsed. */
+export interface StoredTour {
+  sections: OnboardingTourSection[];
+  /**
+   * False when the stored body did not survive its parse.
+   *
+   * Kept as a flag rather than thrown, so a tour written by an older shape
+   * degrades to "no sections, and a reason" instead of turning the read into a
+   * 500 nobody can clear without a database.
+   */
+  bodyValid: boolean;
+  state: 'running' | 'ready';
+  status: OnboardingTour['status'];
+  reason: OnboardingTour['reason'];
+  indexedSha: string | null;
+  filesIndexed: number;
+  filesSkipped: number;
+  model: string | null;
+  attempts: number | null;
+  tokensIn: number | null;
+  tokensOut: number | null;
+  costUsd: number | null;
+  generatedAt: Date;
+  startedAt: Date | null;
+}
+
+/**
+ * The data the service needs, as a call surface it declares for itself.
+ *
+ * The service is constructed with this rather than with the concrete class, so a
+ * test injects an in-memory fake and needs no Postgres — the arrangement
+ * `ProjectContextStore` uses, declared in its module's `types.ts` exactly as this
+ * one is, and the reason both suites are hermetic.
+ */
+export interface OnboardingStore {
+  getRepo(workspaceId: string, repoId: string): Promise<OnboardingRepoRow | undefined>;
+  repoExists(repoId: string): Promise<boolean>;
+  get(repoId: string): Promise<StoredTour | undefined>;
+  markRunning(repoId: string, startedAt: Date): Promise<void>;
+  save(repoId: string, write: StoredTourWrite, generatedAt: Date): Promise<void>;
+  clearRunning(repoId: string, message: string, reason: OnboardingTour['reason']): Promise<void>;
+}
+
+/* ─── what the composition root supplies ──────────────────────────────────── */
+
+/**
+ * The two levels this service logs at, when a caller offers a logger.
+ *
+ * `app.log` and pino satisfy it, and it arrives as a PARAMETER rather than a
+ * field — the shape `IntentWarnLogger` set. The service invents no sink of its
+ * own, because that would put a second one next to the caller's.
+ */
+export interface OnboardingLogger {
+  info: (obj: unknown, msg?: string) => void;
+  warn: (obj: unknown, msg?: string) => void;
+}
+
+/** The job queue, as the call surface this module uses and no more. */
+export interface OnboardingJobQueue {
+  register(
+    kind: string,
+    handler: (payload: unknown, ctx: { jobId: string }) => Promise<void>,
+  ): void;
+  enqueue(
+    workspaceId: string,
+    kind: string,
+    payload: unknown,
+  ): Promise<{ id: string; done: Promise<void> }>;
+}
+
+/** Counting tokens, as a call signature, so nothing here imports the adapter. */
+export interface TokenCounter {
+  count(text: string): number;
+}
+
+/**
+ * Every port this module uses, declared here and satisfied structurally.
+ *
+ * The absences are the point, as they are in `project-context/types.ts`: there
+ * is no GitHub client, no embedder and no `db` in reach — the tour is built from
+ * the index, the clone's declared command files and one model call, and that is
+ * readable from this one interface.
+ */
+export interface OnboardingDeps {
+  store: OnboardingStore;
+  index: OnboardingIndexReader;
+  repoDocs: OnboardingDocReader;
+  featureModel: FeatureModelResolver;
+  llm: (id: 'openai' | 'anthropic' | 'openrouter') => Promise<LLMProvider>;
+  jobs: OnboardingJobQueue;
+  tokenizer: TokenCounter;
+}
+
+/* ─── the module's public face ────────────────────────────────────────────── */
+
+/** What the transport ring and the container see. */
+export interface OnboardingTours {
+  registerJobHandler(log?: OnboardingLogger): void;
+  getTour(workspaceId: string, repoId: string): Promise<OnboardingTour>;
+  requestGeneration(
+    workspaceId: string,
+    repoId: string,
+    log?: OnboardingLogger,
+  ): Promise<{ status: 'accepted'; jobId: string }>;
+  runGeneration(workspaceId: string, repoId: string, log?: OnboardingLogger): Promise<void>;
 }

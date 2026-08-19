@@ -8,11 +8,18 @@ import {
 } from '@devdigest/shared';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
+import type {
+  OnboardingRepoRow,
+  OnboardingStore,
+  StoredTour,
+  StoredTourWrite,
+} from './types.js';
 
 /**
  * Data access for the Onboarding Tour. The ONLY file in this module that
  * touches `db/schema` and `drizzle-orm`; everything above it sees
- * {@link OnboardingStore}.
+ * {@link OnboardingStore}, which — like every other port and row shape this
+ * module declares — lives in `types.ts` rather than beside this implementation.
  *
  * Three things it is arranged to guarantee:
  *
@@ -35,73 +42,6 @@ import * as t from '../../db/schema.js';
  *    (`server/INSIGHTS.md`, 2026-08-14). The query here is narrower anyway: four
  *    columns, not a row.
  */
-
-/** A repository, narrowed to what a generation needs. No Drizzle row escapes. */
-export interface OnboardingRepoRow {
-  id: string;
-  owner: string;
-  name: string;
-  fullName: string;
-}
-
-/** Everything a generation records, in one write. */
-export interface StoredTourWrite {
-  sections: OnboardingTourSection[];
-  status: OnboardingTour['status'];
-  reason: OnboardingTour['reason'];
-  indexedSha: string | null;
-  filesIndexed: number;
-  filesSkipped: number;
-  provider: string | null;
-  model: string | null;
-  attempts: number | null;
-  tokensIn: number | null;
-  tokensOut: number | null;
-  costUsd: number | null;
-  error: string | null;
-}
-
-/** The stored row, with its body already parsed. */
-export interface StoredTour {
-  sections: OnboardingTourSection[];
-  /**
-   * False when the stored body did not survive its parse.
-   *
-   * Kept as a flag rather than thrown, so a tour written by an older shape
-   * degrades to "no sections, and a reason" instead of turning the read into a
-   * 500 nobody can clear without a database.
-   */
-  bodyValid: boolean;
-  state: 'running' | 'ready';
-  status: OnboardingTour['status'];
-  reason: OnboardingTour['reason'];
-  indexedSha: string | null;
-  filesIndexed: number;
-  filesSkipped: number;
-  model: string | null;
-  attempts: number | null;
-  tokensIn: number | null;
-  tokensOut: number | null;
-  costUsd: number | null;
-  generatedAt: Date;
-  startedAt: Date | null;
-}
-
-/**
- * The data the service needs, as a call surface it declares for itself.
- *
- * The service is constructed with this rather than with the concrete class, so
- * a test injects an in-memory fake and needs no Postgres — the arrangement
- * `ProjectContextDeps` uses, and the reason its suite is hermetic.
- */
-export interface OnboardingStore {
-  getRepo(workspaceId: string, repoId: string): Promise<OnboardingRepoRow | undefined>;
-  repoExists(repoId: string): Promise<boolean>;
-  get(repoId: string): Promise<StoredTour | undefined>;
-  markRunning(repoId: string, startedAt: Date): Promise<void>;
-  save(repoId: string, write: StoredTourWrite, generatedAt: Date): Promise<void>;
-  clearRunning(repoId: string, message: string, reason: OnboardingTour['reason']): Promise<void>;
-}
 
 /** The shape the `json` column is expected to hold. Parsed, never cast. */
 const StoredBody = z.object({ sections: z.array(OnboardingTourSection) });

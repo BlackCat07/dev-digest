@@ -2,7 +2,7 @@ import type { ChatMessage, OnboardingCommand } from '@devdigest/shared';
 import { wrapUntrusted } from '../../platform/prompt.js';
 import { loadPromptTemplate, renderTemplate } from '../../platform/prompts.js';
 import { MAX_PROMPT_TOKENS, SECTION_KINDS, SECTION_TITLES, TOUR_LANGUAGE } from './constants.js';
-import type { OnboardingFacts } from './types.js';
+import type { OnboardingFacts, TokenCounter } from './types.js';
 
 /**
  * Prompt assembly for the one structured call.
@@ -41,11 +41,6 @@ import type { OnboardingFacts } from './types.js';
 
 /** The one template this module loads; the `.md` is `loadPromptTemplate`'s. */
 const TOUR_TEMPLATE = 'onboarding.system.md';
-
-/** Counting tokens, as a call signature, so nothing here imports the adapter. */
-export interface TokenCounter {
-  count(text: string): number;
-}
 
 /** Read the tour's system prompt body, cached for the process. */
 export async function loadTemplate(): Promise<string> {

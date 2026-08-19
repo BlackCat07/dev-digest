@@ -1,5 +1,4 @@
 import type {
-  LLMProvider,
   OnboardingCommand,
   OnboardingLink,
   OnboardingPathNote,
@@ -29,14 +28,15 @@ import {
   TOUR_STALE_AFTER_MS,
 } from './constants.js';
 import { collectOnboardingFacts, mapIndexState } from './facts.js';
-import { buildTourMessages, loadTemplate, type TokenCounter } from './prompt.js';
-import type { OnboardingRepoRow, OnboardingStore, StoredTourWrite } from './repository.js';
+import { buildTourMessages, loadTemplate } from './prompt.js';
 import { OnboardingDraft, type DraftSection } from './schemas.js';
 import type {
-  FeatureModelResolver,
-  OnboardingDocReader,
+  OnboardingDeps,
   OnboardingFacts,
-  OnboardingIndexReader,
+  OnboardingLogger,
+  OnboardingRepoRow,
+  OnboardingTours,
+  StoredTourWrite,
 } from './types.js';
 
 /**
@@ -76,61 +76,6 @@ import type {
  * filesystem — and both of those are greps rather than conventions, which is why
  * neither path is spelled out even in a comment.
  */
-
-/**
- * The two levels this service logs at, when a caller offers a logger.
- *
- * `app.log` and pino satisfy it, and it arrives as a PARAMETER rather than a
- * field — the shape `IntentWarnLogger` set. The service invents no sink of its
- * own, because that would put a second one next to the caller's.
- */
-export interface OnboardingLogger {
-  info: (obj: unknown, msg?: string) => void;
-  warn: (obj: unknown, msg?: string) => void;
-}
-
-/** The job queue, as the call surface this module uses and no more. */
-export interface OnboardingJobQueue {
-  register(
-    kind: string,
-    handler: (payload: unknown, ctx: { jobId: string }) => Promise<void>,
-  ): void;
-  enqueue(
-    workspaceId: string,
-    kind: string,
-    payload: unknown,
-  ): Promise<{ id: string; done: Promise<void> }>;
-}
-
-/**
- * Every port this service uses, declared here and satisfied structurally.
- *
- * The absences are the point, as they are in `project-context/types.ts`: there
- * is no GitHub client, no embedder and no `db` in reach — the tour is built from
- * the index, the clone's declared command files and one model call, and that is
- * readable from this one interface.
- */
-export interface OnboardingDeps {
-  store: OnboardingStore;
-  index: OnboardingIndexReader;
-  repoDocs: OnboardingDocReader;
-  featureModel: FeatureModelResolver;
-  llm: (id: 'openai' | 'anthropic' | 'openrouter') => Promise<LLMProvider>;
-  jobs: OnboardingJobQueue;
-  tokenizer: TokenCounter;
-}
-
-/** What the transport ring and the container see. */
-export interface OnboardingTours {
-  registerJobHandler(log?: OnboardingLogger): void;
-  getTour(workspaceId: string, repoId: string): Promise<OnboardingTour>;
-  requestGeneration(
-    workspaceId: string,
-    repoId: string,
-    log?: OnboardingLogger,
-  ): Promise<{ status: 'accepted'; jobId: string }>;
-  runGeneration(workspaceId: string, repoId: string, log?: OnboardingLogger): Promise<void>;
-}
 
 /**
  * The body a section carries when nothing was written for it.
