@@ -58,7 +58,26 @@ Approaches and solutions that worked and should be reused.
 
 <!-- append below -->
 
-_No entries yet._
+- **2026-08-20** — **A fake whose every port method defaults to a thrower is the only way to
+  prove a negative like "this path reads no bytes and resolves no clone".** `unreachable(name)`
+  as the default body of each method on a port fake turns an absence into a failing test that
+  names the offending call, where an assertion over the *result* can only say the answer looked
+  right. Used to pin that `ProjectContext.listEffectiveDocs` performs no `repoDocs.read` and
+  resolves no repository name; mutation-verified by inserting one `read` call, which turned two
+  tests red. Reusable for any port-based module that promises "this path performs no I/O" —
+  the promise is otherwise only a comment. Evidence:
+  `test/project-context-effective.test.ts` (`unreachable`, `reader({})`),
+  `src/modules/project-context/service.ts` (`listEffectiveDocs`).
+
+- **2026-08-20** — **A `200` on a new route is only evidence of registration if the `404` path
+  is checked too, and the two are distinguishable in one extra request.** An unregistered module
+  and a registered one both answer `404` for a nonexistent id — but only the registered one
+  answers with the service's own envelope, `{"error":{"code":"not_found",…}}`, rather than
+  Fastify's route-not-found. So one `curl` against a made-up uuid turns "the route answered" into
+  "the handler ran and the workspace resolution executed". Worth pairing with the 2026-08-19
+  status-code triage in this file (`404` = unregistered, `500` = migration unapplied): that entry
+  tells you what a failure means, this one tells you what a success does **not** yet mean.
+  Evidence: `src/modules/brief/routes.ts`, `src/modules/index.ts`.
 
 ## What Doesn't Work
 
@@ -66,6 +85,39 @@ Dead ends and antipatterns, and why they fail. The most-skipped section and the 
 valuable one — the code does not record what was tried and abandoned.
 
 <!-- append below -->
+
+- **2026-08-20** — **A test suite that checks WRAPPING MECHANICS is not evidence of an
+  injection defence, and the gap is measurable: 9 of 10 passed with the defence deleted.**
+  Measured on the PR Brief prompt — with the `## SECURITY` section removed from
+  `src/prompts/brief.system.md`, every block was still wrapped exactly once, the system message
+  still carried no foreign text, and the token budget still held; only the one assertion written
+  against the *rendered clause* failed. Delimiters are inert without a sentence telling the model
+  what they mean. The compounding fact is what makes this reachable rather than theoretical:
+  `INJECTION_GUARD` is a module-private, **non-exported** const at `../reviewer-core/src/prompt.ts`
+  and is concatenated only inside `assemblePrompt`, so any module that builds its own messages —
+  which a feature module must, because `platform/prompts.ts` is the only loader it may use — reaches
+  no shared guard and there is **nothing to duplicate**. A plan that says "do not duplicate the
+  guard" will be read as "the guard is handled". Carry the clause in the template, the shape
+  `src/prompts/onboarding.system.md` already uses, and assert on the rendered system message
+  rather than on the file's existence. Related: 2026-08-05, Codebase Patterns, for where the
+  trust decision lives. Evidence: `src/prompts/brief.system.md`,
+  `src/modules/onboarding/prompt.ts` (its header states the same reasoning),
+  `test/brief-prompt.test.ts`.
+
+- **2026-08-20** — **Adding a REQUIRED field to a `vendor/shared` contract has a blast radius
+  that `tsc --noEmit -p tsconfig.json` reports only two thirds of — and one site is invisible to
+  every typechecker there is.** Measured over two remediation rounds on `BriefDiffStats`: of eight
+  breaking sites, 3 were in `src/`, 2 in `server/test/` (visible only under `tsconfig.eslint.json`,
+  per 2026-08-10 in Tool & Library Notes), 3 in `client/**/*.test.tsx` (visible only to the client's
+  own `tsc`) — and a ninth was `expect(x).toEqual({…exhaustive object})`, which **no** typechecker
+  reports because `toEqual`'s parameter type accepts a wider object while the assertion itself
+  demands an exact match. It fails at runtime only. This is the mirror image of the 2026-08-10
+  entry: that one is a fixture structurally wrong that *never* fails; this is an assertion
+  structurally accepted that *always* fails. Before scoping a contract-field change, grep every
+  construction site across **both** packages and every `toEqual` over the type — a scope drawn from
+  `tsc -p tsconfig.json` alone will be wrong by a third. Evidence:
+  `src/modules/brief/assemble.ts` (the `diffStats` literal), `test/brief-assemble.test.ts`
+  (the two `toEqual` blocks), `../client/src/lib/hooks/brief.test.tsx`.
 
 - **2026-08-19** — **A `grep`-based Done-condition that passes on zero lines is failed by a
   DOC-COMMENT, and the pressure that creates is to bend the code around a text search.**
@@ -304,6 +356,20 @@ valuable one — the code does not record what was tried and abandoned.
 Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
+
+- **2026-08-20** — **A feature module cannot use `node:crypto`, and the two files that appear to
+  prove otherwise are the named infrastructure exception.** The `modules/<name>/` grep gates ban
+  every `node:` import specifier, not only the filesystem one the 2026-08-10 entry in Tool &
+  Library Notes is about — so a feature needing a digest has exactly two honest options: declare
+  a port for the composition root to satisfy, or hand-roll a pure one and state its scope.
+  `modules/repo-intel/pipeline/full.ts` and `.../incremental.ts` do call `createHash('sha1')`,
+  which reads as a precedent and is not one: `repo-intel` is carved out in
+  `.dependency-cruiser.cjs` as infrastructure reached only through `container.repoIntel`. The PR
+  Brief's cache key took the second option — a non-cryptographic change detector, with the file
+  header saying so, because nothing is authenticated by it and a collision costs one stale brief
+  that the force path clears. Check which side of that carve-out a file is on before copying its
+  imports. Evidence: `src/modules/brief/cache-key.ts` (`computeCacheKey`),
+  `src/modules/repo-intel/pipeline/full.ts`, `.dependency-cruiser.cjs`.
 
 - **2026-08-19** — **This server has TWO prompt-template renderers and they disagree about
   what a missing variable does, silently.** `modules/conventions/prompt.ts`'s
@@ -571,6 +637,17 @@ Conventions and architectural decisions, each with the reason behind it.
 Dependency and tooling quirks.
 
 <!-- append below -->
+
+- **2026-08-20** — **`depcruise`'s MODULE COUNT is the signal for "was this file analysed at
+  all"; the warning count cannot tell you.** An unresolved file produces the *same*
+  `x 22 dependency violations (0 errors, 22 warnings)` line as a clean one, so a green gate is
+  equally consistent with "the new file has no bad edge" and "the new file was never cruised" —
+  and the second is what a missing `tsConfig` path alias or a typo'd `--include` produces.
+  The trailing `N modules, M dependencies cruised` is what separates them: 222 → 234 across
+  twelve new files in one feature is the evidence they were read. Record the count alongside
+  the warning line whenever a diff adds files, and treat an unchanged count over a growing
+  tree as a broken gate rather than a clean one. Evidence: `.dependency-cruiser.cjs`
+  (`tsConfig`), `src/modules/brief/` (the twelve files the count moved for).
 
 - **2026-08-19** — **`grep` without `-a` reports NOTHING on two of this package's own source
   files, and prints no warning worth noticing.** `src/modules/project-context/service.ts` and

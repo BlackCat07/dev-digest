@@ -100,6 +100,22 @@ Approaches and solutions that worked and should be reused.
   initialisation, not to a value it reads later. Evidence:
   `_components/RunTraceDrawer/RunTraceDrawer.test.tsx` (`current`, `LEGACY_TRACE`).
 
+- **2026-08-20** — **A whole-ROUTE flow test can stub just `fetch` and `next/navigation` and keep
+  every hook real — and mocking `@/lib/hooks` instead does not work here.** Extends the AppShell
+  entry below from "the shell mounts" to "the shell, the header and two tabs mount and navigate":
+  make the `fetch` stub a URL router with an **empty-list default** and the real query hooks do the
+  rest, which is what lets a test drive a card row → `?tab=diff&file=…` → the file expanded in the
+  diff tab as one flow. The reason the obvious alternative fails is worth knowing before trying it:
+  `src/lib/repo-context.tsx` and `src/components/app-shell/hooks/useShellContext.ts` read the same
+  barrel (`./hooks` and `@/lib/hooks` resolve to one file), so a module mock would have to
+  re-provide the shell's own hooks too. Two traps it costs. A path rendered by a **prop-derived**
+  notice resolves during the skeleton, before the grouping query settles, so asserting the notice
+  and the diff together needs `findByText` and a wait on a file — otherwise the test passes on a
+  page with no diff on it at all. And the repo name and the PR number each appear **twice** in a
+  real shell (sidebar switcher + breadcrumb), so `getByText` on either throws "found multiple
+  elements" — which is itself the evidence the shell is real rather than faked. Evidence:
+  `src/app/repos/[repoId]/pulls/[number]/_components/PrDetailView/PrDetailView.test.tsx`.
+
 - **2026-08-19** — **`AppShell` mounts cleanly in jsdom with only `vi.mock("next/navigation")`,
   a `QueryClient` and the `shell` namespace** — `useTheme` and `useActiveRepo` both have working
   default contexts and `next/link` needs no router provider. That is worth knowing because it
@@ -115,6 +131,18 @@ Dead ends and antipatterns, and why they fail. The most-skipped section and the 
 valuable one — the code does not record what was tried and abandoned.
 
 <!-- append below -->
+
+- **2026-08-20** — **A `@@` hunk header does not decide which line numbers exist — the body lines
+  do — so a target-line fixture written from the header silently finds no anchor.** A patch whose
+  header claims a long range but whose body carries one context line and one addition renders
+  head-side rows 10 and 11 only; a `targetLine` of 12 then makes
+  `document.getElementById(lineId(path, line))` return `null`, the scroll never happens, and there
+  is no other symptom — no throw, no warning, and the file still renders. Count the **body** lines
+  when writing a fixture that a test will target, and assert the anchor exists before asserting
+  anything about the scroll. Related: the `scrollIntoView` receiver entry in Recurring Errors,
+  which is how you tell "scrolled to the wrong row" from "scrolled to nothing". Evidence:
+  `_components/SmartDiffViewer/helpers.ts` (`lineId`, `parsePatch`),
+  `_components/SmartDiffViewer/SmartDiffViewer.test.tsx`.
 
 - **2026-08-12** — **A "reset the cursor when the filters change" effect also runs on MOUNT,
   so it silently destroys any lazily-initialised value of the state it resets.**
@@ -455,6 +483,17 @@ Dependency and tooling quirks.
 An error string, its real cause, and the fix.
 
 <!-- append below -->
+
+- **2026-08-20** — **`vi.spyOn(Element.prototype, "scrollIntoView")` proves that SOMETHING
+  scrolled, never WHICH element — and `mock.instances` will not tell you, because it is for
+  constructors.** The 2026-08-12 entry below establishes that the shim belongs in
+  `src/test/setup.ts` and must be a real function so a spy can wrap it; this is the next step, and
+  it is the difference between a requirement and a shrug. A requirement like "the targeted line is
+  scrolled clear of the sticky header" needs the receiver, and the way to get it is to capture
+  `this` inside a `mockImplementation` — then the assertion can name the row and check that row's
+  own `scrollMarginTop`, rather than asserting a call count that any scroll anywhere satisfies.
+  Evidence: `_components/SmartDiffViewer/SmartDiffViewer.test.tsx` (`spyOnScroll`),
+  `src/test/setup.ts`.
 
 - **2026-08-19** — **`getByRole(…, { name })` cannot match text containing consecutive spaces
   — the accessible-name computation normalises whitespace — so a control whose name embeds a
