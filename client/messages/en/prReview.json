@@ -92,6 +92,7 @@
     },
     "lineOffDiff": "{count, plural, one {# finding is} other {# findings are}} on lines outside this patch",
     "unavailable": "Couldn't group these files by role — showing the original order.",
+    "targetMissing": "{path} isn't among the files shown here — GitHub caps this list on a large pull request.",
     "grouping": "Grouping files by role…",
     "noFiles": "No changed files.",
     "showComments": "Show comments",

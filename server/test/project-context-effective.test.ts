@@ -306,3 +306,115 @@ describe('ProjectContextService.resolveForRun', () => {
     });
   });
 });
+
+/* ─── the same set as metadata, for a caller that must read no bytes ─────── */
+
+/**
+ * One agent's attachments, shared by every case below so the two methods are
+ * compared over identical input rather than over two hand-written fixtures.
+ *
+ * It carries every rule at once: a document attached directly AND through a
+ * skill, a second document from that same skill, a document from a DISABLED
+ * skill, and one belonging to another repository.
+ */
+const OWN_ROWS: AttachmentRow[] = [
+  own('specs/shared.md', 0),
+  own('specs/own.md', 1),
+  own('specs/elsewhere.md', 2, OTHER_REPO),
+];
+
+const INHERITED_ROWS: InheritedAttachmentRow[] = [
+  inherited('specs/shared.md', { id: 's1', name: 'Security', linkOrder: 0 }, 0),
+  inherited('docs/from-skill.md', { id: 's1', name: 'Security', linkOrder: 0 }, 1),
+  inherited('specs/shared.md', { id: 's2', name: 'Style', linkOrder: 1 }, 0),
+  inherited('docs/off.md', { id: 's3', name: 'Retired', linkOrder: 2, enabled: false }, 0),
+];
+
+describe('ProjectContextService.listEffectiveDocs', () => {
+  it('answers the same paths in the same order as resolveForRun', async () => {
+    const service = new ProjectContextService(
+      deps({
+        store: store({
+          listAgentAttachments: async () => OWN_ROWS,
+          listInheritedAttachments: async () => INHERITED_ROWS,
+          getRepoById: async () => ({
+            id: REPO,
+            owner: 'acme',
+            name: 'payments-api',
+            fullName: 'acme/payments-api',
+            clonePath: '/clones/acme/payments-api',
+          }),
+          repoNames: async () => [{ repoId: OTHER_REPO, fullName: 'acme/billing' }],
+        }),
+        // Every document reads cleanly, so `resolveForRun` drops nothing and the
+        // two answers are comparable: the metadata set is what a run WOULD
+        // attempt, and here the clone refuses none of it.
+        repoDocs: reader({ read: async () => ({ ok: true, text: 'body' }) }),
+      }),
+    );
+
+    const listed = await service.listEffectiveDocs('agent-1', REPO);
+    const resolved = await service.resolveForRun('agent-1', REPO);
+
+    // One definition of "effective set", asserted as an equality rather than as
+    // two expected literals — a second definition would show up here first.
+    expect(listed.map((d) => d.path)).toEqual(resolved.paths);
+    expect(listed.map((d) => d.path)).toEqual([
+      'specs/shared.md',
+      'specs/own.md',
+      'docs/from-skill.md',
+    ]);
+  });
+
+  it('reads no document, and resolves no clone, to produce the set', async () => {
+    const service = new ProjectContextService(
+      deps({
+        store: store({
+          listAgentAttachments: async () => OWN_ROWS,
+          listInheritedAttachments: async () => INHERITED_ROWS,
+          // Left unreachable on purpose: naming a repository is a run-log
+          // concern, and this path resolves no clone at all.
+        }),
+        // The only way to prove a negative here. `reader({})` throws on both
+        // `read` and `list`, so a single byte read anywhere below fails the test
+        // with the name of the method that reached for it.
+        repoDocs: reader({}),
+      }),
+    );
+
+    const listed = await service.listEffectiveDocs('agent-1', REPO);
+
+    // Dedup: attached directly and through two skills, present ONCE, at the
+    // agent's position and sourced to the agent.
+    expect(listed.map((d) => d.path)).toEqual([
+      'specs/shared.md',
+      'specs/own.md',
+      'docs/from-skill.md',
+    ]);
+    expect(listed[0]?.source).toEqual({ kind: 'agent' });
+    expect(listed[2]?.source).toEqual({ kind: 'skill', skill_id: 's1', skill_name: 'Security' });
+    // The order is positional and gap-free, so a consumer can fingerprint the
+    // set from `path` and `order` alone.
+    expect(listed.map((d) => d.order)).toEqual([0, 1, 2]);
+
+    // A disabled skill contributes nothing, and another repository's attachment
+    // is not this repository's document.
+    const paths = listed.map((d) => d.path);
+    expect(paths).not.toContain('docs/off.md');
+    expect(paths).not.toContain('specs/elsewhere.md');
+  });
+
+  it('answers an empty set for an agent with no attachments', async () => {
+    const service = new ProjectContextService(
+      deps({
+        store: store({
+          listAgentAttachments: async () => [],
+          listInheritedAttachments: async () => [],
+        }),
+        repoDocs: reader({}),
+      }),
+    );
+
+    expect(await service.listEffectiveDocs('agent-1', REPO)).toEqual([]);
+  });
+});

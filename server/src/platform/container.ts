@@ -8,6 +8,7 @@ import type {
   FeatureModelChoice,
   FeatureModelId,
   LLMProvider,
+  SmartDiffRole,
 } from '@devdigest/shared';
 import type { AppConfig } from './config.js';
 import type { Db } from '../db/client.js';
@@ -31,6 +32,7 @@ import { ReviewRepository } from '../modules/reviews/repository.js';
 import { SkillsService } from '../modules/skills/service.js';
 import { IntentService } from '../modules/intent/service.js';
 import { SmartDiffService } from '../modules/smart-diff/service.js';
+import { classifyPath } from '../modules/smart-diff/classify.js';
 import { BlastService } from '../modules/blast/service.js';
 import { PriorPrsService } from '../modules/prior-prs/service.js';
 import { ProjectContextService } from '../modules/project-context/service.js';
@@ -39,6 +41,9 @@ import type { ProjectContext } from '../modules/project-context/types.js';
 import { OnboardingService } from '../modules/onboarding/service.js';
 import { OnboardingRepository } from '../modules/onboarding/repository.js';
 import type { OnboardingTours } from '../modules/onboarding/types.js';
+import { BriefService } from '../modules/brief/service.js';
+import { BriefRepository } from '../modules/brief/repository.js';
+import type { PrBriefs } from '../modules/brief/types.js';
 import { resolveFeatureModel } from '../modules/settings/feature-models.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
@@ -74,6 +79,12 @@ export interface ContainerOverrides {
    * clone and no provider.
    */
   onboarding?: OnboardingTours;
+  /**
+   * PR Brief (L05) — tests inject a fake service, or construct the real one over
+   * fake ports, so a generation can be exercised with no Postgres, no clone and
+   * no provider.
+   */
+  brief?: PrBriefs;
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
@@ -106,6 +117,7 @@ export class Container {
   private _priorPrs?: PriorPrsService;
   private _projectContext?: ProjectContext;
   private _onboarding?: OnboardingTours;
+  private _brief?: PrBriefs;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -271,6 +283,41 @@ export class Container {
   }
 
   /**
+   * PR Brief (L05) — what a pull request does, why, and where it may hurt.
+   *
+   * The one place that names the concrete repository, as it is for
+   * `projectContext` and `onboarding`: `BriefDeps` declares twelve ports and
+   * knows nothing about Drizzle, so the composition root is what binds them.
+   * Three of them are wiring rather than plumbing — `fileRole` is the arrow
+   * property below, which is what lets the module order a changed-file list by
+   * Smart Diff's role while importing nothing from `modules/smart-diff/`;
+   * `featureModel` is the same arrangement for the workspace's model choice; and
+   * `intent`, `blast`, `priorPrs` and `projectContext` are the four derivations
+   * this feature consumes through their own facades rather than by re-querying
+   * their tables.
+   *
+   * Exposed as the `PrBriefs` INTERFACE so `ContainerOverrides.brief` can carry a
+   * fake with no database behind it.
+   */
+  get brief(): PrBriefs {
+    if (this.overrides.brief) return this.overrides.brief;
+    return (this._brief ??= new BriefService({
+      store: new BriefRepository(this.db),
+      intent: this.intent,
+      blast: this.blast,
+      priorPrs: this.priorPrs,
+      projectContext: this.projectContext,
+      agents: this.agentsRepo,
+      repoDocs: this.repoDocs,
+      fileRole: this.fileRole,
+      featureModel: this.featureModel,
+      llm: (id) => this.llm(id),
+      github: () => this.github(),
+      jobs: this.jobs,
+    }));
+  }
+
+  /**
    * L03 — the workspace's chosen provider+model for one feature.
    *
    * Wired here, in the one ring allowed to know every module, so the intent
@@ -282,6 +329,24 @@ export class Container {
     workspaceId: string,
     id: FeatureModelId,
   ): Promise<FeatureModelChoice> => resolveFeatureModel(this.db, workspaceId, id);
+
+  /**
+   * L05 — the Smart Diff role of one changed file, from its path alone.
+   *
+   * Wired here because this is the ONE ring allowed to name two modules at once:
+   * the classifier lives inside the smart-diff module and publishes nothing, and
+   * a feature module importing it directly is a `no-cross-module-internals`
+   * violation that `import type` does not exempt (measured at 22 warnings going
+   * to 24 — `server/INSIGHTS.md`, 2026-08-14). The brief declares the shape it
+   * needs (`FileRoleClassifier` in `modules/brief/file-roles.ts`) and this
+   * property satisfies it structurally, so that module imports no sibling.
+   *
+   * An arrow property rather than a method, for the reason `featureModel` above
+   * gives: it satisfies the bare call signature directly and carries `this` with
+   * it wherever the container is destructured. Pure — no clock, no I/O, no
+   * secrets — so there is nothing to cache and nothing to override.
+   */
+  readonly fileRole = (path: string): SmartDiffRole => classifyPath(path);
 
   get codeIndex(): CodeIndex {
     if (this.overrides.codeIndex) return this.overrides.codeIndex;

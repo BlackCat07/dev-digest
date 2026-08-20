@@ -19,7 +19,14 @@
    `pr.files_count` and `pr.files.length` can legitimately differ — GitHub caps the
    file list on a very large PR, which is why this component has always taken both.
    The summary line reports `files_count` (the truth about the PR) while the list can
-   only render what arrived. */
+   only render what arrived.
+
+   That gap is also why a `targetFile` this tab is sent can be a real changed file
+   and still be absent here: the container says so in a notice rather than leaving
+   the reader looking at a view that did not change. The target itself is handed to
+   `SmartDiffViewer`, which is what expands the file and scrolls to the line — the
+   degraded branch renders the plain `DiffViewer`, which has no per-file disclosure
+   to open, so a target there gets the notice and nothing else. */
 "use client";
 
 import React from "react";
@@ -34,6 +41,7 @@ import {
   DiffOrderToggle,
   SmartDiffViewer,
   latestFindingsPerAgent,
+  samePath,
   type DiffOrder,
 } from "../SmartDiffViewer";
 import { SKELETON_ROWS } from "./constants";
@@ -67,6 +75,19 @@ interface DiffTabProps {
    * and therefore no badges, so nothing there needs it.
    */
   onOpenFinding: (findingId: string) => void;
+  /**
+   * The changed file the reader was sent here to read, if any, and the line inside
+   * it. Both optional: the tab is complete without them, and whoever owns the URL
+   * supplies them.
+   *
+   * `targetFile` can legitimately name a file this tab never received. `files` is
+   * one page of at most 100 files from GitHub while the sender grounds against the
+   * PR's full `pr_files` list, so on a large pull request the target is real and
+   * absent at the same time — which is why this container says so rather than
+   * leaving the reader on an unchanged view.
+   */
+  targetFile?: string;
+  targetLine?: number;
 }
 
 export function DiffTab({
@@ -80,6 +101,8 @@ export function DiffTab({
   onOrderChange,
   canComment,
   onOpenFinding,
+  targetFile,
+  targetLine,
 }: DiffTabProps) {
   const t = useTranslations("prReview");
   const { data: comments } = usePrComments(prId);
@@ -115,6 +138,12 @@ export function DiffTab({
   const degraded = smartDiff.isError || (!smartDiff.isLoading && !smartDiff.data);
   const loading = smartDiff.isLoading;
 
+  // Derived, not state: the file list is a prop, so whether the target is in it is
+  // a fact about this render. Compared with `samePath`, the same comparison the
+  // view model uses to expand the file — matching it a second way would let one
+  // file be both "expanded" and "missing".
+  const targetMissing = targetFile != null && !files.some((f) => samePath(f.path, targetFile));
+
   return (
     <section>
       <SectionLabel
@@ -147,6 +176,10 @@ export function DiffTab({
         />
       </div>
 
+      {targetFile != null && targetMissing && (
+        <div style={s.notice}>{t("smartDiff.targetMissing", { path: targetFile })}</div>
+      )}
+
       {degraded && <div style={s.notice}>{t("smartDiff.unavailable")}</div>}
 
       {loading ? (
@@ -165,6 +198,8 @@ export function DiffTab({
           grouped={order === "smart"}
           commenting={commenting}
           onOpenFinding={onOpenFinding}
+          targetFile={targetFile}
+          targetLine={targetLine}
         />
       )}
     </section>

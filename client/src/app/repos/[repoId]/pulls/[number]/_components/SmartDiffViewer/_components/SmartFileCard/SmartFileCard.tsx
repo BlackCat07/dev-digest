@@ -58,6 +58,7 @@ export function SmartFileCard({
   file,
   commenting,
   openOverride,
+  targetLine,
   onToggle,
   onOpenFinding,
 }: {
@@ -65,6 +66,11 @@ export function SmartFileCard({
   commenting?: DiffCommentApi;
   /** The reader's explicit choice, if they have made one; otherwise the rule decides. */
   openOverride: boolean | undefined;
+  /**
+   * The line to reveal, set only when the tab's target names THIS file — the
+   * viewer does the path matching, so this card never compares paths itself.
+   */
+  targetLine?: number;
   onToggle: (path: string, next: boolean) => void;
   onOpenFinding: (findingId: string) => void;
 }) {
@@ -95,6 +101,37 @@ export function SmartFileCard({
     for (const ln of lines) for (const k of keysForLine(ln)) renderedKeys.add(k);
     return partitionThreads(fileThreads, renderedKeys);
   }, [comments, file.path, lines]);
+
+  // ---- the target ------------------------------------------------------------
+  //
+  // ONE effect, and it touches only the DOM and a ref — which is what an effect is
+  // for. It cannot open this card: openness is derived from the target one level
+  // up (see `openOverrideFor`), so the row already exists in the commit this runs
+  // after. Written as two effects — one to open, one to scroll — it would be
+  // `react-hooks/set-state-in-effect`, an **Error** in this package that fails
+  // `next build` (`client/INSIGHTS.md`, 2026-08-11).
+  //
+  // The ref is the idempotence guard. Without it any later re-render that happens
+  // to re-run this effect would scroll the page out from under a reader who has
+  // since scrolled somewhere else. Keyed on the line, so a new target scrolls and
+  // the same one never scrolls twice.
+  //
+  // A line the patch does not render resolves to no element and the scroll is a
+  // no-op: the number is explicitly ungrounded (the model never saw a hunk body),
+  // so landing on the file is the promise and landing on the line is the
+  // convenience.
+  const scrolledLine = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    if (targetLine == null || !open) return;
+    if (scrolledLine.current === targetLine) return;
+    scrolledLine.current = targetLine;
+    // `getElementById`, never `querySelector`: a path's `/` and `.` are legal in an
+    // id but are selector syntax, so a selector needs `CSS.escape` and silently
+    // matches nothing without it.
+    document
+      .getElementById(lineId(file.path, targetLine))
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [targetLine, open, file.path]);
 
   return (
     <div style={diffStyles.fileCard}>
@@ -161,6 +198,12 @@ export function SmartFileCard({
                 const lineNo = ln.kind === "add" || ln.kind === "ctx" ? ln.newNo : undefined;
                 const severity = lineNo != null ? edgeSeverity.get(lineNo) : undefined;
                 const anchored = lineNo != null ? byLine.get(lineNo) : undefined;
+                const edge = severity
+                  ? s.lineEdge((SEV[severity as keyof typeof SEV] ?? SEV.INFO).c)
+                  : undefined;
+                // The scroll margin goes on the row the target names, and on no
+                // other: it is what keeps that row clear of the sticky header.
+                const isTarget = targetLine != null && lineNo === targetLine;
                 return (
                   <CodeLine
                     key={i}
@@ -169,11 +212,7 @@ export function SmartFileCard({
                     threads={threadsForLine(ln, matched)}
                     commenting={commenting}
                     id={lineNo != null ? lineId(file.path, lineNo) : undefined}
-                    rowStyle={
-                      severity
-                        ? s.lineEdge((SEV[severity as keyof typeof SEV] ?? SEV.INFO).c)
-                        : undefined
-                    }
+                    rowStyle={isTarget ? { ...edge, ...s.targetRow } : edge}
                     right={
                       anchored?.[0] ? (
                         /* `findings` is sorted worst-first, so `[0]` is the worst

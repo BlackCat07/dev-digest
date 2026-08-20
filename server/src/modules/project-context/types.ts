@@ -20,6 +20,7 @@ import type {
   ContextAttachment,
   ContextAttachmentInput,
   ContextDocSource,
+  EffectiveContextDoc,
   ProjectDocList,
   RepoRef,
   SpecFile,
@@ -253,6 +254,27 @@ export interface ProjectContext {
     input: ContextAttachmentInput,
   ): Promise<ContextAttachment[]>;
   resolveForRun(agentId: string, repoId: string): Promise<RunContextResolution>;
+  /**
+   * The same effective set as {@link resolveForRun}, as METADATA — paths, their
+   * source and their effective order, with no document text.
+   *
+   * Additive and read-only: it exists so a consumer that needs to know *which*
+   * documents an agent carries, and in what order, does not have to pay for
+   * reading all of them. `resolveForRun` opens every document it keeps, which is
+   * the right cost inside a review and the wrong one on a request-time path that
+   * only needs to fingerprint the set.
+   *
+   * Both answers come from one call to `mergeEffectiveAttachments`, deliberately:
+   * the effective set is defined in exactly one place, so a consumer cannot
+   * accumulate a second definition of it by reading the attachment tables
+   * itself. Whatever this returns, `resolveForRun` would have attempted — minus
+   * whatever the clone then refused.
+   *
+   * Takes no `workspaceId` for the same reason `resolveForRun` takes none: the
+   * caller has already resolved the repository within its own workspace scope,
+   * and that repository is the scope here.
+   */
+  listEffectiveDocs(agentId: string, repoId: string): Promise<EffectiveContextDoc[]>;
 }
 
 /**

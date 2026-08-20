@@ -287,6 +287,57 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         .catch((err: unknown) => app.log.warn({ err }, 'PR intent enqueue failed'));
     };
 
+    /**
+     * L05 — request this PR's brief in the background, from HERE, for exactly
+     * the reason the intent trigger above lives here.
+     *
+     * This route is the only writer of `pr_files` and of `pull_requests.body`,
+     * so it is the only place where the material a brief summarises is
+     * guaranteed to exist. Triggering from the PR list instead is how 15 of 21
+     * `pr_intent` rows came to be derived from the title alone, at the
+     * confidence floor, cached forever (`server/INSIGHTS.md`, 2026-08-11).
+     *
+     * Called on BOTH exits, like the intent trigger: the offline path serves
+     * persisted files and body, which is real material and exactly the
+     * degradation the spec describes. It takes no head SHA because the brief
+     * service reads the row itself — which is why the refresh path calls it
+     * AFTER the update that writes the refreshed head, files and body, never
+     * before.
+     *
+     * The route WIRES ONLY (`DDG-ARCH-001`). The cache-key comparison, the
+     * dedup, the abandoned-generation window and the per-pull-request rate cap
+     * are the brief service's rules, and nothing here holds a copy of any of
+     * them: a pull request whose stored brief still matches its current state
+     * enqueues nothing, and a read while a generation is in flight is refused by
+     * the claim rather than by anything visible from here. A refusal is an
+     * ORDINARY outcome — it arrives as a rejected promise, and it leaves the
+     * stored brief and its stale flag exactly as they were.
+     *
+     * Not awaited, so it cannot touch this response's status, body or latency,
+     * and `.catch`'d because a floating rejection would kill the process
+     * (`server/INSIGHTS.md`, 2026-08-06 / 2026-08-07) even though the method
+     * itself never throws for anything the brief can describe.
+     *
+     * What this costs is THROUGHPUT, not latency. Because the trigger is
+     * un-awaited the freshness check runs after the response is sent, so it is
+     * outside this request's own p95 — but it is paid on every read of every
+     * pull request, by every reader, whether or not the Overview tab is ever
+     * opened: a handful of primary-key reads plus one RECURSIVE walk of the
+     * clone's document roots, which re-resolves each matched candidate twice for
+     * its confinement check. No file CONTENTS are read, and that is the part
+     * that has to stay true — anything added to the cache key that reads bytes
+     * multiplies this by every pull-request detail request in the product.
+     */
+    const triggerBrief = () => {
+      // No `force`: an automatic trigger never overrides the freshness rule —
+      // only the card's regenerate control does, through the POST route.
+      void container.brief
+        .requestGeneration(workspaceId, pr.id, {}, app.log)
+        .catch((err: unknown) =>
+          app.log.warn({ err, prId: pr.id }, 'PR brief generation not started'),
+        );
+    };
+
     // Local-first: refresh detail from GitHub when a token is configured;
     // otherwise serve the persisted files/commits/body (seeded or previously
     // imported) so PR detail works offline.
@@ -339,6 +390,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         .where(eq(t.pullRequests.id, pr.id));
 
       triggerIntent(detail.head_sha);
+      triggerBrief();
       return { ...detail, id: pr.id };
     } catch (err) {
       app.log.warn({ err }, 'GitHub PR detail refresh skipped (no token / offline); serving persisted detail');
@@ -346,6 +398,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       const commits = await container.db.select().from(t.prCommits).where(eq(t.prCommits.prId, pr.id));
       // The persisted head SHA, because nothing was refreshed on this path.
       triggerIntent(pr.headSha);
+      triggerBrief();
       return {
         id: pr.id,
         number: pr.number,

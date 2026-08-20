@@ -4,6 +4,7 @@ import {
   type ContextAttachment,
   type ContextAttachmentInput,
   type ContextDocSource,
+  type EffectiveContextDoc,
   type ProjectDoc,
   type ProjectDocList,
   type ProjectDocListStatus,
@@ -276,6 +277,28 @@ export class ProjectContextService implements ProjectContext {
       skipped,
       tokens: budgeted.kept.reduce((sum, d) => sum + d.tokens, 0),
     };
+  }
+
+  /**
+   * The effective document set of one agent, as metadata only.
+   *
+   * The same two store reads and the same {@link mergeEffectiveAttachments} call
+   * {@link resolveForRun} opens with, stopping there. No clone read, no text, no
+   * token count — so this is safe on a request-time path where reading every
+   * attached document would not be. The absence of `repoDocs` in the body is the
+   * whole guarantee; a test asserts it with a reader that throws.
+   *
+   * Cross-repository attachments are dropped exactly as they are for a run, and
+   * silently here: naming them is a run-log concern, and this answer carries no
+   * skip channel because its caller has nowhere to put one. Nothing is lost —
+   * {@link resolveForRun} still reports every one of them.
+   */
+  async listEffectiveDocs(agentId: string, repoId: string): Promise<EffectiveContextDoc[]> {
+    const [own, inherited] = await Promise.all([
+      this.deps.store.listAgentAttachments(agentId),
+      this.deps.store.listInheritedAttachments(agentId),
+    ]);
+    return mergeEffectiveAttachments(own, inherited, repoId).effective;
   }
 
   /**

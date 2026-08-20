@@ -15,6 +15,19 @@ function normalize(path: string): string {
   return path.trim().replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "").toLowerCase();
 }
 
+/**
+ * Do two paths name the same changed file?
+ *
+ * Exported because a second consumer needs the SAME comparison the view model
+ * uses: a target handed to this tab from elsewhere on the screen (a review-focus
+ * row, a link) has to be matched against `pr.files` before the reader can be told
+ * their file is not here, and matching it a second way would let a file be
+ * simultaneously "expanded" by one rule and "missing" by another.
+ */
+export function samePath(a: string, b: string): boolean {
+  return normalize(a) === normalize(b);
+}
+
 /** Worst severity first, then by line, so a file's list reads top-down by urgency. */
 function byUrgency(a: FindingRecord, b: FindingRecord): number {
   const rank = (SEVERITY_RANK[a.severity] ?? 99) - (SEVERITY_RANK[b.severity] ?? 99);
