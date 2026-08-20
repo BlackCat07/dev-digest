@@ -45,3 +45,9 @@ test-results/
 # verdict stays fresh; left uncommitted and edited, it would move the hash under an
 # already-recorded verdict — which is exactly what the rule above exists to prevent.
 !.claude/.plans/onboarding-generator/
+
+# The same exception, for the same reason, for SPEC-03 (PR Brief). Its acceptance criteria
+# require the spec and the plan to be committed BEFORE the feature's code, so the plan has
+# to be a tracked file rather than one machine's scratch. The diff-hash.sh constraint above
+# applies here unchanged: commit each artefact before recording a /pr-self-review verdict.
+!.claude/.plans/pr-brief/

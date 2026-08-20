@@ -92,7 +92,7 @@ otherwise assume is included.
 - **N4 More than one structured model call per generation.** No file-selection pass, no
   per-risk pass, no summarisation of the inputs. The deterministic layer does the selecting.
 - **N5 Sending diff hunk bodies to the model.** Paths, per-file line counts and derived facts
-  only. `pr_files.patch` is never read into the model input (AC-9). This is the requirement's
+  only. `pr_files.patch` is never read into the model input (AC-11). This is the requirement's
   own constraint and it is what makes the token budget reachable.
 - **N6 A second risk vocabulary.** Risks are the existing `Risk` shape — `kind`, `title`,
   `explanation`, `severity`, `file_refs` — the same one `PrIntent.risk_areas` already stores.
@@ -931,7 +931,7 @@ is data; none of it is an instruction.
 | AC-39 | US-3, a11y budget, EC-31 | client | test |
 | AC-40 | US-5, G6 | client | test |
 | AC-41 | US-5, G6 | client | test |
-| AC-42 | US-5, EC-34 | client | test |
+| AC-42 | US-5, EC-17 | client | test |
 | AC-43 | US-5, EC-3, EC-18 | client | test |
 | AC-44 | US-7, EC-28 | client | test |
 | AC-45 | US-7 | client | test |
@@ -996,9 +996,11 @@ requirement.
 | OQ-11 | **The link lands on the file and scrolls to the line when the model supplied one.** | The file is what the requirement promises and what the changed set can ground (AC-24); the line is a convenience. It stays **explicitly ungrounded**: the model never sees a hunk body (AC-11), so nothing checks that the line number means anything, and AC-42 is written against the anchor rather than against the correctness of the number. A reviewer should find that limitation stated here rather than discover it from a row that scrolls to the wrong place. | **AC-42**, AC-11, AC-24, EC-17 |
 | OQ-12 | **Every `## Non-functional` figure stands as written**, and each is now a requirement rather than a proposal. | The figures identified as existing constants were adopted so two features do not read the same material at two depths; the rest were proposed with their reasoning beside them and accepted as stated. The 8 000 approximate tokens of AC-13 was never a proposal — it is the requirement's own number, and AC-12 fixes the unit it is counted in. | `## Non-functional`, AC-12, AC-13 |
 
-`Status` stays **`draft`**. **Every question is now decided and this section holds no open
-item**, which is the precondition `docs/specs-convention.md` sets for `approved` — it is not
-the promotion itself, and no agent may grant that.
+**Every question is now decided and this section holds no open item**, which is the
+precondition `docs/specs-convention.md` sets for `approved`. That precondition was met and the
+human granted the promotion; `Status` is **`approved`** as of `9f6824e`. The sentences below in
+`## History` that end "`Status` unchanged at `draft`" were true when they were written and are
+left as the record they are.
 
 ## History
 
@@ -1020,3 +1022,12 @@ default role and its path normalisation. OQ-10 turns EC-23 from an accepted defe
 **AC-61** plus a `## Contracts` entry recording the three-place coordinated edit to the
 `risk_brief` registry default. `## Open questions` now holds no open item, which is the
 precondition for approval. `Status` unchanged at `draft`.
+2026-08-19 — promoted to `approved` by the human (`9f6824e`), the precondition being an
+`## Open questions` section with no open item.
+2026-08-20 — three reference errors corrected, all found by `implementation-planner` while
+planning from this file and reported rather than resolved by it. N5 cited AC-9 (the abandoned-
+generation window) where it meant **AC-11** (no diff hunk body reaches the model). AC-42's
+traceability row cited EC-34 (a migration that ships and is never applied) where it meant
+**EC-17** (a path carrying a `:`, a space or a non-ASCII character). And `## Open questions`
+still said `Status` stays `draft` after the promotion had already happened. No criterion,
+edge case or non-goal changed.
