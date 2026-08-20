@@ -1,4 +1,4 @@
-# Spec: PR Brief (Why + Risk) | Spec ID: SPEC-03 | Status: approved
+# Spec: PR Brief (Why + Risk) | Spec ID: SPEC-03 | Status: implemented
 Supersedes: —
 
 A reviewer opening a pull request can read, in one card above the diff, what the change does
@@ -74,8 +74,13 @@ otherwise assume is included.
 
 - **N1 Re-specifying Intent, Blast Radius, Prior PRs, Smart Diff or Project Context.** All five
   are built and specified. This feature is a **consumer** of them: it reads their output through
-  their existing boundaries and changes none of their behaviour. Where this spec names one of
-  them it is stating a dependency, not a requirement on it.
+  their existing boundaries. Where this spec names one of them it is stating a dependency, not a
+  requirement on it. **One exception, agreed before the code started (plan `## Open questions &
+  recommendations` Q1):** `ProjectContext` gained one additive, read-only method,
+  `listEffectiveDocs(agentId, repoId)`, returning the same merged effective attachments
+  `resolveForRun` already computes without reading any document's bytes. No existing method's
+  behaviour changed. Four of the five — Intent, Blast Radius, Prior PRs, Smart Diff — remain
+  wholly unchanged.
 - **N2 Moving the verdict banner onto the Overview tab.** The design's top region — the red
   `Request changes` headline, the `6 findings` / `2 blockers` chips, the `61` PR score and the
   `$0.014 · 8.2K→1.3K` cost line — is the **already-built** `VerdictBanner`, and it renders on
@@ -650,6 +655,8 @@ a test and a review finding will cite, so they are not renumbered to sit in plac
   against, are the ones `pr_files` recorded; the normalised form exists only inside the
   classifier, and the two must not be allowed to become the same comparison by accident.
 
+## Cross-module interactions
+
 Two packages, one direction. `client` calls `server`; `server` reads its own derivations
 through the boundaries they already publish, the clone through the path-confined document
 reader, GitHub for the linked issue, and the model through the container's provider port.
@@ -1002,6 +1009,84 @@ human granted the promotion; `Status` is **`approved`** as of `9f6824e`. The sen
 `## History` that end "`Status` unchanged at `draft`" were true when they were written and are
 left as the record they are.
 
+## Data
+
+| What | Shape | Notes |
+|---|---|---|
+| `GET /pulls/:id/brief` | → `PrRiskBrief` (`contracts/pr-brief.ts`) | 60 req/min per workspace. Answers `200` with an empty document (`generation_state: "never_generated"`) rather than `404` for a pull request nobody has generated a brief for; the only `404` here is the pull request resolving outside the caller's workspace, before any intent row, blast fact, document or clone path is touched (AC-35). |
+| `POST /pulls/:id/brief/generate` | body `GenerateBriefPayload.nullish()` (`{ force?: boolean }`) → `202 { status: "accepted", jobId: string }` | 10/hour **per pull request** (`keyGenerator` keys on the id, not the caller's IP). `jobId` is the empty string when the request was accepted but nothing needed doing — `PrBriefs.requestGeneration`'s return type has no "accepted, nothing to do" variant, so an already-fresh brief and a freshly enqueued one share one response shape and differ only in whether `jobId` is empty. |
+| `pr_brief` table | `server/src/db/schema/reviews.ts:226` | `pr_id` (PK, FK cascade) + `json jsonb $type<StoredBriefBody>()` — a **cast**, read back through a validating `safeParse`, never trusted — plus 14 columns added by migration `0019_misty_terrax.sql`: `cache_key`, `head_sha`, `state` (`running`\|`done`, default `done`), `status` (`ok`\|`partial`\|`degraded`, default `degraded`), `reason`, `risk_level`, `generated_at` (default `now()`, not null), `started_at`, `provider`, `model`, `attempts`, `tokens_in`, `tokens_out`, `cost_usd`, `error`. All additive; no existing column touched. |
+| `contracts/pr-brief.ts` | new file, both `vendor/shared` copies, byte-identical | `RiskLevel` (built from `RiskSeverity.options`), `BriefStatus`, `BriefReason` (11 values), `BriefSourceKind` (8), `BriefSourceStatus` (3), `BriefSource`, `ReviewFocusItem`, `BriefDiffStats`, `BriefGenerationState`, `PrRiskBrief`, `GenerateBriefPayload` — eleven symbols. `Risk` / `RiskSeverity` are imported and reused verbatim from `./brief.js`. `contracts/brief.ts` (`PrBrief`, `Intent`, `BlastRadius`, `Risks`, `PrHistory`) is untouched, exactly as `## Contracts` above states. |
+| `BriefDiffStats` | `{ files_changed, files_listed, additions, deletions, symbols, endpoints }` | Six fields, present on **every** stored brief including a degraded one — not the four `## Contracts` above describes. `symbols` and `endpoints` (the blast map's own counts, `BlastCounts.symbols` / a distinct-endpoint count, verbatim) were added in a second remediation round, after `plan-verifier` found the shipped four-field shape did not carry what AC-30 requires. **Consequence:** a brief stored under the earlier four-field shape now fails `StoredBriefBody`'s `safeParse` and reads back as an empty (`never_generated`) brief until regenerated — the documented behaviour for an unparseable jsonb payload — and there is no backfill, because the counts live inside the existing `json` column rather than a new one. |
+| `contracts/platform.ts` (`FEATURE_MODELS.risk_brief`) | value change, both copies + `client/src/lib/feature-models.ts` | `defaultProvider` `openai` → `openrouter`, `defaultModel` `gpt-4.1` → `deepseek/deepseek-v4-flash` (AC-61). No field, type or name changed. |
+| `?file=`, `?line=` | `PrDetailView` URL search params | Carried alongside the existing `?tab`, `?trace`, `?finding`, `?order`; cleared together with `?finding` when the reader switches tabs by hand. |
+| `messages/en/prBrief.json` | new namespace | The card's own copy: labels, the three level words, one sentence per `BriefReason` value, and `reasonUnknown` for AC-49's fallback. |
+| `messages/en/prReview.json` | one key added | `smartDiff.targetMissing` — the diff tab's "this file isn't in the rendered diff" notice; kept in the diff tab's own namespace rather than `prBrief`'s, because it is the diff tab's sentence (AC-43). |
+| `messages/en/brief.json` | unread | Still describes the older composed `{intent,blast,risks,history}` shape this feature does not produce. Left in place and unread (EC-26, `accepted`). |
+
+## States
+
+| State | Trigger | What the reader sees |
+|---|---|---|
+| Never generated | no `pr_brief` row for this pull request | One empty state offering generation (AC-46) — not one empty region per empty list. |
+| Loading | the read is in flight | A placeholder shaped like the loaded card, so nothing below it shifts when the brief lands (AC-47). |
+| Running | `generation_state === "running"` | A running notice, and — a deliberate divergence from a literal reading of the design — the **previously stored brief, if there is one, keeps rendering underneath it** rather than being blanked. Adopted because a generation now starts on nearly every first open of a pull request (AC-58), so replacing the card's body on every regenerate would be the common case rather than the rare one; the stale notice is suppressed while running so the two notices never stack. |
+| Stale, not running | `brief.stale === true` | The stored content renders, plus a notice offering regeneration (AC-50). |
+| Degraded | `status === "degraded"` | A notice naming the reason; the six deterministic `diff_stats` figures render. The risks section and the review-focus section are **both absent from the layout**, not rendered as empty lists — a deliberate divergence from a literal "no risks and no review-focus entries" (satisfied as data) to no risks/review-focus *heading* at all, because nobody asked a model and a heading over nothing invites exactly the "no risks were identified" misreading a degraded brief must not make — the same refusal the blast card's own degraded state makes. |
+| Partial | `status === "partial"` | A notice naming the reason (`no_intent`, an index reason carried verbatim from the blast map, or `restates_title`); the risks and review-focus sections render normally beside it, because a partial brief did receive a model answer. |
+| Unrecognised reason | `reason` is not one of `BriefReason`'s eleven values | The generic fallback sentence renders — never the raw string, never a message-key path (AC-49). |
+| Read error | the `GET` itself failed | An inline error inside the card; the sidebar, the breadcrumb and the rest of the tab stay navigable (AC-51). |
+| Generate error | the `POST` was refused (most often a 422 — a generation is already running) | Rendered separately from the read error, so a refused regenerate never takes the brief already on screen down with it. |
+| Files changed, target present | the review-focus row's file is among the files this page of the diff received | The file expands even where its default state is collapsed, and the target line, if any, scrolls into view clear of the measured sticky header (AC-41, AC-42). |
+| Files changed, target absent | the targeted path is not among the files this page received (GitHub's 100-file cap, or a stale link) | A notice names the path; the rest of the tab renders normally (AC-43). |
+
+## Implementation
+
+**Server** — `server/src/modules/brief/`:
+
+| File | Carries |
+|---|---|
+| `types.ts` | Every port this module uses (`BriefStore`, `BriefIntentReader`, `BriefBlastReader`, `BriefPriorPrsReader`, `BriefDocSetReader`, `BriefAgentLister`, `BriefDocReader`, `FeatureModelResolver`, `BriefJobQueue`, `BriefLogger`, `BriefGitHubIssueReader`, `BriefDeps`), each declared by this module and satisfied structurally — no sibling-module import. |
+| `constants.ts` | Every fixed figure the spec names, each with its source in the comment: the token and path caps, the shed/core source order, the deadline, retry count and staleness window. |
+| `file-roles.ts` | `FileRoleClassifier`, `orderChangedFilesByRole`, `capFileList` (AC-60, AC-17). `classifyPath` itself is never imported here — it is reached only through `container.fileRole`. |
+| `cache-key.ts` | `computeCacheKey` — the nine-value digest, deduplicated by path before hashing (AC-2, EC-4). |
+| `documents.ts` | The effective-document-set union over the repository's enabled agents (AC-59), and the byte-size lookup used for the cache key (no bytes read). |
+| `assemble.ts` | The eight-source assembly, the role ordering and cap, the budget-shedding loop, and `diff_stats` (six fields, since the second remediation round). |
+| `prompt.ts` | The two model messages; every source wrapped as untrusted exactly once in the user message; the post-wrap size re-check the budget is actually measured against. |
+| `schemas.ts` | `PrBriefDraft` — the structured-call schema (`what`, `why`, `risks`, `review_focus`; no risk level). |
+| `grounding.ts` | Path and endpoint grounding, risk-level derivation, and the `restates_title` check. |
+| `repository.ts` | The only file in this module touching `drizzle-orm` / `src/db`; `claimRunning`'s single-statement claim (AC-8, AC-9); the validating `safeParse` on read (EC-24). |
+| `service.ts` | `BriefService` — `getBrief` (no write, no model call), `requestGeneration` (freshness, `force`, the claim), `runGeneration` (the one bounded call and its three distinguishable failure reasons). |
+| `routes.ts` | `GET /pulls/:id/brief`, `POST /pulls/:id/brief/generate`, and the job-handler registration. |
+
+Elsewhere in `server/src/`:
+
+| File | Carries |
+|---|---|
+| `prompts/brief.system.md` | The stable instruction text, loaded through `platform/prompts.ts`; carries its own untrusted-data clause, since this module never reaches `reviewer-core`'s `INJECTION_GUARD` (N3). |
+| `db/schema/reviews.ts:226` | `pr_brief`'s columns. |
+| `db/migrations/0019_misty_terrax.sql` | The additive migration; applied against the docker-compose database. |
+| `modules/project-context/types.ts`, `service.ts` | `listEffectiveDocs` — the one additive, read-only method this feature adds to a dependency it otherwise leaves alone (N1). |
+| `platform/container.ts` | The `fileRole` arrow property (wired to `modules/smart-diff/classify.ts`) and the `brief` getter plus `ContainerOverrides.brief`. |
+| `modules/index.ts:50` | The `brief` module registration. |
+| `modules/pulls/routes.ts` | `triggerBrief()`, called un-awaited and `.catch`'d on both exits of `GET /pulls/:id`, beside the existing `triggerIntent`. |
+| `vendor/shared/contracts/pr-brief.ts` (+ client copy) | The new contract file. |
+| `vendor/shared/contracts/platform.ts` (+ client copy) | `FEATURE_MODELS.risk_brief`'s new default. |
+
+**Client** — `client/src/`:
+
+| File | Carries |
+|---|---|
+| `lib/hooks/brief.ts` | `usePrBrief` (polls only while `generation_state === "running"`), `useGenerateBrief` (sends `{ force: true }`). |
+| `lib/feature-models.ts` | `risk_brief`'s registry entry, moved to the same OpenRouter default. |
+| `app/repos/[repoId]/pulls/[number]/_components/BriefCard/` | The card unit — presentational, no data hook; the state ladder of `## States` above. |
+| `.../OverviewTab/OverviewTab.tsx` | Owns `usePrBrief` / `useGenerateBrief`; mounts `BriefCard` above `IntentCard` and `BlastRadiusCard` in that order; hands `onOpenFile` down. |
+| `.../PrDetailView/PrDetailView.tsx` | `?file=` / `?line=` read and cleared alongside the existing params; `openFile(path, line?)` navigating to `?tab=diff`. |
+| `.../DiffTab/DiffTab.tsx`, `.../SmartDiffViewer/` | `targetFile` / `targetLine` props; expand-and-scroll; the target-missing notice. |
+| `messages/en/prBrief.json`, `messages/en/prReview.json` | The card's namespace and the diff tab's one added key. |
+
+**Tests.** Hermetic: `server/test/brief-{file-roles,cache-key,assemble,prompt,grounding,service,trigger}.test.ts`, `server/test/project-context-effective.test.ts` (extended), `client/src/lib/hooks/brief.test.tsx`, `client/…/BriefCard/BriefCard.test.tsx`, `client/…/PrDetailView/PrDetailView.test.tsx`, `client/…/DiffTab/DiffTab.test.tsx` and `.../SmartDiffViewer/SmartDiffViewer.test.tsx` (both extended). **Not shipped in this run:** `server/test/brief.it.test.ts`, the DB-backed acceptance pass over a real Postgres (AC-1 … AC-9 end to end, AC-35's cross-workspace 404, AC-58's trigger) — deferred to a separate `test-writer` dispatch, since Docker was not authorised inside an implementer dispatch. The hermetic `brief-service.test.ts` covers the same no-second-model-call criterion against a mock provider.
+
 ## History
 
 2026-08-19 — spec written.
@@ -1031,3 +1116,27 @@ traceability row cited EC-34 (a migration that ships and is never applied) where
 **EC-17** (a path carrying a `:`, a space or a non-ASCII character). And `## Open questions`
 still said `Status` stays `draft` after the promotion had already happened. No criterion,
 edge case or non-goal changed.
+2026-08-20 — implemented over fifteen tasks and two remediation rounds (`.claude/.plans/pr-brief/`).
+`## Data`, `## States` and `## Implementation` written; `Status` moved to **`implemented`**. `N1`
+amended to record its one agreed exception: `ProjectContext` gained an additive, read-only
+`listEffectiveDocs` method, decided before the code started (the plan's `## Open questions &
+recommendations` Q1) — the other four named dependencies (Intent, Blast Radius, Prior PRs, Smart
+Diff) remain wholly unchanged. `client/specs/smart-diff.md`'s non-goal on `file:line` navigation
+was closed the same day, since T6 and T10 built exactly that; its own `## History` records it.
+Two shipped divergences from a literal reading of an acceptance criterion, both recorded above
+rather than in the criteria themselves: the **running** state keeps a previously stored brief on
+screen rather than blanking it, because a generation now starts on nearly every first open
+(AC-58); and a **degraded** brief renders no risks/review-focus section at all, rather than a
+sentence claiming none were found, since nobody asked a model. `BriefDiffStats` gained `symbols`
+and `endpoints` in the second remediation round, after `plan-verifier` found the shipped shape did
+not carry the blast counts AC-30 requires — `## Contracts` above still describes the four-field
+shape it was written against and is not amended here, since it is upper-half text; `## Data`
+carries the six-field shape that shipped. Four findings were reported rather than resolved,
+because each is a disagreement with the criteria themselves and not with the code: AC-2 names
+"nine values" over eight enumerated clauses while the code digests all nine including the
+brief-format version; AC-30's `Verify:` observable still says "four figures" where the normative
+sentence above it — met verbatim — now yields six; AC-25's review-focus half cannot be grounded
+against an endpoint, because `ReviewFocusItem` carries no field that could name one; and AC-33's
+observable presumes a source entry for a linked issue never referenced, where the assembly
+records an entry only for an input actually offered. None of the four changed the acceptance
+criteria; all four are carried in the parent's documentation report rather than in this file.

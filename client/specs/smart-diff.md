@@ -109,9 +109,11 @@ arrived.
 - **The split suggestion.** The server returns `split_suggestion` and this tab does
   not render it yet; the copy (`smartDiff.largeTitle` / `largeBody`) is in place for
   when it does.
-- **Making `FindingCard`'s `file:line` link jump here** instead of to github.com, and
-  wiring `RiskAreas`' file references to the same target. Both become possible now
-  that a line has a DOM id; both are separate changes.
+- **Wiring `RiskAreas`' file references to the same target** `FindingCard`'s
+  `file:line` link now reaches. A risk's file reference is rendered as plain text
+  where no target exists, on purpose — the shared mono-link primitive with no
+  `href` renders a button that does nothing, which is worse than a label
+  (`specs/pr-brief.md` EC-33). This remains a separate, not-yet-built change.
 
 ## Implementation
 
@@ -142,6 +144,18 @@ arrived.
 Server half: `../server/specs/smart-diff.md`.
 
 ## History
+
+`2026-08-20` — **The "make `file:line` jump here instead of to github.com" non-goal is
+closed: it shipped.** `specs/pr-brief.md` (SPEC-03) needed a review-focus row to land a
+reader on a changed file at a line, so `DiffTab` and `SmartDiffViewer` gained optional
+`targetFile` / `targetLine` props: a target seeds `openOverrides` so the file expands
+even where its default state would collapse it, and `document.getElementById(lineId(...))`
+scrolls the line clear of the sticky header using the `STICKY_SCROLL_MARGIN` this file's
+own `2026-08-11` entry describes — no new measuring needed. A path absent from the
+rendered diff (GitHub's 100-file page cap, or a file this tab never received) renders a
+notice naming it rather than leaving the reader on an unchanged view. The non-goal below
+is narrowed to what remains unbuilt — `RiskAreas`' own file references, which is a
+separate change.
 
 `2026-08-12` — **A findings badge now leaves the tab.** Review feedback on the L03
 PR: a badge that scrolls the diff to a line is a viewer, not navigation — the reader
