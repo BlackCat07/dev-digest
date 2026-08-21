@@ -19,6 +19,20 @@
  *  - contracts/prior-prs  PriorPr, PriorPrsCoverage, PrPriorPrs (L04; the history
  *                         half of the Blast Radius card, deliberately its own
  *                         document rather than a field on PrBlastRadius)
+ *  - contracts/project-context ProjectDoc, ProjectDocList, ContextAttachment,
+ *                         ContextAttachmentInput, EffectiveContextDoc (L05; new
+ *                         symbols only — SpecFile, IndexStatus and
+ *                         RunTrace.specs_read are consumed unchanged)
+ *  - contracts/onboarding OnboardingSectionKind/Status/Reason, OnboardingCommand,
+ *                         OnboardingPathNote, OnboardingTask,
+ *                         OnboardingTourSection, OnboardingTour (L05; new symbols
+ *                         only — knowledge's Onboarding/OnboardingSection are
+ *                         untouched and OnboardingLink is reused by import)
+ *  - contracts/pr-brief   RiskLevel, BriefStatus/BriefReason, BriefSourceKind/
+ *                         Status, BriefSource, ReviewFocusItem, BriefDiffStats,
+ *                         BriefGenerationState, PrRiskBrief, GenerateBriefPayload
+ *                         (L05; new symbols only — brief's PrBrief is untouched
+ *                         and Risk / RiskSeverity are reused by import)
  *  - contracts/trace      RunTrace, RunEvent, RunLogLine (single-document trace)
  *  - contracts/platform   Settings, ConnTestResult, Repo, PrMeta/PrDetail, SpecFile, …
  *  - adapters             adapter interfaces + ModelInfo
@@ -36,6 +50,9 @@ export * from './contracts/conventions.js';
 export * from './contracts/intent.js';
 export * from './contracts/blast.js';
 export * from './contracts/prior-prs.js';
+export * from './contracts/project-context.js';
+export * from './contracts/onboarding.js';
+export * from './contracts/pr-brief.js';
 export * from './contracts/trace.js';
 export * from './contracts/platform.js';
 export * from './contracts/why.js';

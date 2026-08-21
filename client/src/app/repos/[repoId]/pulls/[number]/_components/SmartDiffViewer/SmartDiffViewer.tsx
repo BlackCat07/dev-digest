@@ -9,7 +9,14 @@
    It owns two things: the join into a view model and the group order. Where a
    finding badge LEADS is not its decision — it reports the finding's id upward and
    `PrDetailView` turns that into a route change (see `onOpenFinding`), which is
-   what keeps this component free of `next/navigation`. */
+   what keeps this component free of `next/navigation`.
+
+   It also ACCEPTS a target — a file, optionally a line — from whoever owns the
+   URL, and does the two things a target implies: expand that file whatever the
+   expansion rule says, and let the card scroll — to the row when a line was
+   given, to the card itself when none was. It reads no search param itself, for
+   the same reason it reports a finding id rather than pushing a route: this
+   component knows about files and lines, not about the screen's routes. */
 "use client";
 
 import React from "react";
@@ -17,7 +24,7 @@ import { useTranslations } from "next-intl";
 import type { FindingRecord, PrFile, SmartDiff } from "@devdigest/shared";
 import type { DiffCommentApi } from "@/components/diff-viewer";
 import { useStickyOffset } from "@/lib/sticky-offset";
-import { buildViewModel, groupFiles } from "./helpers";
+import { buildViewModel, groupFiles, samePath } from "./helpers";
 import { s } from "./styles";
 import { SmartDiffGroupHeader } from "./_components/SmartDiffGroupHeader";
 import { SmartFileCard } from "./_components/SmartFileCard";
@@ -39,6 +46,26 @@ export interface SmartDiffViewerProps {
    * a URL — this component knows about findings, not about the PR screen's routes.
    */
   onOpenFinding: (findingId: string) => void;
+  /**
+   * Path of a changed file the reader was sent to, if any.
+   *
+   * Optional because the whole tab works without one: nothing passes it until the
+   * screen that owns the URL does. The path is compared the way the view model
+   * matches paths (see `samePath`), so a target that names a file this page of
+   * the diff never received simply matches nothing here — `DiffTab` is what says
+   * so, because it is the one that knows the file list is an excerpt.
+   */
+  targetFile?: string;
+  /**
+   * Line inside `targetFile` to reveal. **Explicitly ungrounded**: it comes from a
+   * model that never saw a hunk body, so nothing checks that the number means
+   * anything. A scroll to a plausible but wrong line is acceptable; landing on the
+   * wrong FILE is not, which is why the file is matched and the line is not.
+   *
+   * Usually absent, which is why its absence is not a state that scrolls nowhere:
+   * the card is the fallback anchor (see `SmartFileCard`).
+   */
+  targetLine?: number;
 }
 
 export function SmartDiffViewer({
@@ -48,6 +75,8 @@ export function SmartDiffViewer({
   grouped,
   commenting,
   onOpenFinding,
+  targetFile,
+  targetLine,
 }: SmartDiffViewerProps) {
   const t = useTranslations("prReview");
   // Publishes the sticky header's measured height on this subtree, which the
@@ -70,6 +99,37 @@ export function SmartDiffViewer({
     setOpenOverrides((prev) => ({ ...prev, [path]: next }));
   }, []);
 
+  /**
+   * Openness of one card: the reader's own choice first, then the target, then the
+   * rule (the card applies `initialOpen` when this is `undefined`).
+   *
+   * DERIVED from the target rather than written into `openOverrides`, and that is
+   * the load-bearing part: seeding the map from a prop would need a `setState` in
+   * an effect, which `react-hooks/set-state-in-effect` rejects as an **Error**
+   * here and would fail `next build` (`client/INSIGHTS.md`, 2026-08-11). Deriving
+   * it also means the targeted row exists in the SAME commit the target arrives
+   * in, so the card's scroll effect has something to find on its first run instead
+   * of needing a second render.
+   *
+   * The reader still wins: an explicit collapse writes `false` into the map, which
+   * is checked first, so a target cannot re-open a file they just closed.
+   */
+  /**
+   * Does the target name this file? One comparison, used by everything the target
+   * drives — openness, the card's scroll and the line's — so a file cannot be the
+   * target for one of them and not for another.
+   */
+  const isTarget = React.useCallback(
+    (path: string): boolean => targetFile != null && samePath(path, targetFile),
+    [targetFile],
+  );
+
+  const openOverrideFor = React.useCallback(
+    (path: string): boolean | undefined =>
+      openOverrides[path] ?? (isTarget(path) ? true : undefined),
+    [openOverrides, isTarget],
+  );
+
   const model = React.useMemo(
     () => buildViewModel(files, smartDiff, findings),
     [files, smartDiff, findings],
@@ -89,7 +149,9 @@ export function SmartDiffViewer({
             key={file.path}
             file={file}
             commenting={commenting}
-            openOverride={openOverrides[file.path]}
+            openOverride={openOverrideFor(file.path)}
+            targeted={isTarget(file.path)}
+            targetLine={isTarget(file.path) ? targetLine : undefined}
             onToggle={onToggle}
             onOpenFinding={onOpenFinding}
           />
@@ -108,7 +170,9 @@ export function SmartDiffViewer({
               key={file.path}
               file={file}
               commenting={commenting}
-              openOverride={openOverrides[file.path]}
+              openOverride={openOverrideFor(file.path)}
+              targeted={isTarget(file.path)}
+              targetLine={isTarget(file.path) ? targetLine : undefined}
               onToggle={onToggle}
               onOpenFinding={onOpenFinding}
             />

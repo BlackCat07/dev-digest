@@ -11,6 +11,9 @@ import intent from './intent/routes.js';
 import smartDiff from './smart-diff/routes.js';
 import blast from './blast/routes.js';
 import priorPrs from './prior-prs/routes.js';
+import projectContext from './project-context/routes.js';
+import onboarding from './onboarding/routes.js';
+import brief from './brief/routes.js';
 import reviews from './reviews/routes.js';
 import repoIntel from './repo-intel/routes.js';
 
@@ -24,8 +27,9 @@ import repoIntel from './repo-intel/routes.js';
  * bundler, and vitest — native dynamic import() of .ts files is not portable.)
  *
  * This is the Part-0 starter set plus L02's `skills`/`conventions`, L03's
- * `intent` and `smart-diff`, and L04's `blast` + `prior-prs`. Each further lesson adds
- * its own module here (brief/context/onboarding, eval/ci/hooks, memory, plugins,
+ * `intent` and `smart-diff`, L04's `blast` + `prior-prs`, and L05's
+ * `project-context` + `onboarding` + `brief`. Each further lesson adds
+ * its own module here (eval/ci/hooks, memory, plugins,
  * …) without touching any other module.
  */
 export const modules: Record<string, FastifyPluginAsync> = {
@@ -41,6 +45,9 @@ export const modules: Record<string, FastifyPluginAsync> = {
   smartDiff,
   blast,
   priorPrs,
+  projectContext,
+  onboarding,
+  brief,
   reviews,
   repoIntel,
 };

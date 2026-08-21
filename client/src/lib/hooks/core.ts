@@ -6,6 +6,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
+import { useProjectDocs } from "./project-context";
 import type {
   Settings,
   SettingsUpdate,
@@ -15,7 +16,6 @@ import type {
   Repo,
   PrMeta,
   PrDetail,
-  SpecFile,
   IndexStatus,
 } from "../types";
 
@@ -119,14 +119,22 @@ export function usePullDetail(prId: string | number | null | undefined) {
   });
 }
 
-// ---- Project Context (A3 contract; safe to call once API exposes it) ----
-export function useContextFiles(repoId: string | null | undefined) {
-  return useQuery({
-    queryKey: ["context", repoId],
-    queryFn: () => api.get<SpecFile[]>(`/repos/${repoId}/context`),
-    enabled: !!repoId,
-  });
-}
+// ---- Project Context (L05) ----
+/**
+ * The repository's markdown documents.
+ *
+ * Kept under its original name for the callers that already know it, but the
+ * response is `ProjectDocList` — an envelope — and no longer `SpecFile[]`. The
+ * declaration here shipped ahead of its route and never ran, so the array was a
+ * guess: an empty list of documents and a repository with no clone at all are
+ * different answers, and only the envelope's `status` / `reason` tell them
+ * apart. `SpecFile` keeps its own job, one document's TEXT, and is what
+ * `useProjectDoc` returns.
+ *
+ * The implementation lives in `./project-context` with the rest of the
+ * feature's hooks; this stays a name, not a second query.
+ */
+export const useContextFiles = useProjectDocs;
 
 export function useReindexContext() {
   const qc = useQueryClient();

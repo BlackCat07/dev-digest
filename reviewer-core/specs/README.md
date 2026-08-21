@@ -3,7 +3,12 @@
 What each behaviour of the review engine must do: what goes into a prompt, what survives
 grounding, how a score is derived.
 
-Format, naming and required sections: [`../../docs/specs-convention.md`](../../docs/specs-convention.md).
+Format, naming, `Spec ID`, the `Status` lifecycle and the required sections:
+[`../../docs/specs-convention.md`](../../docs/specs-convention.md).
+
+**Only features that live entirely inside this package belong here.** A feature spanning
+more than one package gets a single spec in [`../../specs/`](../../specs/README.md)
+instead, with a per-package section.
 
 ## Specs
 

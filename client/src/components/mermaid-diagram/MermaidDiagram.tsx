@@ -17,9 +17,30 @@ function looksLikeMermaid(src: string): boolean {
  * Renders a mermaid diagram string to inline SVG. mermaid is imported lazily
  * (client-only). We VALIDATE with mermaid.parse({suppressErrors}) before
  * rendering — mermaid otherwise injects a "Syntax error" bomb graphic into the
- * DOM on bad input instead of throwing. Junk/unparseable input renders nothing.
+ * DOM on bad input instead of throwing. Junk/unparseable input renders nothing,
+ * unless the caller supplies `fallback`.
  */
-export function MermaidDiagram({ chart }: { chart: string }) {
+export function MermaidDiagram({
+  chart,
+  fallback = null,
+}: {
+  chart: string;
+  /**
+   * Rendered in place of the diagram when this component decides the string is
+   * not a renderable diagram. Defaults to `null`, which is the historical
+   * behaviour — render nothing rather than a broken box.
+   *
+   * A caller cannot make this decision itself. There are TWO failure modes and
+   * this component swallows both: a string that does not match `MERMAID_RE`,
+   * and one that matches it and is then rejected by `mermaid.parse`. A caller
+   * pre-validating with its own copy of the regex would catch the first and
+   * miss the second — an unquoted `/` inside a node label passes `MERMAID_RE`
+   * and fails the parse — and it would have to import `mermaid` to catch the
+   * second, which is exactly the lazy client-only import this component owns.
+   * So the notice a screen wants to show instead comes in as a prop.
+   */
+  fallback?: React.ReactNode;
+}) {
   const ref = React.useRef<HTMLDivElement>(null);
   const [state, setState] = React.useState<"pending" | "ok" | "invalid">("pending");
 
@@ -55,8 +76,9 @@ export function MermaidDiagram({ chart }: { chart: string }) {
     };
   }, [chart]);
 
-  // Not a (valid) diagram → render nothing rather than a broken box.
-  if (state === "invalid") return null;
+  // Not a (valid) diagram → the caller's fallback, or nothing rather than a
+  // broken box when it supplied none.
+  if (state === "invalid") return <>{fallback}</>;
 
   return (
     <div

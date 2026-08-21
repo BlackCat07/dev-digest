@@ -11,7 +11,7 @@ import {
 } from 'drizzle-orm/pg-core';
 // Type-only: erased before drizzle-kit's bundler ever resolves it, so the
 // `@devdigest/shared` path alias never has to survive migration generation.
-import type { IntentSource, Risk } from '@devdigest/shared';
+import type { IntentSource, PrRiskBrief, Risk } from '@devdigest/shared';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
@@ -179,9 +179,109 @@ export const prIntent = pgTable('pr_intent', {
   error: text('error'),
 });
 
+
+/**
+ * The payload half of a stored brief: exactly the `PrRiskBrief` fields the
+ * columns below do NOT carry.
+ *
+ * Declared as a `Pick` of the contract rather than spelled out again, so a field
+ * added to `PrRiskBrief` cannot quietly stop being stored. `risk_level`,
+ * `status`, `reason`, `head_sha`, `cache_key`, `generated_at` and the five
+ * generation figures are columns and are therefore absent here; `pr_id` is the
+ * primary key, and `stale` / `generation_state` are derived on read (from the
+ * cache key and from `state` plus the row's existence) and are never stored.
+ */
+export type StoredBriefBody = Pick<
+  PrRiskBrief,
+  'what' | 'why' | 'risks' | 'review_focus' | 'diff_stats' | 'sources'
+>;
+
+/**
+ * `pr_brief` — the single stored PR Brief per pull request (SPEC-03, Why + Risk).
+ *
+ * Widened from the `pr_id` + `json` placeholder this file shipped with. Shape
+ * follows `onboarding` (`context.ts`), which follows `pr_intent` above:
+ * parent-keyed PK, `jsonb` for the payload, and REAL columns for everything a
+ * screen or a log line reads without opening the payload — the cache key, the
+ * generation lifecycle, the honesty of the stored brief, provenance and price.
+ *
+ *  - **No index.** `pr_id` is the PRIMARY KEY, so the FK column already carries a
+ *    unique B-tree, and every read of this table is by that key — one pull
+ *    request at a time. The "Postgres does not index a FK column on its own"
+ *    rule stated on `reviews` above does not bite here.
+ *  - **No `workspace_id`.** As with `pr_intent`: `pr_id` FKs to `pull_requests`,
+ *    which is already workspace-scoped, and every read path resolves the pull
+ *    request through `getPull(workspaceId, prId)` before it touches this row.
+ *  - **`never_generated` is the ABSENCE of a row**, not a `state` value — which
+ *    is why `state` has two members where the contract's
+ *    `BriefGenerationState` has three. That asymmetry is deliberate.
+ *  - `text(..., { enum: [...] })` emits a PLAIN `text` column, exactly as
+ *    `reviews.kind` and `pr_intent.status` do: drizzle generates NO CHECK
+ *    constraint from it and the enum is TypeScript-level only. Do not hand-add a
+ *    CHECK to the generated SQL.
+ *  - Every column added after the placeholder is nullable or carries a
+ *    NON-VOLATILE default (`now()` is stable), so the `ALTER TABLE` does not
+ *    rewrite the table.
+ */
 export const prBrief = pgTable('pr_brief', {
   prId: uuid('pr_id')
     .primaryKey()
     .references(() => pullRequests.id, { onDelete: 'cascade' }),
-  json: jsonb('json').notNull(),
+  /**
+   * The brief body: what, why, the risks, the review focus, the deterministic
+   * diff figures and the source audit trail — and nothing the columns below
+   * already carry. `$type` is a CAST, not a parse: the repository still
+   * `safeParse`s this value on the way out, because a jsonb written before a
+   * field existed reads back with the key ABSENT rather than null, and a payload
+   * that does not parse is treated as no brief at all.
+   */
+  json: jsonb('json').$type<StoredBriefBody>().notNull(),
+  /**
+   * The digest over the nine values the pull request's state is made of, as of
+   * the generation that wrote this row. The read path compares it against a
+   * freshly computed key to answer `stale` — the head SHA alone is not enough,
+   * because it is written by the pull-request LIST route while the description
+   * and the changed files are written only by the DETAIL route.
+   */
+  cacheKey: text('cache_key'),
+  /** Head commit this brief was generated against; travels with the brief. */
+  headSha: text('head_sha'),
+  /**
+   * Generation lifecycle. Read by the read path to answer `running`, and by the
+   * claim that decides whether a second generation may start.
+   */
+  state: text('state', { enum: ['running', 'done'] })
+    .notNull()
+    .default('done'),
+  /** Honesty of the stored brief; served as `PrRiskBrief.status`. */
+  status: text('status', { enum: ['ok', 'partial', 'degraded'] })
+    .notNull()
+    .default('degraded'),
+  /**
+   * Why the brief is not `ok`. Deliberately NOT a DB enum: `BriefReason` is the
+   * authority and validates on the way out, and a DB enum would need its own
+   * migration every time a reason is added — including the ones this brief
+   * carries through from the blast map verbatim rather than re-deriving.
+   */
+  reason: text('reason'),
+  /**
+   * The whole pull request's risk level, DERIVED as the highest severity among
+   * the risks that survived grounding — never taken from the model. A column
+   * because the PR list and the log line read it without opening the payload.
+   */
+  riskLevel: text('risk_level'),
+  generatedAt: timestamp('generated_at', { withTimezone: true }).defaultNow().notNull(),
+  /** When the current generation started; the staleness window for a dead worker reads it. */
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  /** The model that wrote the brief, served with it and emitted in the log line. */
+  provider: text('provider'),
+  model: text('model'),
+  /** Provider round-trips the one structured call took. Nothing else here records it. */
+  attempts: integer('attempts'),
+  tokensIn: integer('tokens_in'),
+  tokensOut: integer('tokens_out'),
+  /** USD. Null = no price is known for the model — NOT the same as a free call (0). */
+  costUsd: doublePrecision('cost_usd'),
+  /** Free-text failure message; `reason` is the machine-readable half. */
+  error: text('error'),
 });

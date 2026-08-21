@@ -34,6 +34,7 @@ import type {
   BlastChangedSymbol,
   BlastReachedFile,
   BlastResult,
+  FileFactsRow,
   FileRankRow,
   IndexResult,
   IndexState,
@@ -593,6 +594,24 @@ export class RepoIntelService implements RepoIntel {
     if (!this.container.config.repoIntelEnabled) return [];
     if (paths.length === 0) return [];
     return this.repo.getFileRankFor(repoId, paths);
+  }
+
+  /**
+   * Precomputed endpoint/cron facts per file, for onboarding's architecture
+   * section.
+   *
+   * A thin delegate on purpose. It is here rather than in the consuming module
+   * because `modules/onboarding` may not import `repo-intel/repository.ts` —
+   * `no-cross-module-internals`, and `import type` does not exempt it
+   * (`server/INSIGHTS.md`, 2026-08-14, measured 22 -> 24 warnings). Same two
+   * guards as `getFileRank`: `[]` when the layer is off and `[]` for an empty
+   * request. That empty array is the facade's documented degraded contract
+   * (types.ts header) — the status stays observable through `getIndexState`.
+   */
+  async getFileFacts(repoId: string, paths: string[]): Promise<FileFactsRow[]> {
+    if (!this.container.config.repoIntelEnabled) return [];
+    if (paths.length === 0) return [];
+    return this.repo.getFileFacts(repoId, paths);
   }
 
   /** Persistent symbol read-model (T2 columns) for the given files. */

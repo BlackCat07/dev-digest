@@ -58,7 +58,26 @@ Approaches and solutions that worked and should be reused.
 
 <!-- append below -->
 
-_No entries yet._
+- **2026-08-20** — **A fake whose every port method defaults to a thrower is the only way to
+  prove a negative like "this path reads no bytes and resolves no clone".** `unreachable(name)`
+  as the default body of each method on a port fake turns an absence into a failing test that
+  names the offending call, where an assertion over the *result* can only say the answer looked
+  right. Used to pin that `ProjectContext.listEffectiveDocs` performs no `repoDocs.read` and
+  resolves no repository name; mutation-verified by inserting one `read` call, which turned two
+  tests red. Reusable for any port-based module that promises "this path performs no I/O" —
+  the promise is otherwise only a comment. Evidence:
+  `test/project-context-effective.test.ts` (`unreachable`, `reader({})`),
+  `src/modules/project-context/service.ts` (`listEffectiveDocs`).
+
+- **2026-08-20** — **A `200` on a new route is only evidence of registration if the `404` path
+  is checked too, and the two are distinguishable in one extra request.** An unregistered module
+  and a registered one both answer `404` for a nonexistent id — but only the registered one
+  answers with the service's own envelope, `{"error":{"code":"not_found",…}}`, rather than
+  Fastify's route-not-found. So one `curl` against a made-up uuid turns "the route answered" into
+  "the handler ran and the workspace resolution executed". Worth pairing with the 2026-08-19
+  status-code triage in this file (`404` = unregistered, `500` = migration unapplied): that entry
+  tells you what a failure means, this one tells you what a success does **not** yet mean.
+  Evidence: `src/modules/brief/routes.ts`, `src/modules/index.ts`.
 
 ## What Doesn't Work
 
@@ -66,6 +85,62 @@ Dead ends and antipatterns, and why they fail. The most-skipped section and the 
 valuable one — the code does not record what was tried and abandoned.
 
 <!-- append below -->
+
+- **2026-08-20** — **A test suite that checks WRAPPING MECHANICS is not evidence of an
+  injection defence, and the gap is measurable: 9 of 10 passed with the defence deleted.**
+  Measured on the PR Brief prompt — with the `## SECURITY` section removed from
+  `src/prompts/brief.system.md`, every block was still wrapped exactly once, the system message
+  still carried no foreign text, and the token budget still held; only the one assertion written
+  against the *rendered clause* failed. Delimiters are inert without a sentence telling the model
+  what they mean. The compounding fact is what makes this reachable rather than theoretical:
+  `INJECTION_GUARD` is a module-private, **non-exported** const at `../reviewer-core/src/prompt.ts`
+  and is concatenated only inside `assemblePrompt`, so any module that builds its own messages —
+  which a feature module must, because `platform/prompts.ts` is the only loader it may use — reaches
+  no shared guard and there is **nothing to duplicate**. A plan that says "do not duplicate the
+  guard" will be read as "the guard is handled". Carry the clause in the template, the shape
+  `src/prompts/onboarding.system.md` already uses, and assert on the rendered system message
+  rather than on the file's existence. Related: 2026-08-05, Codebase Patterns, for where the
+  trust decision lives. Evidence: `src/prompts/brief.system.md`,
+  `src/modules/onboarding/prompt.ts` (its header states the same reasoning),
+  `test/brief-prompt.test.ts`.
+
+- **2026-08-20** — **Adding a REQUIRED field to a `vendor/shared` contract has a blast radius
+  that `tsc --noEmit -p tsconfig.json` reports only two thirds of — and one site is invisible to
+  every typechecker there is.** Measured over two remediation rounds on `BriefDiffStats`: of eight
+  breaking sites, 3 were in `src/`, 2 in `server/test/` (visible only under `tsconfig.eslint.json`,
+  per 2026-08-10 in Tool & Library Notes), 3 in `client/**/*.test.tsx` (visible only to the client's
+  own `tsc`) — and a ninth was `expect(x).toEqual({…exhaustive object})`, which **no** typechecker
+  reports because `toEqual`'s parameter type accepts a wider object while the assertion itself
+  demands an exact match. It fails at runtime only. This is the mirror image of the 2026-08-10
+  entry: that one is a fixture structurally wrong that *never* fails; this is an assertion
+  structurally accepted that *always* fails. Before scoping a contract-field change, grep every
+  construction site across **both** packages and every `toEqual` over the type — a scope drawn from
+  `tsc -p tsconfig.json` alone will be wrong by a third. Evidence:
+  `src/modules/brief/assemble.ts` (the `diffStats` literal), `test/brief-assemble.test.ts`
+  (the two `toEqual` blocks), `../client/src/lib/hooks/brief.test.tsx`.
+
+- **2026-08-19** — **A `grep`-based Done-condition that passes on zero lines is failed by a
+  DOC-COMMENT, and the pressure that creates is to bend the code around a text search.**
+  Measured across the Onboarding Generator's ten tasks. The gates are
+  `grep -rn "node:fs" src/modules/<name>/ # 0 lines = pass` and
+  `grep -rnE "child_process|execFile|spawn\(|exec\(" # 0 lines = pass`. Written the plain
+  way, prose explaining *why* this module does not import Node's filesystem module returned
+  six comment hits, and `RegExp.prototype.exec` returned two — output an implementer cannot
+  distinguish from a real violation. Two implementers independently responded by wording
+  every doc-comment around the forbidden strings, and one wrote `String.prototype.match`
+  where `.exec()` was natural. The prose half is fine and `modules/project-context/types.ts`
+  already did it ("Node's own filesystem module"); the API half is the line — a control-flow
+  or API choice made to satisfy a text search is a finding, and it was only harmless here
+  because neither regex carries `/g`, so the two calls are behaviourally identical. The same
+  gate then failed again at verification time on a *different* file, because a consolidation
+  moved a comment naming `modules/repos/` into a directory the gate scans. Two rules follow:
+  when adding a grep gate over a directory, scope it to import statements (or exclude
+  comment lines) rather than to the whole file; and when one fires, fix the prose rather
+  than annotating the gate as a known false positive — a gate whose failure has to be
+  resolved by reading is a gate the next reader skips. Evidence:
+  `src/modules/onboarding/repository.ts` (the reworded sibling-module paragraph),
+  `src/modules/onboarding/commands.ts` (`line.match(MAKE_TARGET)`),
+  `.claude/.plans/onboarding-generator/plan.md` (T6 and T8 Done-conditions).
 
 - **2026-08-11** — **Ranking a derived list by SIZE inverts the feature whose whole purpose
   is that size is not importance.** Smart Diff's split suggestion bucketed the changed files
@@ -241,11 +316,89 @@ valuable one — the code does not record what was tried and abandoned.
   (`reverseImpact`, `ownFacts`), `src/modules/blast/service.ts` (`mapLevelImpact`,
   `isTestPath`), `specs/blast-radius.md`.
 
+- **2026-08-19** — **A directory walk that skips every symlink passes an "escaping symlink is
+  not listed" test for the wrong reason, and the test cannot tell the difference.** The
+  confinement re-check never fires, so the assertion is satisfied by the blanket skip rather
+  than by the defence it is supposed to pin — and the defect only surfaces the day a symlink
+  *inside* the clone stops being listed, which no test would then be watching. The escape case
+  alone is therefore not a test of confinement; it needs its **pair**, an in-clone symlink that
+  must still appear. Same shape as any negative-only assertion over a security check: assert
+  what must be refused **and** what must be allowed, or a `return false` at the top of the
+  function is a passing implementation. Evidence:
+  `src/adapters/git/confined-doc.ts` (`collectCandidates`, the `isSymbolicLink` branch, and
+  `resolve`, which is what actually decides), `test/project-context-walk.test.ts`
+  ("omits a symlink that escapes the clone" + "keeps a symlink that stays inside the clone").
+
+- **2026-08-19** — **An acceptance criterion whose *observable* omits a case makes that case
+  invisible to every downstream check, and the implementation will be correct against the
+  spec while being wrong against the requirement.** Project Context's AC-1 said "a recursive
+  walk of the configured search roots" and illustrated it with `specs/a.md`, `docs/sub/b.md`,
+  `src/c.md`, `pkg/INSIGHTS.md` — no case for a root nested under a package. So the walk was
+  built to match a root as a **top-level prefix**, the tests were written from the observable
+  and passed, and `plan-verifier` correctly returned `yes`. Measured on this repository, whose
+  own `CLAUDE.md` requires every package to keep its own `specs/` and `docs/`: **17 documents
+  returned where 25 exist**, the eight missing being every per-package `specs/README.md` and
+  `docs/README.md` — the exact class the feature exists to attach. The originating requirement
+  had said `**/{specs,docs,insights}/**/*.md`; the narrowing happened in the spec and nothing
+  downstream could question it, because a spec's examples become the tests. Two things to
+  carry: when a criterion enumerates examples, ask which case is **absent** rather than
+  whether the listed ones pass; and a rule about paths needs a case at depth, because
+  top-level and nested are different code paths in every implementation of it. The fix has to
+  land in **both** the walk (`isUnderRoot`) and the grouping (`classifyDoc`) or a listed
+  document reports a root it was not found under. Evidence:
+  `src/adapters/git/confined-doc.ts` (`isUnderRoot`),
+  `src/modules/project-context/service.ts` (`classifyDoc`),
+  `test/project-context-walk.test.ts` ("matches a root at any depth"),
+  `../specs/project-context.md` (AC-1, amended).
+
 ## Codebase Patterns
 
 Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
+
+- **2026-08-20** — **A feature module cannot use `node:crypto`, and the two files that appear to
+  prove otherwise are the named infrastructure exception.** The `modules/<name>/` grep gates ban
+  every `node:` import specifier, not only the filesystem one the 2026-08-10 entry in Tool &
+  Library Notes is about — so a feature needing a digest has exactly two honest options: declare
+  a port for the composition root to satisfy, or hand-roll a pure one and state its scope.
+  `modules/repo-intel/pipeline/full.ts` and `.../incremental.ts` do call `createHash('sha1')`,
+  which reads as a precedent and is not one: `repo-intel` is carved out in
+  `.dependency-cruiser.cjs` as infrastructure reached only through `container.repoIntel`. The PR
+  Brief's cache key took the second option — a non-cryptographic change detector, with the file
+  header saying so, because nothing is authenticated by it and a collision costs one stale brief
+  that the force path clears. Check which side of that carve-out a file is on before copying its
+  imports. Evidence: `src/modules/brief/cache-key.ts` (`computeCacheKey`),
+  `src/modules/repo-intel/pipeline/full.ts`, `.dependency-cruiser.cjs`.
+
+- **2026-08-19** — **This server has TWO prompt-template renderers and they disagree about
+  what a missing variable does, silently.** `modules/conventions/prompt.ts`'s
+  `renderTemplate` replaces an unmatched `{{name}}` with the **empty string**;
+  `platform/prompts.ts`'s replaces nothing and leaves the literal `{{name}}` in the prompt.
+  A feature that copies the conventions shape — the obvious precedent, since it is the one
+  with a worked example — and then switches to the platform loader (which it must, because
+  the module-local one imports Node's filesystem module and a feature module may not) has
+  changed what a missing variable sends to the model, with no type error and no gate.
+  Neither behaviour is wrong; not knowing which one you have is. Check which loader you
+  hold before relying on a placeholder being optional, and supply every variable regardless.
+  Evidence: `src/modules/conventions/prompt.ts` (`renderTemplate`), `src/platform/prompts.ts`
+  (`renderTemplate`), `src/modules/onboarding/prompt.ts` (the consumer that switched).
+
+- **2026-08-19** — **Inside a module, WHICH file a port lives in is decided by the direction
+  of the existing type-only edges, not by taste — and `dependency-cruiser` counts a
+  type-only edge.** Two instances, one week apart, same mechanism. A facade row type that
+  reuses `IndexerFileFactsRow` from `repo-intel/repository.ts` cannot live in
+  `repo-intel/types.ts`, because `repository.ts` already imports `./types.js` — so the
+  facade declares its own mirror row instead, which is what that file's header already
+  asks for. And consolidating the onboarding module's ports into `types.ts` could not
+  leave `TokenCounter` in `prompt.ts`: `prompt.ts` imports `OnboardingFacts` from
+  `types.js`, so `OnboardingDeps.tokenizer` importing the type back would have closed a
+  cycle and moved the 22-warning baseline. The port has to move **with** the deps
+  interface, never be imported by it. Generalises: before placing a shared type, check
+  which way the import already runs between the two files. Related: 2026-08-14, this file,
+  for `import type` not exempting a CROSS-module edge — this is the same accounting one
+  level down. Evidence: `src/modules/repo-intel/types.ts` (`FileFactsRow`),
+  `src/modules/onboarding/types.ts` (`TokenCounter`), `src/modules/onboarding/prompt.ts`.
 
 - **2026-08-11** — **When an acceptance criterion is UNIVERSAL over a set ("a lock file is
   always boilerplate"), the set has to be a named constant and the guard has to sit outside
@@ -434,11 +587,78 @@ Conventions and architectural decisions, each with the reason behind it.
   `src/modules/reviews/repository/pull.repo.ts` (`countPullCoverage`),
   `src/modules/prior-prs/service.ts` (`statusOf`), `specs/prior-prs.md` (States).
 
+- **2026-08-18** — **A feature can arrive four-fifths pre-wired across three packages with no
+  single name to grep for, and the parts get rebuilt.** Project Context already exists as:
+  `assemblePrompt`'s `specs` slot, which renders `## Project context` and — unlike `skills` —
+  wraps its own contents; `PromptAssembly.specs` and `RunTrace.specs_read` in **both** contract
+  copies; a `// ---- Project Context ----` block in `contracts/platform.ts` defining `SpecFile`
+  and `IndexStatus`; `useContextFiles` / `useReindexContext` already calling
+  `GET /repos/:id/context` and `POST /repos/:id/context/reindex`; `shell.nav.context` plus a
+  whole `client/messages/en/context.json`; and the trace drawer's "Specs read" row and specs
+  `PromptBlock`. Exactly one thing is missing — a server module: nothing named `context` is
+  registered in `modules/index.ts`, so **both client hooks 404 today** and the executor writes
+  `specs_read: []`. The lesson is the search order: before building an L05+ feature, grep the
+  **contracts** and the **message catalogues** for its product name first, not the module tree —
+  the module tree is the one place a pre-wired feature leaves no trace. Evidence:
+  `src/vendor/shared/contracts/platform.ts:265` (`SpecFile`), `src/modules/index.ts`,
+  `src/modules/reviews/run-executor.ts` (`specs_read: []`),
+  `../client/src/lib/hooks/core.ts:123` (`useContextFiles`).
+
+- **2026-08-18** — **The clone is a mirror that is periodically `reset --hard`, which rules out
+  any in-place write feature before it is designed.** `SimpleGitClient.sync` runs
+  `git fetch origin <branch> --depth <RESYNC_FETCH_DEPTH>` and then
+  `git reset --hard origin/<branch>`, justified in its own comment by "safe here because we
+  never commit to or run code from the clone" — and the `GitClient` port carries no write,
+  commit, branch or push method at all (clone, fetchPullHead, sync, currentHead, diff,
+  diffNameOnly, blame, log, readFile, clonePathFor). So a document-authoring UI over the clone
+  would ship a Save button whose work the Resync button beside it deletes silently, with no
+  error and nothing in the log; making an edit durable needs commit + branch + push + author
+  identity + a GitHub write scope + conflict handling on a **shallow** clone, which is a
+  separate feature rather than a tab. Found while specifying Project Context, whose design mock
+  drew `Preview | Edit` + Save + upload over exactly this directory. Evidence:
+  `src/adapters/git/simple-git.ts` (`sync`), `src/vendor/shared/adapters.ts` (`GitClient`).
+
+- **2026-08-19** — **"A listing that opens no files" and "a token figure counted from
+  characters" are contradictory requirements, and the contradiction is invisible until both are
+  written down.** `ConfinedRepoDocReader.list` deliberately reads no bytes — that is what makes
+  listing a large or hostile clone cheap, and it is why it returns `size` from `stat` only. But
+  `approxTokens` is `ceil(characters / 4)` and takes a **string**, and deriving the figure from
+  byte `size` instead is explicitly ruled out (a multi-byte document would over-count, which is
+  what makes the client's and the server's figures disagree). There is no third option: the list
+  path re-reads each document it reports, and the cost is real and accepted. The one exception
+  is a document past the 256 KB read cap, which is estimated from `size` because it is never
+  going to be sent whole anyway. Worth knowing before adding a second "cheap list" endpoint over
+  the same walk. Evidence: `src/modules/project-context/service.ts` (`tokensFor`),
+  `src/adapters/git/confined-doc.ts` (`list`), `src/adapters/tokenizer/index.ts`
+  (`approxTokens`), `../specs/project-context.md` (EC-16).
+
 ## Tool & Library Notes
 
 Dependency and tooling quirks.
 
 <!-- append below -->
+
+- **2026-08-20** — **`depcruise`'s MODULE COUNT is the signal for "was this file analysed at
+  all"; the warning count cannot tell you.** An unresolved file produces the *same*
+  `x 22 dependency violations (0 errors, 22 warnings)` line as a clean one, so a green gate is
+  equally consistent with "the new file has no bad edge" and "the new file was never cruised" —
+  and the second is what a missing `tsConfig` path alias or a typo'd `--include` produces.
+  The trailing `N modules, M dependencies cruised` is what separates them: 222 → 234 across
+  twelve new files in one feature is the evidence they were read. Record the count alongside
+  the warning line whenever a diff adds files, and treat an unchanged count over a growing
+  tree as a broken gate rather than a clean one. Evidence: `.dependency-cruiser.cjs`
+  (`tsConfig`), `src/modules/brief/` (the twelve files the count moved for).
+
+- **2026-08-19** — **`grep` without `-a` reports NOTHING on two of this package's own source
+  files, and prints no warning worth noticing.** `src/modules/project-context/service.ts` and
+  `src/modules/onboarding/service.ts` contain a literal NUL byte, so `grep` treats them as
+  binary: `grep -n "^export" src/modules/project-context/service.ts` returns empty while
+  `grep -an` on the same file returns seven lines. The failure mode is the dangerous
+  direction — a search for something forbidden comes back clean because the file was never
+  scanned, not because the thing is absent. `gate.md` already uses `-a` for the ESM-extension
+  check and that is why; the same applies to every ad-hoc grep over `src/modules/`, including
+  the ones written into a plan's Done-conditions. Evidence: `src/modules/onboarding/service.ts`,
+  `src/modules/project-context/service.ts`, `.claude/skills/pr-self-review/gate.md`.
 
 - **2026-08-10** — **No test file in this package is typechecked by any gate, so a test can
   carry a real type error while `vitest` is fully green.** `tsconfig.json`'s `include` is
@@ -557,6 +777,17 @@ Dependency and tooling quirks.
   exception. Evidence: `package.json` (`dependency-cruiser`), `tsconfig.json` (`paths`),
   `src/adapters/depgraph/index.ts`.
 
+- **2026-08-19** — **`drizzle-kit generate` ALWAYS rewrites `migrations/meta/_journal.json`, so
+  a migration-shape check written as "one new `.sql` and no `M` line" can never pass.** The
+  journal is append-only generated bookkeeping and every generate adds its `{"idx": N, "tag":
+  …}` object, which `git status --short` reports as `M`. A gate or a plan's Done-condition
+  phrased against "no `M` line" therefore fails on a perfectly correct run, and the tempting
+  reading — "something modified an existing migration" — is exactly wrong. The precise
+  formulation is **"no `M` line against a `.sql` file"**; the snapshot and the journal are
+  expected to move. Confirmed against history: commit `b86cdee` shows
+  `meta/_journal.json | 14 +` alongside its two new migrations. Evidence:
+  `src/db/migrations/meta/_journal.json`, `src/db/migrations/0017_safe_hannibal_king.sql`.
+
 ## Recurring Errors & Fixes
 
 An error string, its real cause, and the fix.
@@ -657,6 +888,40 @@ An error string, its real cause, and the fix.
   300-file index finished `done` in 6.4s, well inside `INDEX_SOFT_BUDGET_MS`. Evidence:
   `src/platform/jobs.ts` (`enqueue`), `src/modules/repos/service.ts` (`refresh`),
   `test/jobs.test.ts`.
+
+- **2026-08-19** — **A contract field declared `.nullish()` reads as "nullable" to whoever
+  writes a helper against it, and `expect(x).not.toBeNull()` followed by `x!` looks like it
+  closes the gap while covering only half of it.** `PromptAssembly.specs` is
+  `z.string().nullish()` — `string | null | undefined` — because `getRunTrace` returns
+  `row.trace as RunTrace`, a **cast, not a parse**, so a trace persisted before a field existed
+  arrives with the key *absent*. A test helper typed `(specs: string | null)` and guarding on
+  `=== null` therefore fails to compile at its call sites, and a `!` at a second call site
+  silently accepts the very value the whole thing is about. Narrow with `== null` (loose, covers
+  both) and prefer an explicit `if (x == null) throw` over `!`, so the failure is a readable
+  message rather than a crash inside `.split`. This cost a remediation round because **no gate
+  typechecks `test/`** (see 2026-08-10, Tool & Library Notes): `vitest run` was 559/559 green
+  with two real `error TS` in the file. Related: 2026-08-02, this file, for the cast. Evidence:
+  `test/project-context-run.test.ts` (`specOpenings`, `specBodies`),
+  `src/vendor/shared/contracts/trace.ts` (`PromptAssembly.specs`),
+  `src/modules/reviews/repository/run.repo.ts` (`getRunTrace`).
+
+- **2026-08-19** — **A feature can pass every gate, every reviewer and a 559-test suite and
+  still 500 on its first real request, because nothing in the pipeline applies the migration
+  it ships.** `CLAUDE.md` already says migrations never run on boot; what it does not say is
+  that **no hermetic test can tell "schema shipped" from "schema applied"** — services take
+  their repository through `ContainerOverrides`, so the suite proves the call shape against a
+  fake and never touches Postgres. Project Context shipped `0017_*.sql`, `DDG-WIRE-003` was
+  satisfied, `/pr-self-review` recorded a clean verdict, and the screen answered
+  `500 internal_error` the moment it was opened. **Read the status code first: `404` means the
+  module is not registered in `modules/index.ts`; `500` on a route that exists, right after a
+  feature that adds a table, means the migration was never applied.** Confirm in one query —
+  `select table_name from information_schema.tables where table_name in (…)` — rather than by
+  reading code, then `./node_modules/.bin/tsx src/db/migrate.ts`. Neither the implementation
+  plan nor `/run-plan` has a step for this, and a task is normally told **not** to migrate
+  (applying one is not the task's job), so the gap is structural rather than anybody's
+  oversight. Evidence: `src/db/migrations/0017_safe_hannibal_king.sql`,
+  `src/db/migrate.ts`, `src/modules/project-context/repository.ts` (`countAgentsByPath`, the
+  query that failed).
 
 ## Session Notes
 

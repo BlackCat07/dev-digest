@@ -190,6 +190,19 @@ export interface FileRankRow {
   percentile: number;
 }
 
+/**
+ * Per-file endpoint/cron facts the indexer precomputes (`file_facts`).
+ *
+ * The field is `filePath`, not `file`: this row mirrors the read model verbatim
+ * (`IndexerFileFactsRow` in `repository.ts`), which is what lets `getFileFacts`
+ * stay a delegate with no mapping layer between the two.
+ */
+export interface FileFactsRow {
+  filePath: string;
+  endpoints: string[];
+  crons: string[];
+}
+
 export interface RepoMapResult {
   text: string;
   tokens: number;
@@ -216,6 +229,16 @@ export interface RepoIntel {
   getBlastRadius(repoId: string, changedFiles: string[]): Promise<BlastResult>;
   getRepoMap(repoId: string, tokenBudget?: number): Promise<RepoMapResult>;
   getFileRank(repoId: string, paths: string[]): Promise<FileRankRow[]>;
+  /**
+   * Precomputed endpoint/cron facts for the given files.
+   *
+   * It lives on the facade rather than in the consuming feature because a module
+   * may not import a sibling's `repository.ts`, and `import type` does NOT exempt
+   * it: a types-only import of a sibling took `depcruise` from 22 to 24 warnings
+   * (`server/INSIGHTS.md`, 2026-08-14). Consumer: `modules/onboarding`, whose
+   * architecture section names the endpoints a file declares.
+   */
+  getFileFacts(repoId: string, paths: string[]): Promise<FileFactsRow[]>;
   getSymbolsInFiles(repoId: string, paths: string[]): Promise<SymbolRow[]>;
   getCallerSignatures(
     repoId: string,

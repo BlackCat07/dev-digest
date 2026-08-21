@@ -31,6 +31,7 @@ import {
   type Line,
 } from "@/components/diff-viewer";
 import {
+  fileCardId,
   initialOpen,
   lineId,
   offDiffId,
@@ -58,6 +59,8 @@ export function SmartFileCard({
   file,
   commenting,
   openOverride,
+  targeted,
+  targetLine,
   onToggle,
   onOpenFinding,
 }: {
@@ -65,6 +68,20 @@ export function SmartFileCard({
   commenting?: DiffCommentApi;
   /** The reader's explicit choice, if they have made one; otherwise the rule decides. */
   openOverride: boolean | undefined;
+  /**
+   * Does the tab's target name THIS file? The viewer does the path matching, so
+   * this card never compares paths itself.
+   *
+   * Separate from `targetLine` because the line is optional and the file is not:
+   * a review-focus row usually carries no line, and "which file was I sent to"
+   * still has an answer then — which is what the card scrolls to.
+   */
+  targeted?: boolean;
+  /**
+   * The line to reveal, set only when the tab's target names THIS file — the
+   * viewer does the path matching, so this card never compares paths itself.
+   */
+  targetLine?: number;
   onToggle: (path: string, next: boolean) => void;
   onOpenFinding: (findingId: string) => void;
 }) {
@@ -96,8 +113,49 @@ export function SmartFileCard({
     return partitionThreads(fileThreads, renderedKeys);
   }, [comments, file.path, lines]);
 
+  // ---- the target ------------------------------------------------------------
+  //
+  // ONE effect, and it touches only the DOM and a ref — which is what an effect is
+  // for. It cannot open this card: openness is derived from the target one level
+  // up (see `openOverrideFor`), so the row already exists in the commit this runs
+  // after. Written as two effects — one to open, one to scroll — it would be
+  // `react-hooks/set-state-in-effect`, an **Error** in this package that fails
+  // `next build` (`client/INSIGHTS.md`, 2026-08-11).
+  //
+  // The ref is the idempotence guard. Without it any later re-render that happens
+  // to re-run this effect would scroll the page out from under a reader who has
+  // since scrolled somewhere else. Keyed on the target itself, so a NEW target
+  // scrolls and the same one never scrolls twice.
+  //
+  // THE LINE IS THE CONVENIENCE, THE FILE IS THE PROMISE — so a target with no
+  // line, or with a line this patch never rendered, falls back to the card. That
+  // fallback is the ordinary path rather than the corner: a review-focus row's
+  // line comes from a model that never sees a hunk body, so it is `null` unless
+  // the material named one, and the tab holds up to 100 files. Scrolling nowhere
+  // left the reader at the top of the diff with their file expanded far below the
+  // fold, which reads as a link that did nothing.
+  const scrolledTarget = React.useRef<string | null>(null);
+  const cardRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    if (!targeted || !open) return;
+    const key = targetLine != null ? `line:${targetLine}` : "file";
+    if (scrolledTarget.current === key) return;
+    scrolledTarget.current = key;
+    // `getElementById`, never `querySelector`: a path's `/` and `.` are legal in an
+    // id but are selector syntax, so a selector needs `CSS.escape` and silently
+    // matches nothing without it.
+    const row = targetLine != null ? document.getElementById(lineId(file.path, targetLine)) : null;
+    (row ?? cardRef.current)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [targeted, targetLine, open, file.path]);
+
   return (
-    <div style={diffStyles.fileCard}>
+    <div
+      ref={cardRef}
+      id={fileCardId(file.path)}
+      // The clearance belongs to the targeted card alone: a `scrollMarginTop` on
+      // every card would move where every other scroll in the diff comes to rest.
+      style={targeted ? { ...diffStyles.fileCard, ...s.targetCard } : diffStyles.fileCard}
+    >
       <div style={s.fileHeader}>
         <button
           type="button"
@@ -161,6 +219,12 @@ export function SmartFileCard({
                 const lineNo = ln.kind === "add" || ln.kind === "ctx" ? ln.newNo : undefined;
                 const severity = lineNo != null ? edgeSeverity.get(lineNo) : undefined;
                 const anchored = lineNo != null ? byLine.get(lineNo) : undefined;
+                const edge = severity
+                  ? s.lineEdge((SEV[severity as keyof typeof SEV] ?? SEV.INFO).c)
+                  : undefined;
+                // The scroll margin goes on the row the target names, and on no
+                // other: it is what keeps that row clear of the sticky header.
+                const isTarget = targetLine != null && lineNo === targetLine;
                 return (
                   <CodeLine
                     key={i}
@@ -169,11 +233,7 @@ export function SmartFileCard({
                     threads={threadsForLine(ln, matched)}
                     commenting={commenting}
                     id={lineNo != null ? lineId(file.path, lineNo) : undefined}
-                    rowStyle={
-                      severity
-                        ? s.lineEdge((SEV[severity as keyof typeof SEV] ?? SEV.INFO).c)
-                        : undefined
-                    }
+                    rowStyle={isTarget ? { ...edge, ...s.targetRow } : edge}
                     right={
                       anchored?.[0] ? (
                         /* `findings` is sorted worst-first, so `[0]` is the worst
