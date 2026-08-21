@@ -145,6 +145,19 @@ Server half: `../server/specs/smart-diff.md`.
 
 ## History
 
+`2026-08-21` — **A target with no line now scrolls the file's card.** The `2026-08-20`
+entry below shipped the scroll against the LINE only, and a review-focus row usually
+carries none — the brief's model never sees a hunk body, so `line: null` is what it is
+told to answer, and on the pull request this was driven against all six rows had it.
+The file expanded and nothing moved, which on a tab of 86 files is indistinguishable
+from a link that did nothing. `SmartFileCard` now takes a `targeted` flag beside
+`targetLine`, carries `fileCardId(path)` on its root, and scrolls that root — with the
+same measured `STICKY_SCROLL_MARGIN` — whenever the target names it and no rendered row
+claims it. That also covers a line the patch never rendered, which is reachable on real
+data: GitHub truncates a large patch (`client/INSIGHTS.md`, 2026-08-20). Recorded as
+**AC-62** in `specs/pr-brief.md`, whose AC-42 is a `WHERE` on the line and therefore
+never promised this.
+
 `2026-08-20` — **The "make `file:line` jump here instead of to github.com" non-goal is
 closed: it shipped.** `specs/pr-brief.md` (SPEC-03) needed a review-focus row to land a
 reader on a changed file at a line, so `DiffTab` and `SmartDiffViewer` gained optional

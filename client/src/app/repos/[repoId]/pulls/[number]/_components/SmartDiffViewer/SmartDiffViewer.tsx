@@ -13,10 +13,10 @@
 
    It also ACCEPTS a target — a file, optionally a line — from whoever owns the
    URL, and does the two things a target implies: expand that file whatever the
-   expansion rule says, and let the card scroll to the row. It reads no search
-   param itself, for the same reason it reports a finding id rather than pushing a
-   route: this component knows about files and lines, not about the screen's
-   routes. */
+   expansion rule says, and let the card scroll — to the row when a line was
+   given, to the card itself when none was. It reads no search param itself, for
+   the same reason it reports a finding id rather than pushing a route: this
+   component knows about files and lines, not about the screen's routes. */
 "use client";
 
 import React from "react";
@@ -61,6 +61,9 @@ export interface SmartDiffViewerProps {
    * model that never saw a hunk body, so nothing checks that the number means
    * anything. A scroll to a plausible but wrong line is acceptable; landing on the
    * wrong FILE is not, which is why the file is matched and the line is not.
+   *
+   * Usually absent, which is why its absence is not a state that scrolls nowhere:
+   * the card is the fallback anchor (see `SmartFileCard`).
    */
   targetLine?: number;
 }
@@ -111,11 +114,20 @@ export function SmartDiffViewer({
    * The reader still wins: an explicit collapse writes `false` into the map, which
    * is checked first, so a target cannot re-open a file they just closed.
    */
+  /**
+   * Does the target name this file? One comparison, used by everything the target
+   * drives — openness, the card's scroll and the line's — so a file cannot be the
+   * target for one of them and not for another.
+   */
+  const isTarget = React.useCallback(
+    (path: string): boolean => targetFile != null && samePath(path, targetFile),
+    [targetFile],
+  );
+
   const openOverrideFor = React.useCallback(
     (path: string): boolean | undefined =>
-      openOverrides[path] ??
-      (targetFile != null && samePath(path, targetFile) ? true : undefined),
-    [openOverrides, targetFile],
+      openOverrides[path] ?? (isTarget(path) ? true : undefined),
+    [openOverrides, isTarget],
   );
 
   const model = React.useMemo(
@@ -138,9 +150,8 @@ export function SmartDiffViewer({
             file={file}
             commenting={commenting}
             openOverride={openOverrideFor(file.path)}
-            targetLine={
-              targetFile != null && samePath(file.path, targetFile) ? targetLine : undefined
-            }
+            targeted={isTarget(file.path)}
+            targetLine={isTarget(file.path) ? targetLine : undefined}
             onToggle={onToggle}
             onOpenFinding={onOpenFinding}
           />
@@ -160,9 +171,8 @@ export function SmartDiffViewer({
               file={file}
               commenting={commenting}
               openOverride={openOverrideFor(file.path)}
-              targetLine={
-                targetFile != null && samePath(file.path, targetFile) ? targetLine : undefined
-              }
+              targeted={isTarget(file.path)}
+              targetLine={isTarget(file.path) ? targetLine : undefined}
               onToggle={onToggle}
               onOpenFinding={onOpenFinding}
             />

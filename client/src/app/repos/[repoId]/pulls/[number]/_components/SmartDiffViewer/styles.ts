@@ -37,6 +37,14 @@ export const s = {
    */
   targetRow: { scrollMarginTop: STICKY_SCROLL_MARGIN } satisfies CSSProperties,
 
+  /**
+   * The same clearance for the targeted FILE's card, which is where a target with
+   * no line comes to rest — and that is the common case, since a review-focus
+   * row's line is `null` unless the material named one. Merged into the card's
+   * style only while it is the target, so no other card's scroll position moves.
+   */
+  targetCard: { scrollMarginTop: STICKY_SCROLL_MARGIN } satisfies CSSProperties,
+
   summaryRow: {
     display: "flex",
     alignItems: "flex-start",

@@ -31,6 +31,7 @@ import {
   type Line,
 } from "@/components/diff-viewer";
 import {
+  fileCardId,
   initialOpen,
   lineId,
   offDiffId,
@@ -58,6 +59,7 @@ export function SmartFileCard({
   file,
   commenting,
   openOverride,
+  targeted,
   targetLine,
   onToggle,
   onOpenFinding,
@@ -66,6 +68,15 @@ export function SmartFileCard({
   commenting?: DiffCommentApi;
   /** The reader's explicit choice, if they have made one; otherwise the rule decides. */
   openOverride: boolean | undefined;
+  /**
+   * Does the tab's target name THIS file? The viewer does the path matching, so
+   * this card never compares paths itself.
+   *
+   * Separate from `targetLine` because the line is optional and the file is not:
+   * a review-focus row usually carries no line, and "which file was I sent to"
+   * still has an answer then — which is what the card scrolls to.
+   */
+  targeted?: boolean;
   /**
    * The line to reveal, set only when the tab's target names THIS file — the
    * viewer does the path matching, so this card never compares paths itself.
@@ -113,28 +124,38 @@ export function SmartFileCard({
   //
   // The ref is the idempotence guard. Without it any later re-render that happens
   // to re-run this effect would scroll the page out from under a reader who has
-  // since scrolled somewhere else. Keyed on the line, so a new target scrolls and
-  // the same one never scrolls twice.
+  // since scrolled somewhere else. Keyed on the target itself, so a NEW target
+  // scrolls and the same one never scrolls twice.
   //
-  // A line the patch does not render resolves to no element and the scroll is a
-  // no-op: the number is explicitly ungrounded (the model never saw a hunk body),
-  // so landing on the file is the promise and landing on the line is the
-  // convenience.
-  const scrolledLine = React.useRef<number | null>(null);
+  // THE LINE IS THE CONVENIENCE, THE FILE IS THE PROMISE — so a target with no
+  // line, or with a line this patch never rendered, falls back to the card. That
+  // fallback is the ordinary path rather than the corner: a review-focus row's
+  // line comes from a model that never sees a hunk body, so it is `null` unless
+  // the material named one, and the tab holds up to 100 files. Scrolling nowhere
+  // left the reader at the top of the diff with their file expanded far below the
+  // fold, which reads as a link that did nothing.
+  const scrolledTarget = React.useRef<string | null>(null);
+  const cardRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
-    if (targetLine == null || !open) return;
-    if (scrolledLine.current === targetLine) return;
-    scrolledLine.current = targetLine;
+    if (!targeted || !open) return;
+    const key = targetLine != null ? `line:${targetLine}` : "file";
+    if (scrolledTarget.current === key) return;
+    scrolledTarget.current = key;
     // `getElementById`, never `querySelector`: a path's `/` and `.` are legal in an
     // id but are selector syntax, so a selector needs `CSS.escape` and silently
     // matches nothing without it.
-    document
-      .getElementById(lineId(file.path, targetLine))
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [targetLine, open, file.path]);
+    const row = targetLine != null ? document.getElementById(lineId(file.path, targetLine)) : null;
+    (row ?? cardRef.current)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [targeted, targetLine, open, file.path]);
 
   return (
-    <div style={diffStyles.fileCard}>
+    <div
+      ref={cardRef}
+      id={fileCardId(file.path)}
+      // The clearance belongs to the targeted card alone: a `scrollMarginTop` on
+      // every card would move where every other scroll in the diff comes to rest.
+      style={targeted ? { ...diffStyles.fileCard, ...s.targetCard } : diffStyles.fileCard}
+    >
       <div style={s.fileHeader}>
         <button
           type="button"

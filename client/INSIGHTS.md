@@ -305,6 +305,25 @@ valuable one — the code does not record what was tried and abandoned.
   boundary unless `next build` demands it (it errors when a static route needs it). Evidence:
   `src/app/repos/[repoId]/pulls/page.tsx`, `../e2e/specs/04-pr-findings.flow.json`.
 
+- **2026-08-21** — **An EARS `WHERE` on an OPTIONAL field silently leaves the common case
+  unspecified, and a green suite plus a met criterion is what hides it.** `specs/pr-brief.md`
+  AC-42 promised a scroll *WHERE a review-focus entry carries a line*; the brief's model never
+  sees a hunk body and is told `null` is the honest answer, so on a real pull request **all six**
+  rows had `line: null`. AC-40 and AC-41 were met — `router.push` landed on `?tab=diff&file=…`
+  and the card expanded — while `SmartFileCard`'s effect returned on its first line
+  (`if (targetLine == null || !open) return;`), so nothing scrolled and the reader sat at the top
+  of an 86-file diff with their file open below the fold. Two tests **pinned** the gap as
+  intended behaviour ("scrolls nowhere when the target carries no line"), which is what a
+  criterion written against the rarer branch buys you. The fix is a `targeted` flag beside
+  `targetLine` and a `fileCardId(path)` anchor on the card root, so the file is the fallback
+  receiver — the file was already named as the promise in that effect's own comment, and only
+  the code disagreed. Tell for the next reader: when a spec's optional field decides whether
+  anything observable happens, check what the field's real-data distribution is before writing
+  the criterion against it. Evidence:
+  `src/app/repos/[repoId]/pulls/[number]/_components/SmartDiffViewer/_components/SmartFileCard/SmartFileCard.tsx`
+  (`scrolledTarget`, `cardRef`), `SmartDiffViewer/helpers.ts` (`fileCardId`),
+  `../specs/pr-brief.md` (AC-42, AC-62).
+
 ## Codebase Patterns
 
 Conventions and architectural decisions, each with the reason behind it.

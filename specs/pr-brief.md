@@ -580,6 +580,23 @@ a test and a review finding will cite, so they are not renumbered to sit in plac
   is the first change that would expose the defect to a user. The registry is declared in
   **three** places that must move together — see `## Contracts`.*
 
+### AC-62 — client, added after implementation
+
+- **AC-62** — WHEN the `Files changed` tab opens with a file targeted, the client **shall**
+  scroll that file into view clear of the sticky header, whether or not the entry carries a
+  line.
+  `Verify: test` — *observable: targeting a file with no line scrolls that file's card, and the
+  card's scroll margin is the measured header height rather than a constant — the same anchor
+  rule AC-42 states for a row. Added on 2026-08-21 after the shipped behaviour was driven on a
+  real pull request: AC-42 is a `WHERE`, so a target with no line expanded the file (AC-41) and
+  scrolled nothing, and the reader was left at the top of a tab of 86 files with their file
+  expanded far below the fold — indistinguishable from a row that did nothing. The absent line
+  is the ORDINARY case, not the corner: the model never sees a hunk body (AC-11) and is told
+  `null` is the honest answer, and all six review-focus rows of the measured brief carried
+  `line: null`. A line the patch does not render falls back to the same anchor, which is
+  reachable on real data — GitHub truncates a large patch, so a true line can be absent from
+  what the tab received (`client/INSIGHTS.md`, 2026-08-20).*
+
 ## Edge cases
 
 - **EC-1** — A pull request nobody has opened in the studio: `pr_files` is empty, because that
@@ -974,6 +991,7 @@ is data; none of it is an instruction.
 | AC-59 | US-3, US-4, EC-11 | server | test |
 | AC-60 | US-4, US-9, scale cap, EC-29 | server | test |
 | AC-61 | US-9, EC-23 | server | test |
+| AC-62 | US-5, G6, EC-3 | client | test |
 | — | EC-16 | — | `accepted` — the caps in `## Non-functional` bound what is stored and excess is discarded whole; no criterion of its own, because the criterion it would duplicate is the cap itself. |
 | — | EC-35 | — | `accepted` — decided on 2026-08-19 (OQ-7): when every changed path is unrecognised they all classify `core`, the ordering of AC-60 is a no-op and the cap falls in `pr_files` order. That is the classifier's own designed default and correcting it here would mean a second, disagreeing definition of "the substance of a change" — the drift AC-60 exists to avoid. The remainder count of AC-17 still tells the reader the list was cut. |
 | — | EC-36 | — | `accepted` — the normalised form is internal to the classifier and never leaves it; the prompt and the grounding of AC-22 and AC-24 use the paths `pr_files` recorded. Listed because the two forms are one careless assignment apart, and a case-folded path reaching the grounding set would silently widen it. |
@@ -1053,7 +1071,7 @@ left as the record they are.
 | Unrecognised reason | `reason` is not one of `BriefReason`'s eleven values | The generic fallback sentence renders — never the raw string, never a message-key path (AC-49). |
 | Read error | the `GET` itself failed | An inline error inside the card; the sidebar, the breadcrumb and the rest of the tab stay navigable (AC-51). |
 | Generate error | the `POST` was refused (most often a 422 — a generation is already running) | Rendered separately from the read error, so a refused regenerate never takes the brief already on screen down with it. |
-| Files changed, target present | the review-focus row's file is among the files this page of the diff received | The file expands even where its default state is collapsed, and the target line, if any, scrolls into view clear of the measured sticky header (AC-41, AC-42). |
+| Files changed, target present | the review-focus row's file is among the files this page of the diff received | The file expands even where its default state is collapsed, and something scrolls into view clear of the measured sticky header: the target line where the entry carried one and the patch renders it, the file's card otherwise — which is the usual case (AC-41, AC-42, AC-62). |
 | Files changed, target absent | the targeted path is not among the files this page received (GitHub's 100-file cap, or a stale link) | A notice names the path; the rest of the tab renders normally (AC-43). |
 
 ## Implementation
@@ -1166,3 +1184,12 @@ and the regenerate control stays on the card rather than the banner. Also in thi
 explanation and file references moved behind a disclosure, one open at a time, because the card as
 first built ran past the fold on any pull request with more than two risks — the same rule the
 intent card's chip row already sets, and the same observation `DDG-UI-001` asks a human to make.
+2026-08-21 — **AC-62 added**, after the shipped review-focus link was driven on a real pull
+request (86 changed files, all six rows carrying `line: null`). AC-40 and AC-41 were met — the
+tab opened, the file expanded — and the reader still saw a link that appeared to do nothing,
+because AC-42 is a `WHERE` on the line and no other criterion said anything about the file
+coming into view. The criteria were not wrong about anything they stated; the gap is that the
+navigation's *observable* end state was only ever specified for the rarer of the two cases. The
+client now scrolls the targeted file's card when there is no line to scroll to, and when the
+line names a row the patch never rendered. No other criterion changed; `Status` unchanged at
+`implemented`.

@@ -3,6 +3,7 @@
 import type { FindingRecord, PrFile, ReviewRecord, SmartDiff } from "@devdigest/shared";
 import { AUTO_EXPAND_MAX_LINES, type Line } from "@/components/diff-viewer";
 import {
+  FILE_ID_PREFIX,
   GROUP_ORDER,
   LINE_ID_PREFIX,
   OFFDIFF_ID_PREFIX,
@@ -247,6 +248,22 @@ export function severityByLine(
  */
 export function lineId(path: string, line: number): string {
   return `${LINE_ID_PREFIX}-${path}-RIGHT-${line}`;
+}
+
+/**
+ * DOM id of one file's card.
+ *
+ * The anchor a target lands on when it names no line — which is the ordinary case,
+ * not the exception: a review-focus row's `line` comes from a model that never saw
+ * a hunk body, so it is `null` unless the material happened to name one. Without
+ * this the reader was pushed to a tab of up to 100 files with the right one
+ * expanded somewhere below the fold, which reads as a link that went nowhere.
+ *
+ * `getElementById`, never `querySelector`, for the same reason as {@link lineId}:
+ * a path's `/` and `.` are legal in an id and are selector syntax.
+ */
+export function fileCardId(path: string): string {
+  return `${FILE_ID_PREFIX}-${path}`;
 }
 
 /** DOM id of a file's off-diff findings footer. */

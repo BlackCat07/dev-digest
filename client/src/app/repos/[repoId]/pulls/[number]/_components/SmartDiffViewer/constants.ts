@@ -83,3 +83,13 @@ export const LINE_ID_PREFIX = "sd-line";
 
 /** Prefix of the off-diff footer's DOM id. Same reasoning as {@link LINE_ID_PREFIX}. */
 export const OFFDIFF_ID_PREFIX = "sd-offdiff";
+
+/**
+ * Prefix of a file card's DOM id.
+ *
+ * The card is the fallback scroll target: a review-focus row carries a line only
+ * when the material named one, and the brief's model never sees a hunk body — so
+ * `line: null` is the normal case and the file itself is what the reader was sent
+ * to. Same id-not-selector reasoning as {@link LINE_ID_PREFIX}.
+ */
+export const FILE_ID_PREFIX = "sd-file";

@@ -293,26 +293,56 @@ describe("SmartDiffViewer — when a file is targeted", () => {
     }
   });
 
-  it("scrolls nowhere when the target carries no line", () => {
+  /**
+   * The ordinary case, not a corner: a review-focus row's `line` comes from a model
+   * that never sees a hunk body, so it is `null` unless the material named one —
+   * every row of the brief measured on a real pull request had `line: null`. The
+   * tab holds up to 100 files, so a target that scrolls nowhere leaves the reader
+   * at the top of the diff with their file expanded far below the fold, which is
+   * indistinguishable from a link that did nothing.
+   */
+  it("scrolls the targeted file's card into view when the target carries no line", () => {
     const scrolled = spyOnScroll();
     try {
       const { container } = mount({ targetFile: "src/config.ts" });
-      // The file is open — that is the whole promise without a line.
+      // The file is open — the first half of the promise, with or without a line.
       expect(container.textContent).toContain("sk_live_x");
-      expect(scrolled.elements).toEqual([]);
+
+      const card = document.getElementById("sd-file-src/config.ts");
+      expect(card).toBeTruthy();
+      expect(scrolled.elements).toEqual([card]);
+      // Same measured header height as a targeted row: the card is what the reader
+      // has to be able to read, so it cannot come to rest underneath it.
+      expect((card as HTMLElement).style.scrollMarginTop).toContain("--dd-sticky-h");
+      // And the clearance belongs to the target alone.
+      const other = document.getElementById("sd-file-package-lock.json");
+      expect((other as HTMLElement).style.scrollMarginTop).toBe("");
     } finally {
       scrolled.restore();
     }
   });
 
-  it("ignores a line whose row this patch never rendered", () => {
+  it("falls back to the card when the line names a row this patch never rendered", () => {
     const scrolled = spyOnScroll();
     try {
       const { container } = mount({ targetFile: "src/config.ts", targetLine: 999 });
       // The line is explicitly ungrounded — nothing ever checked that the number
-      // means anything — so a miss must cost the reader the scroll and nothing
-      // else. The file is still open and the diff is still there.
+      // means anything — so a miss costs the reader the LINE, not the navigation:
+      // they still land on the file they were sent to. Reachable on real data, not
+      // only through a wrong number: GitHub truncates a large patch, so a true line
+      // can be absent from what the tab received (`client/INSIGHTS.md`, 2026-08-20).
       expect(container.textContent).toContain("sk_live_x");
+      expect(scrolled.elements).toEqual([document.getElementById("sd-file-src/config.ts")]);
+    } finally {
+      scrolled.restore();
+    }
+  });
+
+  /** Nothing scrolls when nobody was sent anywhere. */
+  it("scrolls nowhere when no file is targeted", () => {
+    const scrolled = spyOnScroll();
+    try {
+      mount();
       expect(scrolled.elements).toEqual([]);
     } finally {
       scrolled.restore();
