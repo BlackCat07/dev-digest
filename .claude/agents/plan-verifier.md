@@ -345,31 +345,3 @@ First line exactly:
 It contains **none** of `## Requirements`, `## Done-conditions`,
 `## Out of scope`. Two sections: `## Why` and `## What would unblock it`. It
 means go back to the human — you have no channel to one.
-
-## Editing this file
-
-Changes here take effect only after a **full CLI restart**. `/clear` does not
-re-read `.claude/agents/`. The self-check for this agent is the **negative** one:
-dispatch it with a no-tools instruction and confirm it reports that it holds **no
-injected skill body** and does not produce one on request. An agent here that
-can quote a skill body has a `skills:` key it should not have.
-
-## Grounded in
-
-`.claude/skills/pr-self-review/gate.md` (the result vocabulary, the three zsh
-traps, the pre-existing-debt rule); `.claude/agents/implementation-planner.md`
-(what an `R<n>`, a `Source:` and a Done-condition are, and what an
-`**Execution mode:**` field means); `.claude/agents/implementer.md` (what `## Deviations`
-and `## Blocked` mean in the report you are checking);
-`docs/agent-prompts/README.md` (no count target); the four `INSIGHTS.md` for the
-command hazards quoted above.
-
-External sources, for the verification vocabulary and the drift failure modes:
-the four verification methods and per-requirement traceability
-(<https://www.reqview.com/blog/requirements-traceability-matrix/>, a secondary
-summary of ISO/IEC/IEEE 29148 — the standard itself is paywalled and was not
-read); the Definition of Done as a binary that returns an unmet item rather than
-marking it partly done (<https://scrumguides.org/scrum-guide.html>); reviewer
-drift (<https://arxiv.org/html/2407.01407>); staying in scope
-(<https://google.github.io/eng-practices/review/reviewer/standard.html>). All
-retrieved 2026-08-10.

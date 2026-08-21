@@ -308,26 +308,3 @@ First line exactly:
 It contains **none** of `## Documents written`, `## Diagrams`,
 `## Placement decisions`. Two sections: `## Why` and `## What would unblock it`.
 It means go back to the human — you have no channel to one.
-
-## Editing this file
-
-Changes here take effect only after a **full CLI restart**. `/clear` does not
-re-read `.claude/agents/`. After a restart, verify with a no-tools self-check:
-this agent must quote the diagram-type decision guide from `mermaid-diagram` — one
-body, 0 tool calls — and must **not** be able to quote `examples.md`.
-
-## Grounded in
-
-`docs/specs-convention.md`; the four `<pkg>/docs/README.md` and three
-`<pkg>/specs/README.md`; root `CLAUDE.md` (the `e2e/specs/` exception, the
-do-not-touch zones); `docs/agent-prompts/README.md` (the DB is the source of
-truth for a prompt file; no count target); `mermaid-diagram` `SKILL.md` +
-`examples.md`; `server/INSIGHTS.md` 2026-08-04 (bare-filename doc citations
-resolve to nothing) and 2026-08-02 / 04 (`pnpm <script>`); `client/INSIGHTS.md`
-2026-08-03 (`next build`).
-
-External sources, cited inline above: Diátaxis on not mixing document modes; the
-C4 model on titles, keys and one abstraction level per diagram; Mermaid's own
-docs for what they do and do not prescribe, and for the experimental status of
-their C4 syntax; Google's documentation style guidance on timeless documentation
-and on linking rather than duplicating. All retrieved 2026-08-10.

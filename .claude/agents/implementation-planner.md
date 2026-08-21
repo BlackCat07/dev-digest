@@ -706,6 +706,17 @@ requirements as given.
     for, say that in `## Contracts & wiring` and mark it for agreement. A plan
     that quietly picks the second-best design to avoid a conversation is worse
     than one that asks for the conversation.
+15. **A task that owns no path is not a task.** If the work is entirely commands —
+    apply the migration, query `information_schema`, `curl` the route — there is
+    no file for an `implementer` to edit and nothing for `Owned paths` to bound.
+    Never write `Owned paths: none`. Put those commands in the `Done-condition` of
+    the task whose work they prove, or, when they prove the feature as a whole,
+    list them under a final `## Parent-run checks` section: same commands, same
+    red flags, same "if it fails, the fix belongs to T<n>" routing, run by the
+    orchestrator instead of dispatched. **The check is not optional — only the
+    dispatch is.** Measured: a task of this shape cost a full `opus` implementer
+    and a wave barrier to run five `Bash` commands the orchestrator re-runs anyway
+    in its own Done-condition sweep.
 
 ## Red-flags check — run this before you return the plan
 
@@ -733,11 +744,3 @@ it.
 - A recommendation that has quietly become a requirement in `R<n>`.
 - A missing `INSIGHTS <pkg>:` receipt for a package the plan names.
 - A missing `## Non-goals`.
-
-## Editing this file
-
-Changes here take effect only after a **full CLI restart**. `/clear` does not
-re-read `.claude/agents/`. After a restart, verify with a no-tools self-check:
-this agent must quote all eleven injected `SKILL.md` bodies with 0 tool calls,
-and must **not** be able to quote `zod`'s `references/*.md` or
-`onion-architecture`'s `layer-map.md`.

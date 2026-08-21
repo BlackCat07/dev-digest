@@ -57,3 +57,36 @@ taken from what the orchestrator witnessed in context.
   because the file already carried an *under verification* note that the measurement
   closed. Evidence: `docs/retro/2026-08-18-project-context-spec.md` (Proposed
   changes, with a status line under each).
+
+- **2026-08-21** — **the 2026-08-19 entry above was true about the edit and wrong about
+  the effect: the dispatch-brief rule never bound.** It landed in
+  `.claude/agents/README.md`, which is human-facing and **loaded by no dispatch**, while
+  `implementer.md` step 1 went on saying *"read each in-scope package's `INSIGHTS.md` in
+  full — never `head` it"*. Between two instructions the agent only ever sees one.
+  Measured three features later: `server/INSIGHTS.md` had grown **49 KB → 72 KB** and
+  **24 of 46 run reports still recorded a full read** of it — roughly 48 full journal
+  reads across the three runs, against the 8-in-one-run figure that prompted the rule.
+  Now fixed in the two files that bind: `implementer.md` step 1 takes the entries as read
+  when the brief carries them and names the source in its receipt, and
+  `run-plan/SKILL.md` Phase 0 reads each in-scope journal once and quotes it into every
+  wave brief. **The durable lesson is not about journals.** A rule filed where a human
+  reads it is documentation; a rule is only enforced in the file that is loaded into the
+  participant it governs. When a retro proposal targets agent behaviour, name the loaded
+  file it must land in, and verify from a report receipt that the behaviour moved —
+  not from the diff that added the wording.
+
+- **2026-08-21** — same session, unprompted by a retro: **146 lines of maintainer-only
+  text left the eight agent files** (six `## Editing this file` blocks, four trailing
+  `## Grounded in` bibliographies) for `.claude/agents/README.md`. They had been shipping
+  inside every system prompt as instructions the agent cannot act on — restart procedures
+  and academic provenance. The bibliographies turned out to be pure duplicates of that
+  README's own `## Where each agent's rules come from`; every external source in them was
+  already cited there. Two `/run-plan` changes for the same reason: a task with
+  `Owned paths: none` is no longer dispatched (its commands move into the Phase 2 sweep
+  that would re-run them anyway — the *check* stays, only the ~80k-token dispatch goes),
+  and `plan-verifier` no longer re-runs Done-conditions it is about to mark `yes`, which
+  had them running three times. Also pinned `--max-fix` run-wide: read *per source* it
+  licensed six `opus`+`sonnet` rounds on a default invocation. Deliberately **not** taken,
+  so nobody re-derives them as new: trimming `skills:` on the two eleven-skill agents,
+  collapsing the worked-example templates, and a shared `agent-protocol` skill for the
+  ~828 lines of cross-file duplication.

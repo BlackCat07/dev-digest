@@ -54,9 +54,19 @@ Recorded here so that a later reader can tell a decision from an omission.
 It costs a handful of `Bash` calls and it buys two things: a red sweep means the diff
 is about to change, so a reviewer dispatch would review code that will not survive —
 skip straight to remediation; and a green sweep is what makes it safe to run both
-reviewers **in parallel**. It does **not** replace `plan-verifier`: the verifier runs
-the same commands itself, independently, because two independent runs is the point
-and agreeing with the parent is not evidence.
+reviewers **in parallel**. It does **not** replace `plan-verifier`, which still checks
+every `R<n>` and every `T<n>` on its own evidence.
+
+**What the verifier no longer does is re-run the commands that were already green**
+(changed 2026-08-21). Those had run twice — once in the implementer, once in this
+sweep — and a third full `tsc` + `vitest` + `depcruise` pass sat on the critical path
+to confirm what two independent runs already agreed on. The verifier now re-runs,
+verbatim, the Done-condition of **every item it would mark anything other than `yes`**,
+and reports which commands it ran and which it took from the sweep. Two independent
+runs is still the point exactly where the two sides might disagree; it was never worth
+paying for where they do not. This is the rule [remediation.md](remediation.md) already
+applied in the fix loop — *re-verify the items that were not `yes`, not all of them* —
+and the two are now consistent.
 
 **The fix loop has two exits, not one.** `--max-fix` (default 2) bounds honest
 attempts. *No progress* — a round after which the re-review reports the same ids,

@@ -179,13 +179,21 @@ findings ──► triage ──► fix plan ──► implementer ──► gat
                                  escalate
 ```
 
-**`--max-fix` rounds per source, default 2, then stop.** Not a budget-saving
+**`--max-fix` rounds for the whole run, default 2, then stop.** Not a budget-saving
 heuristic: a finding that survives two honest fix attempts is a disagreement about
 design, not a defect, and the third round is where an agent starts changing the
 target to make the check pass. Each round costs an `opus` implementer plus a
 `sonnet` re-review, so the bound is also the difference between an hour and an
 afternoon. Raise it with `--max-fix 3` when the findings are genuinely independent
 and mechanical; never raise it because one finding keeps coming back.
+
+**Run-wide, not per source** — one budget covering `plan-verifier`,
+`architecture-reviewer` and `/pr-self-review` together. Read per-source it would
+license **six** `opus`+`sonnet` rounds on a default invocation, which is not what
+`SKILL.md`'s "round budget (`--max-fix`, default 2)" promises and not a cost anyone
+agreed to. Findings from a later source join the same budget; if it is already spent
+when `/pr-self-review` returns a CRITICAL, that CRITICAL is `escalated` to the human
+rather than silently buying a seventh round.
 
 **The second exit is *no progress*, and it usually fires first.** After a round,
 compare the re-review against the previous one **by finding id**. If nothing moved —

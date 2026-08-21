@@ -831,6 +831,43 @@ consequence rather than a preference.
    would cost 90 150. A skill an agent is forbidden to act on is pure cost, and
    worse than cost when it hands the agent a rubric outside its lane.
 
+### The per-agent restart self-check
+
+Step 8's self-check, written out per agent. **Changes to any `.claude/agents/*.md`
+take effect only after a full CLI restart — `/clear` does not re-read that
+directory**, so compare the process start time against the files' mtimes before
+trusting a result. Each check below is a no-tools dispatch: the agent answers from
+context, and **0 tool calls** is part of the pass.
+
+These lived at the foot of each agent file until 2026-08-21, where they were loaded
+into every dispatch as system-prompt text the agent cannot act on. They are
+maintainer instructions, so they live here.
+
+| Agent | Must quote, 0 tool calls | Must **not** be able to quote |
+|---|---|---|
+| `implementation-planner` | all eleven injected `SKILL.md` bodies | `zod`'s `references/*.md`; `onion-architecture`'s `layer-map.md` |
+| `implementer` | its eleven injected bodies | the same sibling reference files |
+| `architecture-reviewer` | *"All imports point inward"* + the six-row layer table (`onion-architecture`); the six laws (`frontend-ui-architecture`) — two bodies | `layer-map.md`, `enforcement.md` |
+| `test-writer` | the Testing Trophy block (`react-testing-library`); the reading order (`fastify-best-practices`); the `Brand<K, T>` snippet (`typescript-expert`) — three bodies | `rules/testing.md` |
+| `spec-creator` | the required state list (`product-ui-language`); the diagram decision guide (`mermaid-diagram`); the dependency rule (`onion-architecture`) — three bodies | `mermaid-diagram`'s `examples.md`; `onion-architecture`'s `layer-map.md` |
+| `doc-writer` | the diagram-type decision guide (`mermaid-diagram`) — one body | `examples.md` |
+| `plan-verifier` | **nothing — this is the negative check.** It must report that it holds no injected skill body, and must not produce one on request | any skill body at all |
+
+**If an agent can quote a sibling reference file, something other than `skills:` is
+loading files and the cost arithmetic above is wrong.** Only `SKILL.md` is inlined.
+
+Two checks that are not about skills:
+
+- **`architecture-reviewer` writes nothing.** Confirm `git status --short
+  --untracked-files=all` is byte-identical before and after a real dispatch.
+- **`spec-creator` must still return a blocking gap rather than defaulting it.**
+  Dispatch it against a request with one deliberately load-bearing gap and check the
+  gap **leads** the report, marked BLOCKING, with a proposed default beside it. This
+  is the failure that is *silent* — an agent that quietly picked a value looks
+  exactly like one that had no questions, and the spec reads as agreed either way.
+  (The older form of this check tested whether `AskUserQuestion` reached a human; it
+  cannot — see that file's *Clarify first*.)
+
 ## Provenance and limits
 
 Authored in this repo. Agents have no upstream and do not belong in
@@ -1058,3 +1095,4 @@ Known limits:
 | 2026-08-10 | Four agents, taking the set to seven. `test-writer` (`opus`, `green` — a forced duplicate, the palette holds six values) writes only inside test paths; `doc-writer` (`sonnet`, `magenta`) only inside doc paths. `architecture-reviewer` (`opus`, `red`) and `plan-verifier` (`opus`, `yellow`) are read-only by allowlist and carry the full named-construct prohibition. `plan-verifier` declares **no** `skills:` as a design choice — a rubric it holds is a rubric it applies. Narrow justified `skills:` lists become the default: full fan-out costs 38 962 injected words instead of 75 125. Permissions matrix transposed to agent-per-row. Four external practice sets cited in the provenance section — subagent design, LLM-generated-test failure modes, requirements verification, and documentation/diagram conventions. |
 | 2026-08-17 | `planner` → **`implementation-planner`**, and the artefact `Development Plan` → **`Implementation Plan`**. The agent now plans **how**, never **what**: a new `## You do NOT own the specification` section forbids writing, amending or *planning* a spec, ticket or acceptance criterion, and the plan's `## Specs` section is gone. Two mandatory steps run before any planning — **Step 1, verify the requirements** (restate each as an `R<n>` with a `Source:` of a spec `AC-n`, the dispatch, or `assumed default — confirm`; find gaps as numbered questions with defaults; recommend a cleaner/safer/cheaper route as advice, never as an edit) and **Step 2, ask the execution mode** (`multi-agent` waves versus a `single-agent` linear pass, recommended-but-confirmed, with both orderings written out so the answer is free). New sections: `## Execution mode`, `Requirements (verified)`, `## Open questions & recommendations`, and a `## Red-flags check` the agent runs before returning. Spec ownership now stops at two agents: `implementer` lost its spec-writing step entirely (`specs/**` added to its do-not-touch list, a contradiction goes to `## For the parent`), leaving `spec-creator` before the code and `doc-writer` after it — recorded in `docs/specs-convention.md` too. References updated in `implementer.md`, `plan-verifier.md` (whose `## Requirements` table gained a `Source` column), `doc-writer.md`, `spec-creator.md` and `test-writer.md`. |
 | 2026-08-19 | **`AskUserQuestion` withdrawn from `spec-creator`, and with it the last claim that any agent here can ask a human.** Closed by measurement, not argument: the harness answers `AskUserQuestion is not available inside subagents`. The agent now returns blocking gaps to the parent — numbered, defaulted, leading its report and marked BLOCKING — and keeps the clarification artefact for the case where they make the spec unwritable. *Inputs and outputs* gains two rules the parent owes every dispatch: quote the `INSIGHTS.md` entries you have already read instead of citing the path (measured: 8 opens of a 49 KB journal across 3 participants in one run), and carry a design as a saved path or as prose, because no agent inherits chat images. Source: `docs/retro/2026-08-18-project-context-spec.md`. |
+| 2026-08-21 | **Two cuts for cost, none for safety.** A measured audit of three SDD runs put one feature at ≈25 dispatches, 1.3–1.8M uncached tokens and ~5 hours, with **≈67k of each ≈80k implementer dispatch spent on preamble before the first edit**. Two changes here, both removing duplicated work rather than a check. **The maintainer-only sections left the agent files** — six `## Editing this file` blocks and four trailing `## Grounded in` bibliographies, 146 lines that shipped inside every system prompt as text the agent cannot act on. The self-check recipes became the per-agent table under `## Adding an agent`; the bibliographies were pure duplicates of `## Where each agent's rules come from` and every external source in them was already cited there, so they were dropped rather than moved. The **earlier** `## Grounded in` in four files is a report-template heading the agent writes and was deliberately left alone. **`implementer` step 1 stopped mandating a full journal read**: when the dispatch brief carries the entries verbatim it takes them as read and says so in its receipt, and `/run-plan` Phase 0 now reads each in-scope journal once and quotes the relevant entries into every wave brief. That is the 2026-08-18 retro's own rule finally applied where it binds — it had been written into this README, which no dispatch loads, while `implementer.md` still said *"read in full — never `head` it"*; `server/INSIGHTS.md` grew 49 KB → 72 KB and 24 of one feature's reports still recorded a full read. Not taken, and recorded as considered: trimming `skills:` (B3), collapsing the worked-example templates (B4), and a shared `agent-protocol` skill for the ~828 lines of cross-file duplication (B5). |

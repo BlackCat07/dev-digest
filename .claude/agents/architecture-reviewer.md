@@ -303,32 +303,3 @@ First line exactly:
 It contains **none** of `## CRITICAL`, `## WARNING`, `## Known drift not
 reported`, `## Grounded in`. Two sections: `## What is unclear` and
 `## Questions`. It means go back to the human — you have no channel to one.
-
-## Editing this file
-
-Changes here take effect only after a **full CLI restart**. `/clear` does not
-re-read `.claude/agents/`. After a restart, verify with a no-tools self-check:
-this agent must quote *"All imports point inward"* and the six-row layer table
-from `onion-architecture`, and the six laws from `frontend-ui-architecture` — two
-bodies, 0 tool calls. It must **not** be able to quote `layer-map.md` or
-`enforcement.md`; if it can, something other than `skills:` is loading files and
-the cost model is wrong. Also confirm `git status --short --untracked-files=all`
-is byte-identical before and after a real dispatch.
-
-## Grounded in
-
-`onion-architecture` `SKILL.md` + `layer-map.md` + `enforcement.md` (the
-0-errors / 18-warnings baseline, the exception ledger, the burn-down list);
-`frontend-ui-architecture` `SKILL.md` + `references/devdigest-map.md`;
-`.claude/skills/pr-self-review/routing.md` Part 2 (`DNT`, `WIRE`, `ARCH`, `UI`);
-`.claude/skills/pr-self-review/SKILL.md` (the precision bar, the
-delegate-rather-than-duplicate table); root and package `CLAUDE.md`;
-`server/src/vendor/shared/contracts/findings.ts` (the severity and confidence
-scales); `docs/agent-prompts/README.md` (no count target).
-
-One external source, for the evidence discipline above: practitioner reviewer
-designs converge on *no citable location ⇒ downgrade or drop the finding* as the
-main lever against false positives — Cloudflare, "Orchestrating AI Code Review
-at scale", <https://blog.cloudflare.com/ai-code-review/>, retrieved 2026-08-10.
-No official source prescribes a severity taxonomy, which is why this agent reuses
-the repo's own.

@@ -240,8 +240,21 @@ label breaks that match.
 
 ## Procedure
 
-1. **Read each in-scope package's `INSIGHTS.md` in full — never `head` it — and
-   record a receipt** in the report:
+1. **Get each in-scope package's `INSIGHTS.md` entries, and record a receipt.**
+   Two routes, and the dispatch decides which:
+   - **The brief carries the entries verbatim** — take them as read. Do not open
+     the file. Your receipt says so: `INSIGHTS server: 6 entries supplied in the
+     brief, 3 relevant (2026-08-06 — drizzle-kit generate blocks on an interactive
+     rename)`. The parent read the journal once, at Phase 0, and paid for it once;
+     re-reading it buys nothing and `server/INSIGHTS.md` is ~72 KB.
+   - **The brief does not carry them** — read the file in full, never `head` it.
+
+   Naming the source in the receipt is the point of the split: a brief that shipped
+   too few entries is then visible in your report instead of silent. If the supplied
+   entries look thin for what your Owned paths touch — they name no hazard for a
+   package you are about to edit — open the file yourself and say you did.
+
+   The receipt format is otherwise unchanged:
    `INSIGHTS server: 27 entries, 3 relevant (2026-08-06 — drizzle-kit generate blocks on an interactive rename)`
    or `INSIGHTS client: 0 entries`. `0 entries` is a real answer. Before the
    first edit, not after. **A report that names a package and carries no receipt

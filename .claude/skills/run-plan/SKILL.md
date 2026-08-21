@@ -130,6 +130,27 @@ Stop and ask, dispatching nothing, when:
 | an `R<n>` appears in no task's `Satisfies` | the plan does not build one of its own requirements |
 | the tree is dirty with unrelated work | every reviewer downstream scopes "the diff", and unrelated changes get reviewed as part of this feature |
 
+**A task that owns no path is not a dispatch — it is a Phase 2 check.** A task whose
+`Owned paths` reads `none` (in any wording — `none`, `none — this task edits no
+repository file`, `—`) does no work an `implementer` is for: its entire output is its
+`Done-condition`. Do **not** dispatch it. Move its commands into the Phase 2 sweep,
+which already runs every task's Done-condition verbatim, and record in `run.md` that
+it ran there. This is not a stop — the run proceeds, one dispatch lighter.
+
+Measured on the PR Brief run: `T15` was exactly this shape, and its own report says
+*"No file was edited, added, or deleted by this task."* It cost a full `opus`
+implementer — reckon 70–90k tokens and a wave barrier — to run five `Bash` commands
+the parent was going to run anyway.
+
+**The check itself is never dropped, only relocated.** `T15`-shaped tasks exist because
+of a measured structural gap: nothing in this pipeline applies the migration a feature
+ships, so Project Context shipped `0017_*.sql`, satisfied `DDG-WIRE-003`, recorded a
+clean `/pr-self-review` and still answered `500 internal_error` the moment its screen
+was opened (`server/INSIGHTS.md`, 2026-08-19). Apply-the-migration, the
+`information_schema` query and the `curl` against the running stack all still run — in
+Phase 2, by you. Dropping them because the dispatch went away is the one way to get
+this wrong.
+
 **Know what this validation actually is.** Reading a plan is **LLM parsing of
 markdown fields** — `Owned paths:`, `Depends-on:`, `Satisfies:`, `Done-condition:`,
 the `## Waves` list. There is no schema and no parser. Two consequences:
@@ -156,6 +177,20 @@ and recorded quietly**, if it records it at all. You hold the tool. Before Phase
 - Anything that does not meet that bar is not worth a round trip: let the agent take
   the plan's stated default, and note it in the run report.
 
+**Read the in-scope journals now, once, and carry them in the briefs.** For every
+package the plan's Owned paths touch, read `<package>/INSIGHTS.md` in full here — and
+then never pay for it again: each wave brief quotes the entries relevant to that
+wave's paths, and `implementer` is told to take them as read. The read half of the
+session protocol still happens; it happens **once per run instead of once per
+dispatch**.
+
+The cost of getting this wrong was measured twice. In the 2026-08-18 spec run
+`server/INSIGHTS.md` (~49 KB then) was opened **eight times across three
+participants** to quote four entries. The rule that came out of it was written into
+`.claude/agents/README.md` — which no dispatch loads — so the journals kept being
+re-read; the file is now ~72 KB and 24 of one feature's reports still record a full
+read of it. Quoting the path is not carrying the entries.
+
 Then print the run plan — waves, dispatch count, and the budget below — and write
 `run.md`. On `--dry-run`, stop here.
 
@@ -181,6 +216,14 @@ their paths.
 
 Test rows in the plan's ## Tests whose Owner is implementer ARE yours and ship with
 the code — test-writer is not being dispatched on this run.
+
+## INSIGHTS, read for you at Phase 0 — take these as read, do not open the files
+<the entries relevant to these tasks' Owned paths, quoted verbatim, with their
+dates and their package. One block per in-scope package. A package whose journal
+holds nothing relevant is stated as such: "INSIGHTS client: 14 entries, 0 relevant
+to these paths.">
+If a hazard for a package you are about to edit is missing here, open that journal
+yourself and say so in your receipt.
 
 Docker is not authorised: no *.it.test.ts, no e2e.
 Leave the work uncommitted. 'gate did not run' is a fine result; an invented green
@@ -222,6 +265,13 @@ Plus the two invariants no tool here catches, from
 added a relative import or a module — take them **verbatim**, `grep -arnE` and the
 `src/modules/*/` loop. They are the only check for two CRITICALs `tsc` cannot see.
 
+**Plus the Done-conditions of any task Phase 0 relocated here** — the `Owned paths:
+none` ones that were never dispatched. Those commands are the whole of that task, so
+a red one is a real failure and goes to [remediation.md](remediation.md) like any
+other; it is not a note to carry forward. Where the task named which task owns the
+fix — `T15` sends a `404` back to the registration task and a `500` back to the
+migration task — route it there rather than re-deriving the owner.
+
 This is not verification and does not replace Phase 3. It is a fail-fast filter:
 you are answering *is this diff stable enough to be worth reviewing*, not *is the
 plan met*.
@@ -250,10 +300,22 @@ is checked against that criterion's text, not only against the plan's wording.
 The diff is uncommitted. Docker is not authorised. Implementation reports:
 <paths>.
 
-I re-ran every Done-condition myself before dispatching you and they were green —
-run them again anyway, verbatim, exactly as the plan wrote them. Two independent
-runs is the point; agreeing with me is not evidence.
+I re-ran every Done-condition myself before dispatching you and they were green.
+Do not re-run the ones you are about to mark `yes` — take my run as the second
+one. Re-run, verbatim and exactly as the plan wrote it, the Done-condition of
+**every item you would mark anything other than `yes`**: two independent runs is
+the point precisely where we disagree, and agreeing with me there is not evidence.
+Say in your report which commands you ran and which you took from my sweep.
 ```
+
+**Why the verifier no longer re-runs the green ones.** They had already run twice —
+once inside the implementer, once in the Phase 2 sweep — and a third full
+`tsc` + `vitest` + `depcruise` pass sat on the critical path to confirm a result
+two independent runs had already agreed on. The rule here is the one
+[remediation.md](remediation.md) already applies in the fix loop — *re-verify the
+items that were not `yes`, not all of them* — and the two are now consistent. What
+is **not** cut is the Phase 2 sweep itself: it is five `Bash` calls rather than a
+dispatch, and it is what makes this phase's parallelism safe.
 
 ```
 # architecture-reviewer

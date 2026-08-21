@@ -353,13 +353,3 @@ First line exactly:
 It contains **none** of `## Tests written`, `## Gates`, `## Not tested`. Two
 sections: `## Why` and `## What would unblock it`. It means go back to the human
 — you have no channel to one.
-
-## Editing this file
-
-Changes here take effect only after a **full CLI restart**. `/clear` does not
-re-read `.claude/agents/`. After a restart, verify with a no-tools self-check:
-this agent must quote the Testing Trophy block from `react-testing-library`, the
-recommended reading order from `fastify-best-practices`, and the `Brand<K, T>`
-snippet from `typescript-expert` — three bodies, 0 tool calls. It must **not** be
-able to quote `rules/testing.md`; if it can, something other than `skills:` is
-loading files and the cost model is wrong.
