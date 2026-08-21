@@ -115,6 +115,17 @@ function renderCard(props: Partial<BriefCardProps> = {}) {
 
 /** The given strings — each already asserted to be on screen — sorted into the
     order they are actually READ in, so a failure prints the real order. */
+/**
+ * Both `RISKS` and `REVIEW FOCUS` arrive SHUT, so a test that reaches for a row
+ * inside one has to open it first. Named after what the reader does rather than
+ * after the control, so the call sites read as steps.
+ */
+function expandSection(label: string) {
+  fireEvent.click(
+    screen.getByRole("button", { name: M.sectionExpand.replace("{label}", label) }),
+  );
+}
+
 function readingOrder(container: HTMLElement, ...needles: string[]) {
   const text = container.textContent ?? "";
   return [...needles].sort((a, b) => text.indexOf(a) - text.indexOf(b));
@@ -183,13 +194,36 @@ describe("BriefCard", () => {
     // AC-39 — all four parts of each risk, with the severity as a word plus an
     // icon. `severity.*` and not `level.*`: two vocabularies for two facts, the
     // whole pull request's level and one risk's severity.
+    expandSection(M.risksLabel);
     const severity = screen.getByText(M.severity.high);
     expect(severity.querySelector("svg")).toBeTruthy();
     expect(screen.getByText(M.severity.low)).toBeInTheDocument();
     expect(screen.getByText(HIGH_RISK.title)).toBeInTheDocument();
+
+    // The explanation and the paths sit behind a disclosure, closed on arrival —
+    // a risk carries two sentences and up to three paths, so a block that
+    // expands every row runs past the fold on any real pull request. Severity
+    // and title are what a reader scans; the rest is what they ask for. Assert
+    // the closed state first, or a passing test says nothing about the height
+    // that made this change necessary.
+    expect(screen.queryByText(HIGH_RISK.explanation)).not.toBeInTheDocument();
+    expect(screen.queryByText(M.riskFilesLabel)).not.toBeInTheDocument();
+
+    const expandHigh = screen.getByRole("button", {
+      name: M.riskExpand.replace("{title}", HIGH_RISK.title),
+    });
+    expect(expandHigh).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(expandHigh);
     expect(screen.getByText(HIGH_RISK.explanation)).toBeInTheDocument();
     expect(screen.getByText(M.riskFilesLabel)).toBeInTheDocument();
     expect(screen.getByText("src/api/public.ts")).toBeInTheDocument();
+
+    // One open at a time: opening the low risk closes the high one, so the block
+    // is never taller than one risk's worth of prose.
+    fireEvent.click(
+      screen.getByRole("button", { name: M.riskExpand.replace("{title}", LOW_RISK.title) }),
+    );
+    expect(screen.queryByText(HIGH_RISK.explanation)).not.toBeInTheDocument();
     expect(screen.getByText(LOW_RISK.explanation)).toBeInTheDocument();
     // A risk citing nothing says so rather than showing an empty file row.
     expect(screen.getByText(M.riskNoFiles)).toBeInTheDocument();
@@ -206,6 +240,7 @@ describe("BriefCard", () => {
 
     // AC-40 — the row is a real control, and it hands the card's caller the path
     // and the line. The card knows about paths; it knows nothing about routes.
+    expandSection(M.reviewFocusLabel);
     const row = screen.getByRole("button", {
       name: M.reviewFocusOpenLine
         .replace("{path}", "src/middleware/ratelimit.ts")
@@ -263,6 +298,59 @@ describe("BriefCard", () => {
     expect(readingOrder(container, M.stale, WHAT)).toEqual([M.stale, WHAT]);
   });
 
+  it("arrives with both risk and review-focus sections shut, and each opens alone", () => {
+    // The height IS the requirement: six risks and five focus rows pushed the
+    // intent and blast cards below the fold, which is why both lists start
+    // behind a disclosure. Assert the SHUT state first — a test that only checks
+    // that expanding works says nothing about the problem this solves.
+    renderCard({ brief: brief() });
+    expect(screen.queryByText(HIGH_RISK.title)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: M.reviewFocusOpen.replace("{path}", "src/config.ts"),
+      }),
+    ).not.toBeInTheDocument();
+
+    // The count is what keeps a shut section honest — two risks and two focus
+    // rows in the fixture, readable without opening either.
+    const risksHead = screen.getByRole("button", {
+      name: M.sectionExpand.replace("{label}", M.risksLabel),
+    });
+    expect(risksHead).toHaveAttribute("aria-expanded", "false");
+
+    // Independent: opening the risks leaves the review focus shut. One shared
+    // boolean would have passed every other assertion here.
+    expandSection(M.risksLabel);
+    expect(screen.getByText(HIGH_RISK.title)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: M.reviewFocusOpen.replace("{path}", "src/config.ts"),
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: M.sectionCollapse.replace("{label}", M.risksLabel) }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("does not hide an EMPTY list behind a disclosure", () => {
+    // "No specific risk was identified" is a claim about the change, not an
+    // absent list, so it must not cost a click to read. A section with nothing to
+    // list therefore renders its sentence outright and offers no control at all.
+    renderCard({ brief: brief({ risks: [], review_focus: [], risk_level: "low" }) });
+    expect(screen.getByText(M.risksNone)).toBeInTheDocument();
+    expect(screen.getByText(M.reviewFocusNone)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: M.sectionExpand.replace("{label}", M.risksLabel),
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: M.sectionExpand.replace("{label}", M.reviewFocusLabel),
+      }),
+    ).not.toBeInTheDocument();
+  });
+
   it("names the reason on a partial brief and still renders what the brief holds", () => {
     // AC-48 — the notice and the content are in the tree at once, the shape the
     // blast card already uses for a partial index. `restates_title` is the
@@ -276,6 +364,7 @@ describe("BriefCard", () => {
     expect(screen.getByText(M.whyLabel)).toBeInTheDocument();
     // A null what renders the why alone, not an empty labelled region.
     expect(screen.queryByText(M.whatLabel)).not.toBeInTheDocument();
+    expandSection(M.risksLabel);
     expect(screen.getByText(HIGH_RISK.title)).toBeInTheDocument();
   });
 

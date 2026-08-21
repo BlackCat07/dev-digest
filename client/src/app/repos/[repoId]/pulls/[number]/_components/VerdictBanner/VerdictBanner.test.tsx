@@ -23,7 +23,6 @@ describe("VerdictBanner (smoke)", () => {
         score={42}
         findingsCount={1}
         blockers={1}
-        agentName="Security Reviewer"
       />,
     );
     expect(screen.getByText("Request changes")).toBeInTheDocument();
@@ -62,5 +61,21 @@ describe("VerdictBanner (smoke)", () => {
       />,
     );
     expect(screen.queryByText("—")).not.toBeInTheDocument();
+  });
+
+  it("does not name the agent — the surfaces around it already do", () => {
+    // The badge was removed rather than restyled: `Agent runs` is the tab about
+    // agents, and inside ReviewRunAccordion the header above this banner opens
+    // with the same name. The prop is gone too, so a call site cannot pass one.
+    renderWithIntl(
+      <VerdictBanner
+        verdict="request_changes"
+        summary="Hardcoded secret introduced."
+        score={42}
+        findingsCount={1}
+        blockers={1}
+      />,
+    );
+    expect(screen.queryByText("Security Reviewer")).not.toBeInTheDocument();
   });
 });

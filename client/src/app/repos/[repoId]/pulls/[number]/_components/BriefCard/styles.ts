@@ -188,12 +188,73 @@ export const s = {
     background: "var(--bg-primary)",
     border: "1px solid var(--border)",
   } satisfies CSSProperties,
+  // The disclosure control. `all: unset` would drop the layout too, so the
+  // button's own chrome is reset explicitly and the row keeps the flex shape it
+  // had as a `div` — the head looked like this before it became a control and
+  // should keep looking like it.
   riskHead: {
     display: "flex",
     alignItems: "center",
     flexWrap: "wrap",
     gap: 10,
+    width: "100%",
+    padding: 0,
+    border: "none",
+    background: "none",
+    font: "inherit",
+    color: "inherit",
+    textAlign: "left",
+    cursor: "pointer",
   } satisfies CSSProperties,
+  /**
+   * A section's own disclosure control — `RISKS` and `REVIEW FOCUS`.
+   *
+   * Same reset recipe as `riskHead` below, for the same reason: `all: unset`
+   * would drop the layout too, so the button's chrome is cleared explicitly. The
+   * header keeps looking exactly like the `SectionLabel` it wraps, which is what
+   * makes a collapsed section read as a heading rather than as a control the
+   * card grew.
+   *
+   * `marginBottom: -14` cancels `SectionLabel`'s own bottom margin while the
+   * section is SHUT: that margin is the gap before a list, and with no list
+   * under it two collapsed headers sat further apart than two rows of content.
+   */
+  sectionHead: (open: boolean): CSSProperties => ({
+    display: "block",
+    width: "100%",
+    padding: 0,
+    border: "none",
+    background: "none",
+    font: "inherit",
+    color: "inherit",
+    textAlign: "left",
+    cursor: "pointer",
+    marginBottom: open ? 0 : -14,
+  }),
+  /** The count and the chevron, as one group in `SectionLabel`'s `right` slot. */
+  sectionRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  } satisfies CSSProperties,
+  /** The count beside a section's label, so a shut section is not opaque. */
+  sectionCount: { fontSize: 11.5, padding: "1px 7px" } satisfies CSSProperties,
+  /** Like `riskChevron` but without its `marginLeft: auto` — inside the `right`
+      slot that would shove the chevron away from the count it sits beside. */
+  sectionChevron: (open: boolean): CSSProperties => ({
+    flexShrink: 0,
+    color: "var(--text-muted)",
+    transform: open ? "rotate(180deg)" : "none",
+    transition: "transform .15s ease",
+  }),
+  riskChevron: (open: boolean) =>
+    ({
+      marginLeft: "auto",
+      flexShrink: 0,
+      color: "var(--text-secondary)",
+      transform: open ? "rotate(180deg)" : "none",
+      transition: "transform .15s ease",
+    }) satisfies CSSProperties,
   riskTitle: {
     fontSize: 13.5,
     fontWeight: 600,

@@ -215,6 +215,14 @@ function BriefContent({
   onOpenFile: BriefCardProps["onOpenFile"];
 }) {
   const t = useTranslations("prBrief");
+  // Which risk's explanation is showing, or none. ONE at a time, the rule the
+  // intent card's chip row already sets: a risk carries two sentences and up to
+  // three paths, so a block that expands every row grows past the fold on any
+  // pull request with more than two risks — which was this card's first
+  // observation in the running app. Index rather than an id: `Risk` has none,
+  // this is immutable server data, and the list is never reordered while
+  // mounted. Derived-not-stored is not available here; a disclosure IS state.
+  const [openRisk, setOpenRisk] = React.useState<number | null>(null);
   const degraded = brief.status === "degraded";
   const partial = brief.status === "partial";
   // AC-49 — a reason this build has no sentence for renders the GENERIC one,
@@ -258,39 +266,48 @@ function BriefContent({
       {!degraded && (
         <>
           <div style={s.divider} />
-          <section>
-            <SectionLabel icon="AlertTriangle">{t("risksLabel")}</SectionLabel>
-            {brief.risks.length === 0 ? (
-              <div style={s.quiet}>{t("risksNone")}</div>
-            ) : (
-              <div style={s.riskList}>
-                {/* Index keys: this list is rendered wholesale from immutable
-                    server data, holds no per-item state, and its order is a pure
-                    function of that data — two risks are allowed to share a
-                    title, so the title is not an id. */}
-                {risksWorstFirst(brief.risks).map((risk, i) => (
-                  <RiskRow key={i} risk={risk} />
-                ))}
-              </div>
-            )}
-          </section>
+          {/* Both sections start SHUT. Between them they carry up to six risks and
+              five focus rows, which pushed the intent and blast cards below the
+              fold on any real pull request — the same observation that already
+              put a risk's explanation behind its own disclosure, one level up. */}
+          <Section
+            icon="AlertTriangle"
+            label={t("risksLabel")}
+            count={brief.risks.length}
+            empty={t("risksNone")}
+          >
+            <div style={s.riskList}>
+              {/* Index keys: this list is rendered wholesale from immutable
+                  server data, holds no per-item state, and its order is a pure
+                  function of that data — two risks are allowed to share a
+                  title, so the title is not an id. */}
+              {risksWorstFirst(brief.risks).map((risk, i) => (
+                <RiskRow
+                  key={i}
+                  risk={risk}
+                  open={openRisk === i}
+                  onToggle={() => setOpenRisk(openRisk === i ? null : i)}
+                />
+              ))}
+            </div>
+          </Section>
 
-          <section>
-            <SectionLabel icon="ListChecks">{t("reviewFocusLabel")}</SectionLabel>
-            {brief.review_focus.length === 0 ? (
-              <div style={s.quiet}>{t("reviewFocusNone")}</div>
-            ) : (
-              <div style={s.focusList}>
-                {brief.review_focus.map((item, i) => (
-                  <FocusRow
-                    key={`${item.path}:${item.line ?? ""}:${i}`}
-                    item={item}
-                    onOpenFile={onOpenFile}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
+          <Section
+            icon="ListChecks"
+            label={t("reviewFocusLabel")}
+            count={brief.review_focus.length}
+            empty={t("reviewFocusNone")}
+          >
+            <div style={s.focusList}>
+              {brief.review_focus.map((item, i) => (
+                <FocusRow
+                  key={`${item.path}:${item.line ?? ""}:${i}`}
+                  item={item}
+                  onOpenFile={onOpenFile}
+                />
+              ))}
+            </div>
+          </Section>
         </>
       )}
 
@@ -355,6 +372,82 @@ function Stat({ icon, text }: { icon: "File" | "Eye" | "Code" | "EyeOff"; text: 
 }
 
 /**
+ * One collapsible section of the stored brief — `RISKS` and `REVIEW FOCUS`.
+ *
+ * Shut by default, and each instance owns its own `open`, so expanding one leaves
+ * the other alone. State lives HERE rather than in `BriefContent` for that reason:
+ * two independent booleans threaded from the parent would say the same thing with
+ * more wiring, and nothing outside this component reads either one.
+ *
+ * The header wraps `SectionLabel` in a real `<button>` instead of re-deriving that
+ * primitive's type scale — the shape `RiskRow`'s head already set one level down,
+ * and the reason a shut section still reads as a heading. A native button is also
+ * what AC-53 wants: tab-reachable, with an accessible name, no pointer required.
+ *
+ * AN EMPTY LIST IS NOT COLLAPSIBLE. With no risks the section renders its sentence
+ * outright, because "No specific risk was identified" is a CLAIM about the change
+ * and a reader must not have to click to find out that nothing was flagged. Note
+ * the early return sits AFTER the hook, so the hook order never depends on
+ * `count` — a regeneration that takes a list from empty to non-empty must not
+ * reorder hooks.
+ */
+function Section({
+  icon,
+  label,
+  count,
+  empty,
+  children,
+}: {
+  icon: "AlertTriangle" | "ListChecks";
+  label: string;
+  count: number;
+  /** The sentence shown INSTEAD of a disclosure when there is nothing to list. */
+  empty: string;
+  children: React.ReactNode;
+}) {
+  const t = useTranslations("prBrief");
+  const [open, setOpen] = React.useState(false);
+
+  if (count === 0) {
+    return (
+      <section>
+        <SectionLabel icon={icon}>{label}</SectionLabel>
+        <div style={s.quiet}>{empty}</div>
+      </section>
+    );
+  }
+
+  return (
+    <section>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-label={t(open ? "sectionCollapse" : "sectionExpand", { label })}
+        style={s.sectionHead(open)}
+      >
+        <SectionLabel
+          icon={icon}
+          right={
+            <span style={s.sectionRight}>
+              {/* The count is what keeps a shut section honest: the reader can see
+                  there are three risks without opening it. */}
+              <Badge color="var(--text-secondary)" style={s.sectionCount}>
+                {count}
+              </Badge>
+              <Icon.ChevronDown size={15} style={s.sectionChevron(open)} />
+            </span>
+          }
+        >
+          {label}
+        </SectionLabel>
+      </button>
+      {open ? children : null}
+    </section>
+  );
+}
+
+/**
  * One risk, with all four of its parts at once (AC-39): the severity as a WORD
  * plus an icon, the title, the explanation, and the files it names.
  *
@@ -373,31 +466,55 @@ function Stat({ icon, text }: { icon: "File" | "Eye" | "Code" | "EyeOff"; text: 
  * request touches — no target, no control. A review-focus row is the opposite
  * case and IS a control.
  */
-function RiskRow({ risk }: { risk: Risk }) {
+function RiskRow({
+  risk,
+  open,
+  onToggle,
+}: {
+  risk: Risk;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const t = useTranslations("prBrief");
   return (
     <div style={s.riskRow}>
-      <div style={s.riskHead}>
+      {/* The head is the disclosure control, not a label. A row's severity, its
+          title and its state are what a reader scans; the explanation and the
+          paths are what they ask for. Making the whole head the button rather
+          than a bare chevron gives the control a real accessible name and a
+          target worth aiming at. */}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-label={t(open ? "riskCollapse" : "riskExpand", { title: risk.title })}
+        style={s.riskHead}
+      >
         <Badge icon={severityIcon(risk.severity)} color={riskSeverityColor(risk.severity)}>
           {t(`severity.${risk.severity}`)}
         </Badge>
         <span style={s.riskTitle}>{risk.title}</span>
-      </div>
-      <div style={s.riskExplanation}>{risk.explanation}</div>
-      {risk.file_refs.length > 0 ? (
-        <div>
-          <div style={s.statementLabel}>{t("riskFilesLabel")}</div>
-          <div style={s.riskRefs}>
-            {risk.file_refs.map((ref, i) => (
-              <span key={i} style={s.riskRef}>
-                {ref}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div style={s.quiet}>{t("riskNoFiles")}</div>
-      )}
+        <Icon.ChevronDown style={s.riskChevron(open)} />
+      </button>
+      {open ? (
+        <>
+          <div style={s.riskExplanation}>{risk.explanation}</div>
+          {risk.file_refs.length > 0 ? (
+            <div>
+              <div style={s.statementLabel}>{t("riskFilesLabel")}</div>
+              <div style={s.riskRefs}>
+                {risk.file_refs.map((ref, i) => (
+                  <span key={i} style={s.riskRef}>
+                    {ref}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={s.quiet}>{t("riskNoFiles")}</div>
+          )}
+        </>
+      ) : null}
     </div>
   );
 }

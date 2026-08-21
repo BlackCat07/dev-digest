@@ -62,5 +62,9 @@
     "model_invalid": "The model’s answer did not match the shape this brief requires, so only the figures that need no model were recorded.",
     "restates_title": "The model’s summary only restated this pull request’s title, so no summary is shown. The rest of this brief is unaffected."
   },
-  "reasonUnknown": "This brief is incomplete, and the cause is not one this version of the screen recognises. What is shown above is whatever the generation managed to record; regenerating it is safe."
+  "reasonUnknown": "This brief is incomplete, and the cause is not one this version of the screen recognises. What is shown above is whatever the generation managed to record; regenerating it is safe.",
+  "riskExpand": "Show why: {title}",
+  "riskCollapse": "Hide why: {title}",
+  "sectionExpand": "Show {label}",
+  "sectionCollapse": "Hide {label}"
 }

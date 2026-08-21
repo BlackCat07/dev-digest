@@ -166,6 +166,28 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
   const lethalTrifecta = allFindings.filter((f) => f.kind === "lethal_trifecta");
   const findingsCount = allFindings.length;
 
+  // The verdict banner on `Overview` shows the LAST agent run, which is the
+  // product's own rule for that gauge: each run writes its own `reviews` row with
+  // its own score, and the screen reports the newest one rather than an aggregate
+  // across agents — a security agent at 30 and a style agent at 85 average to 57,
+  // which states nothing. `reviews` arrives newest-first (the API orders
+  // `desc(created_at)`), so the head of the filtered list IS that run.
+  //
+  // `kind === 'review'` for the same reason `allFindings` filters it: a
+  // `kind: 'summary'` row is not a run's verdict, and the two must not mix on one
+  // gauge. Cost and tokens live on the matching `agent_runs` row, joined by
+  // `run_id` exactly as the Agent-runs tab joins them — the seeded review carries
+  // a null `run_id` and simply contributes no usage figures.
+  const latestReview = React.useMemo(
+    () => (reviews ?? []).find((r) => r.kind === "review") ?? null,
+    [reviews],
+  );
+  const latestRun = React.useMemo(
+    () =>
+      latestReview?.run_id ? (prRuns ?? []).find((r) => r.run_id === latestReview.run_id) ?? null : null,
+    [latestReview, prRuns],
+  );
+
   const repoName = activeRepo?.full_name ?? repoId;
   // The real "owner/repo" (null until the repo is loaded) — used to build
   // github.com deep-links for the header and finding file references.
@@ -232,6 +254,8 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
             repoFullName={repoFullName}
             repoId={repoId}
             onOpenFile={openFile}
+            latestReview={latestReview}
+            latestRun={latestRun}
           />
         )}
 

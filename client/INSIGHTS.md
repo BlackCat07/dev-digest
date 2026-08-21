@@ -311,6 +311,34 @@ Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
 
+- **2026-08-20** — **`vendor/ui`'s "extend via a new file, don't restyle a primitive" rule
+  has a third path it doesn't name: most primitives take a `style` prop, so trimming one
+  for a single surface needs no `vendor/ui` edit and no fork.** `Badge` spreads
+  `...style` last over its own defaults, so a caller overrides `fontSize`/`padding` for
+  itself alone — which is what the do-not-touch rule actually wants (no other caller
+  moves), reached without a second component. Put the override in the calling unit's
+  `styles.ts` as a named member rather than inline, so the deviation from the primitive's
+  scale is a thing with a name and a comment; `VerdictBanner`'s `s.countBadge` is the
+  precedent. Check the primitive first — `style` is a prop on `Badge` but NOT on
+  `SeverityBadge` or `CategoryTag` in the same file, so the escape hatch is per-component,
+  not universal. Evidence: `src/vendor/ui/primitives/Badge.tsx` (`Badge`),
+  `src/app/repos/[repoId]/pulls/[number]/_components/VerdictBanner/styles.ts`
+  (`countBadge`).
+- **2026-08-20** — **`SectionLabel` carries its own `marginBottom: 14`, which is the gap
+  before the list it heads — so reusing it as a COLLAPSIBLE header leaves that gap
+  hanging under a section with nothing below it, and two shut sections then sit further
+  apart than two rows of content.** Reusing the primitive is still right (it owns the
+  12px/700/uppercase/0.07em scale every section label in the app shares, and re-deriving
+  that in a feature's `styles.ts` is how two headings start disagreeing) — but the
+  wrapping button has to cancel the margin while shut, which is why `s.sectionHead`
+  takes `open` and sets `marginBottom: open ? 0 : -14`. Its `right` slot is the place for
+  the count and the chevron; note that slot is `marginLeft: auto`, so a chevron style
+  copied from `riskChevron` brings a SECOND `marginLeft: auto` and shoves the chevron
+  away from the count it should sit beside — `s.sectionChevron` is the same style minus
+  that one line. Evidence: `src/vendor/ui/primitives/SectionLabel.tsx`,
+  `src/app/repos/[repoId]/pulls/[number]/_components/BriefCard/styles.ts`
+  (`sectionHead`, `sectionChevron`), `BriefCard.tsx` (`Section`).
+
 - **2026-08-11** — **`scrollMarginTop` on this app's screens cannot be a constant, because the
   scroll container is not the window and the sticky header is not a fixed height.**
   `AppFrame` scrolls an inner `<main style={{overflow:"auto"}}>`, and `PrDetailHeader`'s root
@@ -483,6 +511,28 @@ Dependency and tooling quirks.
 An error string, its real cause, and the fix.
 
 <!-- append below -->
+
+- **2026-08-20** — **"Couldn't load this pull request" with the sidebar reading "No repo
+  selected" is almost never the screen you just changed — it is the app talking to an API
+  that refused it, and there are exactly two cheap causes.** Both were hit in one session
+  while visually verifying a `VerdictBanner` restyle, and both render the app's own
+  full-screen error, which is indistinguishable from a feature you just broke. (1) **Wrong
+  host in the address bar.** `server/src/app.ts` registers `cors` with
+  `origin: [config.webOrigin]`, and `webOrigin` is built as
+  `http://localhost:${WEB_PORT}` — a literal, not a pattern. Serve the app from
+  `http://127.0.0.1:3000` and the API answers 200 with **no**
+  `access-control-allow-origin` header at all, so the browser discards every response and
+  every hook errors. Always drive a browser at `http://localhost:3000`; `curl` cannot
+  reveal this because it sends no `Origin`. (2) **You tripped the rate limiter.** The same
+  file registers `@fastify/rate-limit` at `max: 120, timeWindow: '1 minute'`, so a probe
+  script that walks every PR and fetches its reviews and runs exhausts the budget in
+  seconds and the NEXT page load fails — the API then answers
+  `{"error":{"code":"internal_error","message":"Rate limit exceeded, retry in N seconds"}}`.
+  `/health` is exempt (`config: { rateLimit: false }`), which is why the stack looks up
+  while the app is down. Tell the two apart in one command:
+  `curl -sD - -H 'Origin: http://localhost:3000' localhost:3001/repos | grep -i
+  access-control`. Evidence: `../server/src/app.ts`, `../server/src/platform/config.ts`
+  (`webOrigin`), `src/lib/api.ts` (`API_BASE`).
 
 - **2026-08-20** — **`vi.spyOn(Element.prototype, "scrollIntoView")` proves that SOMETHING
   scrolled, never WHICH element — and `mock.instances` will not tell you, because it is for

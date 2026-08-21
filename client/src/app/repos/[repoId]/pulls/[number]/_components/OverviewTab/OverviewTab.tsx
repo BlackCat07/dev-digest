@@ -9,16 +9,20 @@
    one written in their own terms. All three sit ABOVE the description, which is the
    raw claim they were derived from.
 
-   The verdict banner is NOT here even though the design draws it at the top of this
-   section: it is review output rendered on `Agent runs`, and a brief exists before any
-   agent has run — on a fresh pull request that whole region would be empty. */
+   The verdict banner IS here, at the top, where the design draws it — it reports the
+   LAST agent run's verdict and score, which is that gauge's own rule. It renders only
+   once something has run: a pull request nobody has reviewed has no verdict, and an
+   empty headline is worse than none. The brief keeps its own risk level regardless,
+   because a brief exists before any agent does. */
 "use client";
 
 import React from "react";
 import { SectionLabel } from "@devdigest/ui";
+import type { ReviewRecord, RunSummary, Verdict } from "@devdigest/shared";
 import { useDeriveIntent, useGenerateBrief, usePrBrief, usePrIntent } from "@/lib/hooks";
 import { usePrBlast } from "@/lib/hooks/blast";
 import { usePriorPrs } from "@/lib/hooks/prior-prs";
+import { VerdictBanner } from "../VerdictBanner";
 import { BriefCard } from "../BriefCard";
 import { IntentCard } from "../IntentCard";
 import { BlastRadiusCard } from "../BlastRadiusCard";
@@ -43,6 +47,15 @@ interface OverviewTabProps {
    * not about routes at all.
    */
   onOpenFile: (path: string, line?: number | null) => void;
+  /**
+   * The newest `kind: 'review'` row for this pull request, or null when no agent
+   * has run. Derived in `PrDetailView` so "the last run" has one definition on
+   * this screen, and passed in rather than queried here so this tab keeps handing
+   * its cards plain props.
+   */
+  latestReview: ReviewRecord | null;
+  /** That review's `agent_runs` row, for the banner's cost and token figures. */
+  latestRun: RunSummary | null;
 }
 
 export function OverviewTab({
@@ -52,6 +65,8 @@ export function OverviewTab({
   repoFullName,
   repoId,
   onOpenFile,
+  latestReview,
+  latestRun,
 }: OverviewTabProps) {
   const brief = usePrBrief(prId);
   const generateBrief = useGenerateBrief(prId);
@@ -63,10 +78,32 @@ export function OverviewTab({
   // its own request keeps the impact map painting the moment it arrives.
   const priorPrs = usePriorPrs(prId);
 
+  const blockers =
+    latestReview?.findings.filter((f) => f.severity === "CRITICAL" && !f.dismissed_at).length ?? 0;
+
   // A fragment, not a wrapper: `PrDetailView`'s `s.tabColumn` is the flex column
   // that spaces these sections, and an extra div would swallow its gap.
   return (
     <>
+      {/* The verdict of the LAST agent run, where the design puts it. Absent
+          until something has run — a pull request nobody has reviewed has no
+          verdict, and an empty banner would be a headline about nothing. That is
+          why the brief below carries its own risk level rather than borrowing
+          this gauge: the two answer different questions, and the brief exists
+          before any agent does. */}
+      {latestReview ? (
+        <VerdictBanner
+          verdict={latestReview.verdict as Verdict}
+          summary={latestReview.summary}
+          score={latestReview.score}
+          findingsCount={latestReview.findings.length}
+          blockers={blockers}
+          costUsd={latestRun?.cost_usd ?? null}
+          tokensIn={latestRun?.tokens_in ?? null}
+          tokensOut={latestRun?.tokens_out ?? null}
+        />
+      ) : null}
+
       {/* ABOVE the grid, not inside it: the brief is one full-width reading of the
           whole pull request, while the grid's two cards are a pair that reflows to
           one column together. Neither of those cards moves. */}

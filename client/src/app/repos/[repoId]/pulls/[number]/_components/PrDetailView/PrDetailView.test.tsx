@@ -202,10 +202,33 @@ const PRIOR_PRS = {
   reason: null,
 };
 
+/** One `kind: 'review'` row, shaped for the verdict banner. Only the fields the
+    banner reads carry meaning; `findings` is empty so the blocker count is a fact
+    about the fixture rather than a second thing to keep in step. */
+const REVIEW = {
+  id: "rev-1",
+  pr_id: "pr-1",
+  run_id: null,
+  agent_id: null,
+  agent_name: "Security",
+  kind: "review",
+  verdict: "request_changes",
+  summary: "A secret is committed in plaintext.",
+  score: 61,
+  created_at: "2026-08-20T10:00:00Z",
+  findings: [],
+} as const;
+
+/** Reviews for the next `route()` answer. A test that needs the banner sets this
+    through `tree({ reviews })`; the default is an empty list, which is the state a
+    pull request nobody has reviewed is really in. */
+let reviewsFixture: unknown[] = [];
+
 /** Every endpoint this screen reaches, answered from a fixture. Anything not
-    named here — comments, reviews, run history, active runs — is an empty list,
+    named here — comments, run history, active runs — is an empty list,
     which is a real state and keeps those cards out of the way. */
 function route(url: string): unknown {
+  if (url.endsWith("/pulls/pr-1/reviews")) return reviewsFixture;
   if (url.endsWith("/repos")) return REPOS;
   if (url.endsWith("/repos/r1/pulls")) return [PR_META];
   if (url.endsWith("/pulls/pr-1")) return PR_DETAIL;
@@ -221,7 +244,8 @@ let qc: QueryClient;
 
 /** The tree under test. Rebuilt rather than remounted, so a URL written by a
     navigation lands the way it would after the router re-rendered the route. */
-function tree() {
+function tree({ reviews }: { reviews?: unknown[] } = {}) {
+  reviewsFixture = reviews ?? [];
   return (
     <QueryClientProvider client={qc}>
       <NextIntlClientProvider
@@ -270,6 +294,14 @@ afterEach(() => {
 describe("PrDetailView — the brief's cross-tab landing", () => {
   it("takes a review-focus row to the diff tab, in the URL, with the file expanded there", async () => {
     const { container, rerender } = render(tree());
+
+    // REVIEW FOCUS arrives shut on the card, so the reader's first act is to open
+    // it — and so is this test's. Awaited, because the brief lands from a fetch.
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: prBriefMessages.sectionExpand.replace("{label}", prBriefMessages.reviewFocusLabel),
+      }),
+    );
 
     // The row, by the sentence naming where it goes. A path carries no
     // consecutive spaces, so the accessible-name whitespace normalisation that
@@ -360,12 +392,16 @@ describe("PrDetailView — the brief's cross-tab landing", () => {
     expect(await screen.findByText("src/config.ts")).toBeInTheDocument();
   });
 
-  it("renders the brief above the intent and blast cards, and no verdict banner", async () => {
+  it("orders the brief above the intent and blast cards, with no verdict banner until a review exists", async () => {
     // AC-36, asserted here because the vertical order is a fact about this
-    // container rather than about any one card — and the negative half needs the
-    // real Overview tree: the design mock draws the verdict banner at the top of
-    // this very section, but it is review output rendered on `Agent runs`, and a
-    // brief exists before any agent has run.
+    // container rather than about any one card.
+    //
+    // The negative half is about ABSENCE OF DATA, not about placement: this
+    // fixture's `/reviews` route answers an empty list, so no agent has run and
+    // there is no verdict to report. That is the state a fresh pull request is in,
+    // and an empty headline would be worse than none. The test below covers the
+    // other side — the banner appears once a review exists — and the two together
+    // are what make this assertion mean something rather than pass by default.
     const { container } = render(tree());
     await screen.findByText(prBriefMessages.whatLabel);
 
@@ -378,5 +414,40 @@ describe("PrDetailView — the brief's cross-tab landing", () => {
 
     expect(screen.queryByText(prReviewMessages.verdict.prScore)).not.toBeInTheDocument();
     expect(screen.queryByText(prReviewMessages.verdict.requestChanges)).not.toBeInTheDocument();
+  });
+
+  it("puts the last run's verdict banner above the brief once a review exists", async () => {
+    // AC-36 as amended 2026-08-20 on the human's decision: the design draws the
+    // banner at the top of this section and it belongs there, reporting the LAST
+    // agent run — each run writes its own `reviews` row with its own score, and
+    // this gauge reports the newest rather than an aggregate across agents.
+    //
+    // Two reviews in the fixture, newest first, with DIFFERENT scores, so a
+    // reading that took the wrong row fails instead of passing on a coincidence.
+    const { container } = render(
+      tree({
+        reviews: [
+          { ...REVIEW, id: "rev-new", score: 61, verdict: "request_changes", findings: [] },
+          { ...REVIEW, id: "rev-old", score: 92, verdict: "approve", findings: [] },
+        ],
+      }),
+    );
+
+    expect(await screen.findByText(prReviewMessages.verdict.prScore)).toBeInTheDocument();
+    // The newest row's score, not the older one's, and not an average of the two.
+    expect(screen.getByText("61")).toBeInTheDocument();
+    expect(screen.queryByText("92")).not.toBeInTheDocument();
+    expect(screen.queryByText("76")).not.toBeInTheDocument();
+
+    // Banner first, then the brief, then the two derived cards.
+    const text = container.textContent ?? "";
+    const order = [
+      prReviewMessages.verdict.prScore,
+      prBriefMessages.title,
+      intentMessages.label,
+      blastMessages.label,
+    ].map((label) => text.indexOf(label));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 });

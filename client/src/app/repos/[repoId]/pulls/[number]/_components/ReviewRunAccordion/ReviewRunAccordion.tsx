@@ -172,7 +172,6 @@ export function ReviewRunAccordion({
                 score={review.score}
                 findingsCount={findings.length}
                 blockers={blockers}
-                agentName={review.agent_name}
                 costUsd={run?.cost_usd ?? null}
                 tokensIn={run?.tokens_in ?? null}
                 tokensOut={run?.tokens_out ?? null}

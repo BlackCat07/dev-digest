@@ -85,10 +85,17 @@ otherwise assume is included.
   `Request changes` headline, the `6 findings` / `2 blockers` chips, the `61` PR score and the
   `$0.014 · 8.2K→1.3K` cost line — is the **already-built** `VerdictBanner`, and it renders on
   the `Agent runs` tab from review data. It is review output, not brief output: a brief exists
-  before any agent has run. **Decided on 2026-08-19 (OQ-4): the banner does not move.** It
-  stays on the `Agent runs` tab, and this card carries its own risk level, its own regenerate
-  control and its own cost line. This card renders **below** the tab bar on `Overview` and
-  **above** the existing intent and blast cards, which stay exactly where they are.
+  before any agent has run. **Decided on 2026-08-19 (OQ-4): the banner does not move — and
+  REVERSED on 2026-08-20 by the human, after comparing the built card against the design.**
+  The banner now renders at the top of `Overview`, reporting the most recent `kind: 'review'`
+  row, and is **absent** until one exists — which is what disposes of the original objection:
+  there is no empty headline, because there is no headline. This is no longer a non-goal, and
+  AC-36 carries the requirement. What survives from the original reasoning: this card still
+  carries its **own** risk level, its own regenerate control and its own cost line, and borrows
+  nothing from the gauge — the banner answers "what did the last run say", the card answers
+  "what is this change and where do I look", and neither depends on the other. This card renders
+  **below** the banner on `Overview` and **above** the existing intent and blast cards, which
+  stay exactly where they are.
 - **N3 Any change to `reviewer-core`.** The structured call reaches the model through the
   container's `LLMProvider` port exactly as the intent classifier and the onboarding generator
   do. `wrapUntrusted`, `parseWithRepair` and `INJECTION_GUARD` are **relied upon and
@@ -391,11 +398,20 @@ open a pull request, read why and how risky, click a review-focus row, land on t
 ### AC-36 … AC-53 — client
 
 - **AC-36** — WHERE a pull request is open, the client **shall** render the brief card on the
-  `Overview` tab above the intent and blast cards.
-  `Verify: test` — *observable: the brief card, the intent card and the blast card are all in
-  the tree in that vertical order; neither existing card is removed, and the verdict banner is
-  **not** in the `Overview` tree — decided on 2026-08-19 (OQ-4), and asserted here because the
-  design draws it at the top of this very section (N2, EC-27).*
+  `Overview` tab above the intent and blast cards, and **shall** render the verdict of the most
+  recent `kind: 'review'` row above the brief card WHERE at least one exists.
+  `Verify: test` — *observable: the verdict banner, the brief card, the intent card and the blast
+  card are all in the tree in that vertical order; neither existing card is removed; the banner
+  reports the newest review's score and not an older one's, and not an average of the two; and on
+  a pull request with no review the banner is absent while the other three still render.*
+  **Amended 2026-08-20**, superseding the 2026-08-19 decision on OQ-4. The original criterion
+  asserted the banner was **absent** from `Overview`, on the reasoning that a brief exists before
+  any agent has run. The human reversed it after seeing the built card beside the design: the
+  design draws the banner at the top of this section, the gauge's own rule is "the last agent
+  run", and the two facts coexist — the banner reports a run and is absent until one exists, the
+  brief carries its own risk level and does not borrow the gauge. What the original criterion got
+  right is kept: nothing about the brief depends on a review, and an un-reviewed pull request
+  shows no empty headline.
 - **AC-37** — The card **shall** convey the risk level with a word and an icon in addition to
   colour.
   `Verify: test` — *observable: the accessible text for a high-risk brief contains the level's
@@ -964,7 +980,7 @@ is data; none of it is an instruction.
 | — | EC-24 | — | `accepted` — a brief stored under an earlier shape is read back through a validating parse rather than a cast, and a payload that does not parse is treated as no brief and offered for regeneration. Recorded as an edge case because the failure mode it prevents — an absent key, not a null one — has cost this repository twice. |
 | — | EC-25 | — | `accepted` — the existing `pr_brief` table is a name and a json column; the columns of `## Contracts` are new work, and `## Open questions` does not need to ask whether to add them. |
 | — | EC-26 | — | `accepted` — the card ships its own message namespace and does not read `brief.json`'s existing keys, which name a shape this feature does not produce. Changing or deleting the shipped file is a separate product decision; leaving it unread costs nothing, and reading it is exactly the mistake that put "Brief not available yet." on the Intent card. |
-| — | EC-27 | — | `accepted` — decided on 2026-08-19 (OQ-4, N2): the regenerate control belongs to the brief card and not to the verdict banner, which does not appear on this tab at all, so the design's placement is not followed. AC-36 asserts the banner's absence; this row records that the divergence from the mock is deliberate. |
+| — | EC-27 | — | `accepted` — **updated 2026-08-20.** The banner now DOES appear at the top of this tab (AC-36 amended, OQ-4 reversed), so the design's placement is followed. The half of the original decision that stands: the **regenerate control** belongs to the brief card, not to the banner — pressing it on the banner reads as 're-run the review', which costs a full multi-agent run rather than one flash call. So the mock is followed on placement and deliberately not on that control. |
 | — | EC-33 | — | `accepted` — every file reference this card renders carries a real target (AC-40 for a review-focus row; a risk's references are rendered as plain text where no target exists), so the do-nothing-button shape cannot arise. |
 
 ## Open questions
@@ -984,7 +1000,7 @@ requirement from.
 | OQ-1 | **The effective document set is the union of the effective document sets of the repository's enabled agents**, deduplicated by path with the first occurrence winning, ordered by agent then by attachment order, and capped by the budget. | It is the only mechanism in this product where a **person** has said "this document is relevant" — a repository-wide walk has no relevance signal at all and would put every document into an 8 000-token budget. Reusing the per-agent resolution also means a brief and a review read the same documents in the same order. | **AC-59**, AC-2, AC-10, AC-14, `## Inputs (provenance)` |
 | OQ-2 | **Opening the pull request's detail generates a brief in the background** when no stored brief matches the computed cache key. The regenerate control remains the explicit force path. | The requirement's own acceptance criterion — "re-opening the same pull request state reads the cache with no new model call" — presupposes that a first open produced one. The detail route is also the **only** writer of `pull_requests.body` and `pr_files`, so it is the one place a trigger sees the material it is classifying. | **AC-58**, AC-6, AC-46, **N11**, `## Non-functional` (perf, rate), `## Cross-module interactions` |
 | OQ-3 | **A review-focus entry may cite only files in the pull request's changed set.** | Its whole contract is that it navigates into the `Files changed` tab, and that tab contains only changed files — a row that cannot navigate is worse than a missing row. **Consequence: the design's fourth review-focus row, `src/api/users.ts`, is a design bug rather than a feature**, and is recorded as one. A risk's file references are deliberately wider (AC-22), because a risk is not required to be clickable. | **AC-24**, AC-22, **N13**, EC-12 |
-| OQ-4 | **The verdict banner does not move.** It stays on the `Agent runs` tab; the brief card carries its own risk level, its own regenerate control and its own cost line. | The banner is review output and a brief exists before any agent has run, so on the `Overview` tab of an un-reviewed pull request it would be an empty headline. Duplicating a built component across two tabs is a separate product decision with its own cost. | **N2**, AC-36, EC-27, `## Traceability` (EC-27's row) |
+| OQ-4 | ~~**The verdict banner does not move.**~~ **Reversed 2026-08-20 — it moves.** The banner renders at the top of `Overview`, reporting the most recent review, and is absent until one exists. The brief still carries its own risk level, its own regenerate control and its own cost line. | The original answer reasoned that a brief exists before any agent has run, so the banner would be an empty headline on an un-reviewed pull request. That half was right and is kept — the banner is conditional. What it got wrong was the conclusion: the design draws the banner there, the gauge reports the LAST agent run by its own rule, and a conditional banner has no empty state to worry about. Reversed by the human after comparing the built card against the design. | **N2**, AC-36 (amended), EC-27, `## Traceability` (EC-27's row) |
 
 **Decided — 2026-08-19, the remaining eight**
 
@@ -1140,3 +1156,13 @@ against an endpoint, because `ReviewFocusItem` carries no field that could name 
 observable presumes a source entry for a linked issue never referenced, where the assembly
 records an entry only for an input actually offered. None of the four changed the acceptance
 criteria; all four are carried in the parent's documentation report rather than in this file.
+2026-08-20 — **OQ-4 reversed by the human, and AC-36 amended with it.** The verdict banner now
+renders at the top of the `Overview` tab, reporting the most recent `kind: 'review'` row, and is
+absent until one exists. The original decision — the banner stays on `Agent runs` — was made from
+the spec alone; it was reversed after the built card was compared against the design in the running
+app, which is the check `DDG-UI-001` exists for and the one no gate performs. The reasoning that
+survives is recorded in N2: the brief keeps its own risk level and borrows nothing from the gauge,
+and the regenerate control stays on the card rather than the banner. Also in this pass: a risk's
+explanation and file references moved behind a disclosure, one open at a time, because the card as
+first built ran past the fold on any pull request with more than two risks — the same rule the
+intent card's chip row already sets, and the same observation `DDG-UI-001` asks a human to make.
