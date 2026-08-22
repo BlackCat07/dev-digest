@@ -80,7 +80,7 @@ They are the rules a reviewer only applies if something reminds them to.
 
 | ID | Rule | Gate | Severity |
 |---|---|---|---|
-| `OA-SIZE-001` | A repository earns its place on the **second consumer** of a query, or when a route passes ~50 lines or two tables | — | — |
+| `OA-SIZE-001` | **A repository is not the optional layer; the service is.** `OA-INFRA-001` makes `repository.ts` the only legal home for a query, so a one-`select` feature still gets one — there is nowhere else the query may go, and `OA-GATE-001` forecloses "it is only a warn". What the threshold governs is the **service**: it earns its place on the second consumer of a repository method, or when a route passes ~50 lines or two tables. Below that, `routes.ts` → `repository.ts` (+ `helpers.ts` for the DTO map) is the whole module | — | — |
 | `OA-SIZE-002` | No rich entity classes. Zod contracts plus pure functions are the deliberate choice; an "anemic model" is not a defect here | — | — |
 | `OA-SIZE-003` | Never rename or move files just to match the shape. Onion is about the direction of dependencies, not folder vocabulary | — | — |
 
@@ -92,7 +92,7 @@ what they add up to. See SKILL.md, "Following the chain".
 | ID | Rule | Gate | Severity |
 |---|---|---|---|
 | `OA-DEEP-001` | An import is only as pure as what it imports. `ports-import-nothing` bans `^src/` from the port ring but not `node:*`, so a port-ring file doing I/O at module scope makes every importer impure — the core included — with both purity rules still green. Follow one hop into the port ring or `_shared` and read its imports | — | — |
-| `OA-DEEP-002` | A port that cannot be faked is not a port. Every type in a consumer-declared port signature must belong to the port ring or to the consuming module; a Drizzle Row type in a port signature has moved the schema into the contract, and the cast in the fake is the tell | — | — |
+| `OA-DEEP-002` | A port that cannot be faked is not a port. Every type in a consumer-declared port signature must belong to the port ring or to the consuming module; a Drizzle Row type in a port signature has moved the schema into the contract, and the cast in the fake is the tell. **This is about the signature, not the import.** `db/rows.ts` exists so cross-cutting consumers may name a row shape — its own header says so — and a Row type in `helpers.ts` doing Row → DTO is that permission working as intended. Flagging the mapper alongside the port is the common false positive here | — | — |
 
 ## Review process
 

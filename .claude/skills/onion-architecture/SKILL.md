@@ -115,8 +115,9 @@ A diff whose only architectural evidence is "the gate passed" has not been revie
 ask it explicitly rather than last. For every ring the diff introduces, name the thing that
 justifies it:
 
-- a **repository** — a second consumer of one of its queries, or a route past ~50 lines or
-  two tables (`OA-SIZE-001`). One `select` behind one route does not earn one;
+- a **service** — a second consumer of a repository method, or a route past ~50 lines or two
+  tables (`OA-SIZE-001`). A repository is never the ring to question: `OA-INFRA-001` leaves a
+  query nowhere else to live, so a one-query module is `routes.ts` → `repository.ts`;
 - a **class** — behaviour that is genuinely stateful. Zod contracts plus pure functions are
   the house shape, and an anemic model is not a defect here (`OA-SIZE-002`);
 - a **new folder** — a real dependency boundary, not the vocabulary of the pattern. A
@@ -239,9 +240,15 @@ Current `warn` drift (real violations to burn down, then promote the rule):
 Palermo is explicit that onion "is not appropriate for small websites", and DevDigest grows
 one lesson at a time:
 
-- **A repository earns its place on the second consumer of a query, or when a route passes
-  ~50 lines or two tables.** `workspace/routes.ts` is 34 lines and one `select`; wrapping it
-  buys nothing. `pulls/routes.ts` (388 lines) passed both thresholds long ago.
+- **A repository is not the optional layer; the service is.** `OA-INFRA-001` makes
+  `repository.ts` the only legal home for a query, so even a one-`select` feature gets one:
+  there is nowhere else the query may legally live, and `OA-GATE-001` rules out parking it in
+  a route as "only a warn". What the threshold governs is the **service** — it earns its place
+  on the second consumer of a repository method, or when a route passes ~50 lines or two
+  tables. Below that, `routes.ts` → `repository.ts` plus `helpers.ts` is the whole module.
+  `pulls/routes.ts` (388 lines) passed both thresholds long ago. `workspace/routes.ts` is 34
+  lines and one `select` — and it sits on the `routes-no-data-access` burn-down list above, so
+  it is drift to fix by *adding* a repository, not a pattern to copy.
 - **No rich entity classes.** Zod contracts plus pure functions are the deliberate choice
   here; `reviewer-core` carries real domain logic without them. An "anemic model" is not a
   defect in this codebase.

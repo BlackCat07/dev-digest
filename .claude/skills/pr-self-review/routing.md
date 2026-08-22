@@ -76,6 +76,7 @@ deduplicated. Paths are repo-relative, as step 0's `git diff --name-status` and
 | `.github/workflows/**` | mirror of the local gates — changing one changes both (`DDG-WIRE-007`) |
 | `scripts/*.sh`, `docker-compose.yml` | no skill — read it; ports and env only |
 | `*/pnpm-lock.yaml`, `*/package-lock.json`, `skills-lock.json` | **never hand-edited** → `DDG-DNT-005` |
+| `.claude/skills/*/test-cases/**`, `evals/*/*/fixtures/**` | no skill — **eval fixtures, whose violations are deliberate**. The review is the fixture's own hygiene gate (`.claude/skills/onion-architecture/test-cases/scripts/check-fixture-hygiene.sh`), not a reading of the code. See rule 6 |
 
 ### Rules around the table
 
@@ -92,6 +93,17 @@ deduplicated. Paths are repo-relative, as step 0's `git diff --name-status` and
    `frontend-ui-architecture`, `engineering-insights` and `pr-self-review` are
    authored here; the rest are pinned in `skills-lock.json`. Never "fix" a
    vendored skill to make a finding go away.
+6. **Eval fixtures are exempt from the cross-cutting rules.**
+   `.claude/skills/*/test-cases/**` and `evals/*/*/fixtures/**` hold code whose
+   violations are *planted*: an eval cannot measure whether a reviewer finds a raw
+   `octokit` import, a `process.env` read or a missing tenancy filter if the fixture
+   is forbidden from containing one. The hunk-content rules in **Cross-cutting**
+   would route every such fixture to `security` and every planted layering defect to
+   an architecture skill, and a CRITICAL on a deliberate defect blocks the merge gate
+   for nothing. Route these paths by their "Not code" row **only**, and never propose
+   a fix to a fixture — a fixture that stops violating has stopped measuring. What
+   does apply: the hygiene gate must pass, and no comment inside a fixture may name
+   the defect it hides (that is what makes the case worthless).
 
 ## Part 2 — Invariants (`DDG-*`)
 

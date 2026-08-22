@@ -9,7 +9,7 @@
   "assertions": [
     {
       "id": "D1_flags_over_layering",
-      "text": "Raises whether this much structure is earned for a feature this size \u2014 one table, one select, one update, a single consumer, a 26-line routes.ts \u2014 rather than never putting the question. Credit either conclusion so long as the size/threshold question is actually asked."
+      "text": "Raises whether the SERVICE is earned for a feature this size \u2014 one table, one select, one update, a single consumer, a 26-line routes.ts. Credit either conclusion so long as the question is asked. Reporting the REPOSITORY as unearned is wrong under OA-INFRA-001 and does not count."
     },
     {
       "id": "D2_flags_rich_entity",
@@ -29,7 +29,7 @@
     },
     {
       "id": "D_names_threshold_or_precedent",
-      "text": "Names a concrete threshold or in-repo precedent for collapsing the structure (second consumer of a query / ~50 lines / two tables, or the workspace or agents module as the shape to copy) rather than only asserting it is too much."
+      "text": "Names a concrete threshold or in-repo precedent (second consumer of a repository method / ~50 lines / two tables, or agents/ as the shape to copy) rather than only asserting the structure is too much."
     }
   ]
 }

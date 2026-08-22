@@ -11,20 +11,18 @@
       "rule": "OA-SIZE-001",
       "gate": null,
       "severity": "\u2014 (nothing mechanical catches this)",
-      "file": "server/src/modules/tags/repository.ts",
+      "file": "server/src/modules/tags/service.ts",
       "lines": [
         "whole file"
       ],
-      "summary": "A repository plus a service plus helpers wrapping one table, one select, one update, with a single consumer and a 26-line routes.ts.",
-      "fix": "Collapse toward routes.ts -> a thin service; add the repository on the second consumer of a query. workspace/routes.ts (34 lines, one select) is the precedent for not wrapping.",
+      "summary": "A service wrapping one one-table query with a single consumer, behind a 26-line routes.ts. The repository is NOT the defect \u2014 OA-INFRA-001 makes it the only legal home for the query.",
+      "fix": "Drop service.ts: routes.ts -> repository.ts, helpers.ts keeps the DTO map. Keep the repository.",
       "match": [
+        "service.ts",
         "second consumer",
         "50 lines",
         "two tables",
-        "workspace",
-        "earned",
-        "premature",
-        "over"
+        "OA-SIZE-001"
       ]
     },
     {
@@ -103,5 +101,5 @@
       "why": "OA-APP-004 tells NEW services to take narrow ports, and reserves 'not a refactor target' for the three named existing services. TagsService is new, so flagging it is legitimate and not flagging it is defensible. Score it neither way."
     }
   ],
-  "notes": "This case contains NO dependency-rule violation. Every import points inward and depcruise is green, so a reviewer who only runs the gate passes the patch. A generic clean-architecture reviewer will praise all three planted items \u2014 measured 2026-08-21, the isolated_without_skill arm demanded MORE layering (a TagsRepositoryPort) and praised the entity."
+  "notes": "This case contains NO dependency-rule violation. Every import points inward and depcruise is green, so a reviewer who only runs the gate passes the patch. A generic clean-architecture reviewer will praise all three planted items \u2014 measured 2026-08-21, the isolated_without_skill arm demanded MORE layering (a TagsRepositoryPort) and praised the entity. CORRECTED 2026-08-22: the earlier fix prescribed collapsing the query into routes.ts, which OA-TRANS-001 forbids. OA-SIZE-001 now governs the service, not the repository."
 }

@@ -74,7 +74,9 @@ Two findings that are not about versions at all:
 
 - **`T4` is 0/10, a shared blind spot.** Every run flagged `helpers.ts`'s `db/rows.ts` import
   alongside the port's and prescribed removing both. Neither `SKILL.md` says Row→DTO mapping in
-  `helpers.ts` is a Row type's legitimate home. **This is an unfixed gap in the skill**, with the
+  `helpers.ts` is a Row type's legitimate home. **Fixed 2026-08-22** — `OA-DEEP-002` now states that a Row type in `helpers.ts` doing Row → DTO
+  is `db/rows.ts`'s permission working as intended, and that flagging the mapper alongside the
+  port is the common false positive. Re-run case `07` to confirm the assertion moves. Originally, with the
   strongest evidence in the whole suite. Amend `rules.md` (`OA-DEEP-002`) and the case will move.
 - **3 of 10 runs invented a gate firing.** `row-types-stay-in-persistence` was claimed to fire on
   `ports.ts` (its `from` is `(service|routes).ts`); one run claimed `ports-import-nothing` turns
@@ -105,4 +107,6 @@ It compounds: `SKILL.md` cites `workspace/routes.ts` as the model for *not* wrap
 while that same file sits on the `routes-no-data-access` burn-down list the skill says must be
 cleared. The skill holds up its own tracked drift as the pattern to copy. `04-over-layering`'s
 `expected.md` inherits the error — it prescribes collapsing into `routes.ts`, which another rule
-forbids. **Both still need fixing.**
+forbids. **Both fixed 2026-08-22:** `OA-SIZE-001` now governs the service rather than the repository,
+`workspace/routes.ts` is named as drift instead of as a model, and `04-over-layering`'s key
+prescribes dropping the service while keeping the repository.
