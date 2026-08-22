@@ -638,6 +638,50 @@ Dependency and tooling quirks.
 
 <!-- append below -->
 
+- **2026-08-22** — **A side-effect subpath import (`import 'dotenv/config'`) is a third class
+  of scanner-invisible dependency: `scan.mjs` reports `importedInFiles: 0` for `dotenv` while
+  four files in this package import it.** `src/platform/config.ts`, `src/db/migrate.ts`,
+  `src/db/seed.ts` and `drizzle.config.ts` all open with `import 'dotenv/config'` — a bare
+  side-effect import of a subpath, which the loose per-name regex does not attribute to
+  `dotenv`. The only thing keeping it off the unused-candidates list is `referencedInConfig`
+  (the name appears in `drizzle.config.ts`); a subpath-imported package with no config mention
+  would surface as a removal candidate while being load-bearing. Same lesson as the
+  `@vscode/ripgrep` entry beside this one: the Step 4 grep-by-name pass is what catches it,
+  never the scanner column. Evidence: `src/platform/config.ts:1`,
+  `.claude/skills/dependency-checker/scripts/scan.mjs` (`importedInFiles`).
+
+- **2026-08-22** — **Two of this package's `dependencies` are invisible to every static
+  dependency scan, in opposite directions, and a third is genuinely dead.** Measured
+  while building `.claude/skills/dependency-checker/`. (1) `@vscode/ripgrep` looks unused
+  to any importer-based tool because `src/adapters/codeindex/ripgrep.ts:33` loads it as
+  `await import(/* @vite-ignore */ '@vscode/ripgrep' as string)` — the cast to `string`
+  is what makes the specifier opaque, and it defeats regex scans and bundler resolution
+  alike. It IS used; never remove it on a scanner's say-so. (2) `testcontainers` is
+  declared here but only `@testcontainers/postgresql` is imported (`test/helpers/pg.ts:1`),
+  and that package already depends on `testcontainers@^10.28.0` — redundant, but dropping
+  the direct entry hands the version pin to the child. (3) `@fastify/autoload` has **zero**
+  references in `src/` (`grep -ran autoload src/` → empty) and contradicts the static
+  registration in `src/modules/index.ts` that the root `CLAUDE.md` mandates — that one is
+  genuinely removable. The general shape: three superficially identical "unused" candidates,
+  three different correct answers, none decidable without reading the source. Evidence:
+  `src/adapters/codeindex/ripgrep.ts:33`, `test/helpers/pg.ts:1`, `package.json`.
+
+- **2026-08-22** — **`du -sk` reports 0 bytes for every dependency in a pnpm
+  `node_modules`, so any size audit built on it silently measures nothing.** Despite
+  `node-linker=hoisted` in `.npmrc`, this tree's top-level entries are symlinks into
+  `.pnpm/` (`node_modules/fastify -> .pnpm/fastify@5.8.5/node_modules/fastify`), and `du`
+  does not follow symlinks: `du -sk node_modules/fastify` → `0`, `du -skL` → `3552`.
+  The failure is the quiet direction — a size report full of zeros reads as "these
+  dependencies are tiny". `-L` fixes it here but is wrong for the npm-managed packages
+  (`reviewer-core`, `e2e`, `mcp-server`), whose flat trees can nest a second
+  `node_modules` that then gets double-counted, and BSD/macOS `du` has no `--exclude`.
+  Since this repo runs both managers, no single `du` invocation is correct everywhere.
+  What worked: walk in JS, skip any directory named `node_modules`, never follow a
+  symlink, cache by resolved real path — ~2 s for all six packages, and it agrees with
+  `du` to within 5%. Implemented in
+  `.claude/skills/dependency-checker/scripts/scan.mjs` (`dirSize`). Evidence: `.npmrc`,
+  `node_modules/fastify` (the symlink).
+
 - **2026-08-20** — **`depcruise`'s MODULE COUNT is the signal for "was this file analysed at
   all"; the warning count cannot tell you.** An unresolved file produces the *same*
   `x 22 dependency violations (0 errors, 22 warnings)` line as a clean one, so a green gate is
