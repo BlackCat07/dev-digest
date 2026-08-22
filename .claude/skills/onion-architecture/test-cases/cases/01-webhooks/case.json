@@ -1,0 +1,31 @@
+{
+  "id": "01-webhooks",
+  "skill": "onion-architecture",
+  "title": "Transport and adapter leaks in a new module",
+  "prompt": "I'm adding an outbound webhooks module to the API \u2014 routes, service, repository and constants, all under {{FIXTURE}}/server/src/modules/webhooks/. Before I open the PR, go through it and tell me whether each piece sits where it should in this backend's structure. Flag anything that's in the wrong place, and say where it should go instead.",
+  "fixture": "fixture",
+  "expected": "expected.md",
+  "planted_violations": 3,
+  "assertions": [
+    {
+      "id": "A1_routes_data_access",
+      "text": "Flags routes.ts for doing its own database query \u2014 names the drizzle-orm and/or db/schema import in routes.ts, or the inline select in the GET /webhooks/:id/deliveries handler, as misplaced."
+    },
+    {
+      "id": "A2_service_concrete_adapter",
+      "text": "Flags service.ts for importing and constructing the concrete OctokitGitHubClient adapter class instead of taking the GitHub client off the container."
+    },
+    {
+      "id": "A3_cross_module_internal",
+      "text": "Flags service.ts importing ../repos/helpers.js as reaching into a sibling module's internals."
+    },
+    {
+      "id": "A_no_false_positive_on_repository",
+      "text": "Does NOT report repository.ts's drizzle-orm / db/schema imports as a problem \u2014 that is the one ring permitted to touch them."
+    },
+    {
+      "id": "A_fix_named_per_finding",
+      "text": "For each violation reported, names a concrete destination or fix (move the query into the repository; use container.github(); lift the helper to _shared or reach it via the container) rather than only naming the rule."
+    }
+  ]
+}

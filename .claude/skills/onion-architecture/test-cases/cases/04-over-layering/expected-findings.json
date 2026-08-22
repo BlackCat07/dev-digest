@@ -1,0 +1,107 @@
+{
+  "case": "04-over-layering",
+  "schema": 1,
+  "scoring": {
+    "planted": "deterministic \u2014 a planted entry counts as found when the report names `file` and at least one token from `match`",
+    "traps": "grader \u2014 deciding whether a report *complained* about a legitimate import needs judgement; `match` only locates the passage"
+  },
+  "planted": [
+    {
+      "id": "P1",
+      "rule": "OA-SIZE-001",
+      "gate": null,
+      "severity": "\u2014 (nothing mechanical catches this)",
+      "file": "server/src/modules/tags/repository.ts",
+      "lines": [
+        "whole file"
+      ],
+      "summary": "A repository plus a service plus helpers wrapping one table, one select, one update, with a single consumer and a 26-line routes.ts.",
+      "fix": "Collapse toward routes.ts -> a thin service; add the repository on the second consumer of a query. workspace/routes.ts (34 lines, one select) is the precedent for not wrapping.",
+      "match": [
+        "second consumer",
+        "50 lines",
+        "two tables",
+        "workspace",
+        "earned",
+        "premature",
+        "over"
+      ]
+    },
+    {
+      "id": "P2",
+      "rule": "OA-SIZE-002",
+      "gate": null,
+      "severity": "\u2014 (nothing mechanical catches this)",
+      "file": "server/src/modules/tags/domain/tag.entity.ts",
+      "lines": [
+        "whole file"
+      ],
+      "summary": "A rich entity class: private constructor, mutable _name, behavioural rename(), derived get slug(), equals(), rehydrate()/create() factories.",
+      "fix": "A Zod contract in @devdigest/shared plus pure functions, the shape agents/helpers.ts and smart-diff/classify.ts already use.",
+      "match": [
+        "entity",
+        "TagEntity",
+        "pure function",
+        "Zod contract",
+        "anemic"
+      ]
+    },
+    {
+      "id": "P3",
+      "rule": "OA-SIZE-003",
+      "gate": null,
+      "severity": "\u2014 (nothing mechanical catches this)",
+      "file": "server/src/modules/tags/domain",
+      "lines": [
+        "directory"
+      ],
+      "summary": "A domain/ subfolder introduced because the architecture is called onion \u2014 folder vocabulary borrowed from the pattern.",
+      "fix": "Flat module files. agents/ is the shape to copy: routes.ts -> service.ts -> repository.ts + helpers.ts.",
+      "match": [
+        "domain/",
+        "folder",
+        "flat",
+        "agents/",
+        "vocabulary"
+      ]
+    }
+  ],
+  "traps": [
+    {
+      "id": "T1",
+      "rule": "OA-INFRA-001",
+      "file": "server/src/modules/tags/repository.ts",
+      "lines": [
+        1,
+        3
+      ],
+      "why_legitimate": "A repository may import drizzle-orm and db/schema.",
+      "match": [
+        "drizzle-orm",
+        "db/schema"
+      ]
+    },
+    {
+      "id": "T2",
+      "rule": "OA-INFRA-001",
+      "file": "server/src/modules/tags/helpers.ts",
+      "lines": [
+        "whole file"
+      ],
+      "why_legitimate": "Entity/row -> DTO mapping in helpers.ts is the prescribed home.",
+      "match": [
+        "helpers",
+        "toTagDto",
+        "DTO"
+      ]
+    }
+  ],
+  "not_scored": [
+    {
+      "item": "TagsService taking the whole Container",
+      "rule": "OA-APP-004",
+      "why": "OA-APP-004 tells NEW services to take narrow ports, and reserves 'not a refactor target' for the three named existing services. TagsService is new, so flagging it is legitimate and not flagging it is defensible. Score it neither way."
+    }
+  ],
+  "notes": "This case contains NO dependency-rule violation. Every import points inward and depcruise is green, so a reviewer who only runs the gate passes the patch. A generic clean-architecture reviewer will praise all three planted items \u2014 measured 2026-08-21, the isolated_without_skill arm demanded MORE layering (a TagsRepositoryPort) and praised the entity."
+}

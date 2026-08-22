@@ -1,0 +1,35 @@
+{
+  "id": "05-warn-drift",
+  "skill": "onion-architecture",
+  "title": "All-warn drift behind a green gate",
+  "prompt": "New weekly digest module at {{FIXTURE}}/server/src/modules/digest/. I ran the architecture gate and it came back clean, so I think we're good to merge \u2014 but give it a proper review anyway and tell me if anything in there is going to bite us.",
+  "fixture": "fixture",
+  "expected": "expected.md",
+  "planted_violations": 3,
+  "assertions": [
+    {
+      "id": "E1_flags_routes_queries",
+      "text": "Reports the two inline Drizzle queries in the GET /digest/counts handler (and the drizzle-orm / db/schema imports in routes.ts) as data access that does not belong in the route file."
+    },
+    {
+      "id": "E2_flags_row_type_in_application",
+      "text": "Reports the db/schema import in service.ts and the exported ReviewRow ($inferSelect) Drizzle row type being used as the module's currency, including the bare .select() in the repository that returns full rows."
+    },
+    {
+      "id": "E3_flags_container_wide_param",
+      "text": "Reports summariseWindow in helpers.ts taking the whole Container for a single call as a problem, on the grounds that importing platform/container.ts drags in every module and puts the caller in a cycle with the DI root."
+    },
+    {
+      "id": "E_green_gate_not_treated_as_pass",
+      "text": "Does NOT accept the user's premise that a clean gate run means the module is fine. Either states these are warn-severity known drift that must not be added to, or reports them as real problems to fix without relying on the gate's exit code."
+    },
+    {
+      "id": "E_no_false_positive_on_repository",
+      "text": "Does NOT report repository.ts importing drizzle-orm / db/schema as a violation \u2014 that is the ring permitted to touch them."
+    },
+    {
+      "id": "E_names_narrowing_fix",
+      "text": "Prescribes narrowing the helpers.ts parameter (a consumer-declared resolver interface, or passing the resolved model value in) rather than restructuring the callers or leaving it as is."
+    }
+  ]
+}

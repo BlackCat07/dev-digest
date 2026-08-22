@@ -1,0 +1,145 @@
+{
+  "case": "07-composite-leaks",
+  "schema": 1,
+  "scoring": {
+    "planted": "grader \u2014 every entry is a multi-file composition; see the README correction on why token matching cannot score these",
+    "traps": "grader"
+  },
+  "planted": [
+    {
+      "id": "P1",
+      "rule": "OA-DEEP-001",
+      "gate": null,
+      "severity": "\u2014 (no gate: the hop is through the port ring)",
+      "file": "server/src/vendor/shared/contracts/insights.ts",
+      "lines": [
+        2,
+        "14-15"
+      ],
+      "chain": [
+        "reviewer-core/src/review/reliability.ts:2 imports the value DEFAULT_WEIGHTS from @devdigest/shared",
+        "server/src/vendor/shared/contracts/insights.ts:2 imports readFileSync from node:fs",
+        "line 15 executes it at module scope, so the pure core does filesystem I/O at load"
+      ],
+      "summary": "The pure core is transitively impure through a port-ring file that reads the filesystem at module scope. core-stays-pure and ports-import-nothing both stay green.",
+      "fix": "Move the default weights into reviewer-core as a constant, or make weights a required field the caller supplies.",
+      "match": [
+        "node:fs",
+        "readFileSync",
+        "DEFAULT_WEIGHTS",
+        "module scope",
+        "transitiv"
+      ]
+    },
+    {
+      "id": "P2",
+      "rule": "OA-DEEP-002",
+      "gate": null,
+      "severity": "\u2014 (row-types-stay-in-persistence matches only service.ts / routes.ts)",
+      "file": "server/src/modules/insights/ports.ts",
+      "lines": [
+        1,
+        11
+      ],
+      "chain": [
+        "ports.ts:11 declares runsInWindow(): Promise<AgentRunRow[]>",
+        "AgentRunRow comes from db/rows.js, so the Drizzle schema is now part of the contract",
+        "adapters/insights/mocks.ts:19-37 must hand-build 13 columns and still cast `as unknown as AgentRunRow`"
+      ],
+      "summary": "A consumer-declared port whose signature carries a Drizzle Row type is the data layer under a different name \u2014 no fake can satisfy it without a cast.",
+      "fix": "The port returns RunOutcome[] or the module's own row type; the repository maps Row to it.",
+      "match": [
+        "AgentRunRow",
+        "ports.ts",
+        "as unknown",
+        "fake",
+        "mock",
+        "cast"
+      ]
+    },
+    {
+      "id": "P3",
+      "rule": "OA-INFRA-003",
+      "gate": null,
+      "severity": "\u2014 (no gate)",
+      "file": "server/src/modules/insights/service.ts",
+      "lines": [
+        "50-51"
+      ],
+      "chain": [
+        "service.ts:50-51 awaits recordSnapshot then markWindowClosed as two calls",
+        "repository.ts:41 opens db.transaction inside recordSnapshot only",
+        "so the pair is two transactions, while the service doc-comment claims they are written together"
+      ],
+      "summary": "The transaction boundary sits inside the repository, so the service cannot make its two writes atomic \u2014 and its own comment claims they already are.",
+      "fix": "The service opens one db.transaction and passes tx into both repository methods.",
+      "match": [
+        "transaction",
+        "atomic",
+        "markWindowClosed",
+        "recordSnapshot",
+        "tx"
+      ]
+    }
+  ],
+  "traps": [
+    {
+      "id": "T1",
+      "rule": "OA-APP-004",
+      "file": "server/src/modules/insights/service.ts",
+      "lines": [
+        16
+      ],
+      "why_legitimate": "Taking a narrow InsightsDeps rather than the whole Container is exactly what OA-APP-004 asks of a new service.",
+      "match": [
+        "InsightsDeps",
+        "Container",
+        "narrow"
+      ]
+    },
+    {
+      "id": "T2",
+      "rule": "OA-INFRA-002",
+      "file": "server/src/adapters/insights/window-clock.ts",
+      "lines": [
+        "whole file"
+      ],
+      "why_legitimate": "The adapter satisfies WindowClockPort structurally and imports nothing from modules/ \u2014 the sanctioned pattern that keeps it a leaf.",
+      "match": [
+        "window-clock",
+        "WindowClockPort",
+        "structural"
+      ]
+    },
+    {
+      "id": "T3",
+      "rule": "OA-INFRA-001",
+      "file": "server/src/modules/insights/repository.ts",
+      "lines": [
+        1,
+        4
+      ],
+      "why_legitimate": "A repository is the one ring permitted to import drizzle-orm and db/schema.",
+      "match": [
+        "drizzle-orm",
+        "db/schema"
+      ]
+    },
+    {
+      "id": "T4",
+      "rule": "OA-DEEP-002",
+      "file": "server/src/modules/insights/helpers.ts",
+      "lines": [
+        1,
+        7
+      ],
+      "why_legitimate": "The SAME AgentRunRow import as P2, but legitimate: db/rows.ts exists so cross-cutting consumers may name a row shape, and Row->DTO mapping in helpers.ts is its prescribed job. P2 is about the type appearing in a PORT SIGNATURE.",
+      "match": [
+        "helpers.ts",
+        "AgentRunRow",
+        "toRunOutcome"
+      ]
+    }
+  ],
+  "notes": "11 files, 379 lines. depcruise is green on this patch. OA-DEEP-001 and OA-DEEP-002 exist only in the new skill version; OA-INFRA-003 is in both. T4 is the sharpest trap: the same import as P2 in a different file."
+}

@@ -1,0 +1,87 @@
+{
+  "case": "06-noise-suppression",
+  "schema": 1,
+  "scoring": {
+    "planted": "deterministic \u2014 a planted entry counts as found when the report names `file` and at least one token from `match`",
+    "traps": "grader \u2014 deciding whether a report *complained* about a legitimate import needs judgement; `match` only locates the passage"
+  },
+  "planted": [
+    {
+      "id": "P1",
+      "rule": "OA-APP-002",
+      "gate": "modules-no-raw-sdk",
+      "severity": "error",
+      "file": "server/src/modules/exports/service.ts",
+      "lines": [
+        1,
+        "22-23",
+        31
+      ],
+      "summary": "A feature module imports the octokit SDK directly and constructs new Octokit({ auth: token }) from a hand-fetched secret. octokit is first in the RAW_SDKS list, so the gate goes 0 -> 1 errors and CI fails.",
+      "fix": "await this.container.github() \u2014 the GitHubClient port and its adapter already exist, with a mock for tests.",
+      "match": [
+        "octokit",
+        "Octokit",
+        "container.github",
+        "GitHubClient"
+      ]
+    }
+  ],
+  "traps": [
+    {
+      "id": "T1",
+      "rule": "OA-INFRA-001",
+      "file": "server/src/modules/exports/repository.ts",
+      "lines": [
+        "25-33"
+      ],
+      "why_legitimate": "The repository returns the module's own ExportItem type rather than a Drizzle row. Returning domain values instead of leaking rows is the point of the ring.",
+      "match": [
+        "ExportItem",
+        "row",
+        "domain value"
+      ]
+    },
+    {
+      "id": "T2",
+      "rule": "OA-SIZE-002",
+      "file": "server/src/modules/exports/types.ts",
+      "lines": [
+        "whole file"
+      ],
+      "why_legitimate": "Zod schemas plus free functions (render, orderItems, filenameFor) with no class is the prescribed shape here; an anemic model is not a defect.",
+      "match": [
+        "types.ts",
+        "anemic",
+        "entity",
+        "class"
+      ]
+    },
+    {
+      "id": "T3",
+      "rule": "OA-GATE-002",
+      "file": "server/src/modules/repo-intel/pipeline/exports.ts",
+      "lines": [
+        "1-2",
+        18
+      ],
+      "why_legitimate": "repo-intel importing adapters/codeindex and adapters/astgrep, and reading SUPPORTED_EXT from repo-intel/constants.js, are the two NAMED exceptions in the ledger, encoded as pathNot. No rule requires a 'ledger row' for anything further.",
+      "match": [
+        "repo-intel",
+        "adapters/codeindex",
+        "adapters/astgrep",
+        "SUPPORTED_EXT",
+        "exception",
+        "ledger"
+      ]
+    }
+  ],
+  "not_scored": [
+    {
+      "item": "ExportsService taking the whole Container",
+      "rule": "OA-APP-004",
+      "why": "Same as 04-over-layering: ExportsService is new, so OA-APP-004's 'take the ports you need' applies and flagging it is legitimate. Score it neither way."
+    }
+  ],
+  "notes": "This case inverts the others: it measures false positives, not recall. Measured 2026-08-21, T3 discriminated AGAINST the skill \u2014 isolated_with_skill was the only arm to file the ledgered repo-intel imports as a violation, demanding a pathNot and a ledger row for a rule that does not exist. The fixture also carries unplanted real defects (extractFileFacts and parseFile do not exist in server/src; the route param cannot span a slash; repoFullName never reaches the query) \u2014 treat those as code_quality, not architecture."
+}

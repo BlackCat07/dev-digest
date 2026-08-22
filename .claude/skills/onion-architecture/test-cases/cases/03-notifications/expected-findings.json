@@ -1,0 +1,105 @@
+{
+  "case": "03-notifications",
+  "schema": 1,
+  "scoring": {
+    "planted": "deterministic \u2014 a planted entry counts as found when the report names `file` and at least one token from `match`",
+    "traps": "grader \u2014 deciding whether a report *complained* about a legitimate import needs judgement; `match` only locates the passage"
+  },
+  "planted": [
+    {
+      "id": "P1",
+      "rule": "OA-INFRA-002",
+      "gate": "adapters-are-leaves",
+      "severity": "error",
+      "file": "server/src/adapters/slack/client.ts",
+      "lines": [
+        3,
+        "22-24",
+        34
+      ],
+      "summary": "An adapter imports a feature module's service (modules/reviews/service.js) and calls back into it.",
+      "fix": "The adapter takes the summary as a parameter; the caller reads the review and hands the data over.",
+      "match": [
+        "modules/reviews/service",
+        "ReviewService"
+      ]
+    },
+    {
+      "id": "P2",
+      "rule": "OA-ROOT-001",
+      "gate": "platform-not-module-aware",
+      "severity": "error",
+      "file": "server/src/platform/notifier.ts",
+      "lines": [
+        "2-3",
+        "26-27"
+      ],
+      "summary": "platform/ imports a feature module's repository and helpers; only platform/container.ts may know modules exist.",
+      "fix": "Move resolveDestination into a module, or have the caller pass the resolved Destination in.",
+      "match": [
+        "modules/settings",
+        "SettingsRepository",
+        "rowsToSettings"
+      ]
+    },
+    {
+      "id": "P3",
+      "rule": "OA-APP-002",
+      "gate": "modules-no-raw-sdk",
+      "severity": "error",
+      "file": "server/src/modules/reviews/notify.ts",
+      "lines": [
+        1,
+        "27-28"
+      ],
+      "summary": "A feature module imports the simple-git SDK directly instead of going through the GitClient port.",
+      "fix": "container.git.diff(...) \u2014 GitClient already exposes diff, with a mock for tests.",
+      "match": [
+        "simple-git",
+        "container.git",
+        "GitClient"
+      ]
+    }
+  ],
+  "traps": [
+    {
+      "id": "T1",
+      "rule": "OA-INFRA-002",
+      "file": "server/src/adapters/slack/client.ts",
+      "lines": [
+        1
+      ],
+      "why_legitimate": "@slack/web-api inside an adapter \u2014 an adapter is exactly where a vendor SDK belongs.",
+      "match": [
+        "@slack/web-api",
+        "WebClient"
+      ]
+    },
+    {
+      "id": "T2",
+      "rule": "OA-INFRA-002",
+      "file": "server/src/adapters/slack/client.ts",
+      "lines": [
+        2
+      ],
+      "why_legitimate": "@devdigest/shared types \u2014 the port ring is inward of adapters.",
+      "match": [
+        "@devdigest/shared",
+        "ReviewSummary"
+      ]
+    },
+    {
+      "id": "T3",
+      "rule": "OA-ROOT-001",
+      "file": "server/src/modules/reviews/notify.ts",
+      "lines": [
+        3
+      ],
+      "why_legitimate": "A module importing platform/notifier.js is fine \u2014 platform/ is cross-cutting and any ring may use it. The defect is inside notifier.ts (P2), not in this import.",
+      "match": [
+        "platform/notifier",
+        "resolveDestination"
+      ]
+    }
+  ]
+}

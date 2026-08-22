@@ -1,0 +1,43 @@
+{
+  "id": "07-composite-leaks",
+  "skill": "onion-architecture",
+  "title": "Composite leaks: legal per edge, illegal in composition",
+  "prompt": "New cross-repo insights feature \u2014 11 files under {{FIXTURE}}, spanning the shared contracts, reviewer-core, the insights module and its adapters. I was careful with the layering this time: the service takes only the ports it needs, the adapter doesn't import the module, and drizzle stays in the repository. Review it before I open the PR.",
+  "fixture": "fixture",
+  "expected": "expected.md",
+  "planted_violations": 3,
+  "assertions": [
+    {
+      "id": "P1_traces_transitive_impurity",
+      "text": "Reports that reviewer-core is transitively impure, and names the CHAIN: the core importing DEFAULT_WEIGHTS (a value) from @devdigest/shared, and contracts/insights.ts calling readFileSync at module scope. Naming only one end of the chain does not pass."
+    },
+    {
+      "id": "P2_flags_row_type_in_port",
+      "text": "Reports that InsightsRepositoryPort.runsInWindow returning AgentRunRow puts the Drizzle schema into the contract, so the port is not a boundary a fake can satisfy."
+    },
+    {
+      "id": "P2_cites_mock_cast_as_evidence",
+      "text": "Cites the mock as the consequence \u2014 the hand-built 13-column row and/or the `as unknown as AgentRunRow` cast in adapters/insights/mocks.ts \u2014 rather than arguing the point from the port file alone."
+    },
+    {
+      "id": "P3_flags_transaction_boundary",
+      "text": "Reports that the service's two sequential writes (recordSnapshot then markWindowClosed) are not atomic because the transaction is opened inside the repository, and that the service's own comment claims otherwise."
+    },
+    {
+      "id": "no_fp_narrow_deps",
+      "text": "Does NOT report InsightsService taking a narrow InsightsDeps instead of the whole Container as a problem \u2014 that is the shape the skill asks for in a new service."
+    },
+    {
+      "id": "no_fp_structural_adapter",
+      "text": "Does NOT report adapters/insights/window-clock.ts implementing WindowClockPort without importing it as a problem \u2014 structural satisfaction is what keeps the adapter a leaf."
+    },
+    {
+      "id": "no_fp_helpers_row_import",
+      "text": "Does NOT report helpers.ts importing AgentRunRow from db/rows.js as a violation. It is the same symbol as P2 but in its prescribed place \u2014 Row to DTO mapping. Flagging both without distinguishing them fails this."
+    },
+    {
+      "id": "states_gate_is_green",
+      "text": "States that the dependency-cruiser gate passes on this patch (or that no rule catches these defects), rather than attributing any finding to a gate rule that would fire."
+    }
+  ]
+}

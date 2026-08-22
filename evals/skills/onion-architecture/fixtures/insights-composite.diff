@@ -1,0 +1,395 @@
+diff --git a/server/src/vendor/shared/contracts/insights.ts b/server/src/vendor/shared/contracts/insights.ts
+new file mode 100644
+index 0000000..00a5f26
+--- /dev/null
++++ b/server/src/vendor/shared/contracts/insights.ts
+@@ -0,0 +1,43 @@
++import { z } from 'zod';
++import { readFileSync } from 'node:fs';
++
++/**
++ * L07 — cross-repo insights.
++ *
++ * A window is a closed interval of agent activity for one repository. The
++ * reliability figure is derived from what the runs in that window did, weighted
++ * per outcome so a flaky provider error does not read like a bad review.
++ *
++ * The weights ship as data so an operator can retune them for a workspace
++ * without a deploy; the file below is the shipped default.
++ */
++const WEIGHTS_PATH = new URL('./insight-weights.json', import.meta.url);
++const DEFAULT_WEIGHTS = JSON.parse(readFileSync(WEIGHTS_PATH, 'utf8')) as Record<string, number>;
++
++export const OutcomeWeights = z.record(z.string(), z.number().min(0).max(1));
++export type OutcomeWeights = z.infer<typeof OutcomeWeights>;
++
++export const InsightWindow = z.object({
++  repoId: z.string().uuid(),
++  from: z.string().datetime(),
++  to: z.string().datetime(),
++  weights: OutcomeWeights.default(DEFAULT_WEIGHTS),
++});
++export type InsightWindow = z.infer<typeof InsightWindow>;
++
++export const RepoReliability = z.object({
++  repoId: z.string().uuid(),
++  runs: z.number().int(),
++  reliability: z.number().min(0).max(1),
++  worstAgent: z.string().nullable(),
++});
++export type RepoReliability = z.infer<typeof RepoReliability>;
++
++export const InsightsReport = z.object({
++  window: InsightWindow,
++  repos: z.array(RepoReliability),
++  generatedAt: z.string().datetime(),
++});
++export type InsightsReport = z.infer<typeof InsightsReport>;
++
++export { DEFAULT_WEIGHTS };
+diff --git a/reviewer-core/src/review/reliability.ts b/reviewer-core/src/review/reliability.ts
+new file mode 100644
+index 0000000..5f0dfcf
+--- /dev/null
++++ b/reviewer-core/src/review/reliability.ts
+@@ -0,0 +1,46 @@
++import type { OutcomeWeights } from '@devdigest/shared';
++import { DEFAULT_WEIGHTS } from '@devdigest/shared';
++
++/**
++ * Reliability scoring.
++ *
++ * Given the outcomes of the runs in a window, produce a single 0-1 figure. The
++ * calculation is deterministic and total: the same outcomes in a different order
++ * give the same number, and an empty window scores 1 rather than 0, because
++ * "nothing ran" is not evidence of unreliability.
++ */
++export interface RunOutcome {
++  agentId: string | null;
++  status: string;
++}
++
++export function scoreReliability(
++  outcomes: readonly RunOutcome[],
++  weights: OutcomeWeights = DEFAULT_WEIGHTS,
++): number {
++  if (outcomes.length === 0) return 1;
++
++  const total = outcomes.reduce((acc, o) => acc + (weights[o.status] ?? 0.5), 0);
++  return Math.min(1, Math.max(0, total / outcomes.length));
++}
++
++/** The agent carrying the most weight loss in the window, or null on a tie-free empty set. */
++export function worstAgent(
++  outcomes: readonly RunOutcome[],
++  weights: OutcomeWeights = DEFAULT_WEIGHTS,
++): string | null {
++  const loss = new Map<string, number>();
++  for (const o of outcomes) {
++    if (o.agentId == null) continue;
++    loss.set(o.agentId, (loss.get(o.agentId) ?? 0) + (1 - (weights[o.status] ?? 0.5)));
++  }
++  let worst: string | null = null;
++  let worstLoss = 0;
++  for (const [agentId, l] of [...loss.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
++    if (l > worstLoss) {
++      worst = agentId;
++      worstLoss = l;
++    }
++  }
++  return worst;
++}
+diff --git a/server/src/modules/insights/ports.ts b/server/src/modules/insights/ports.ts
+new file mode 100644
+index 0000000..9fc1f2e
+--- /dev/null
++++ b/server/src/modules/insights/ports.ts
+@@ -0,0 +1,28 @@
++import type { AgentRunRow } from '../../db/rows.js';
++import type { InsightWindow, RepoReliability } from '@devdigest/shared';
++
++/**
++ * L07 — the capabilities this module needs, declared here rather than taken off
++ * the container, so the dependencies are visible in the service's signature and
++ * a test can supply its own.
++ */
++export interface InsightsRepositoryPort {
++  /** Every run that started inside the window, newest first. */
++  runsInWindow(window: InsightWindow): Promise<AgentRunRow[]>;
++  /** Persist one repository's computed figure for the window. */
++  recordSnapshot(window: InsightWindow, row: RepoReliability): Promise<void>;
++  /** Mark the window as closed so a later pass does not recompute it. */
++  markWindowClosed(window: InsightWindow): Promise<void>;
++  /** Repositories with any activity in the window. */
++  activeRepoIds(from: string, to: string): Promise<string[]>;
++}
++
++export interface WindowClockPort {
++  /** The closed window ending at the most recent hour mark before `now`. */
++  currentWindow(repoId: string): InsightWindow;
++}
++
++export interface InsightsDeps {
++  insights: InsightsRepositoryPort;
++  clock: WindowClockPort;
++}
+diff --git a/server/src/adapters/insights/mocks.ts b/server/src/adapters/insights/mocks.ts
+new file mode 100644
+index 0000000..8fd0f01
+--- /dev/null
++++ b/server/src/adapters/insights/mocks.ts
+@@ -0,0 +1,51 @@
++import type { AgentRunRow } from '../../db/rows.js';
++import type { InsightWindow, RepoReliability } from '@devdigest/shared';
++
++/**
++ * Test double for the insights repository. Returns whatever the test hands it and
++ * records what was written, so a test can assert on the sequence of writes.
++ */
++export interface MockInsightsOptions {
++  runs?: { agentId: string | null; status: string }[];
++  repoIds?: string[];
++}
++
++export class MockInsightsRepository {
++  readonly snapshots: RepoReliability[] = [];
++  readonly closed: InsightWindow[] = [];
++
++  constructor(private readonly opts: MockInsightsOptions = {}) {}
++
++  async runsInWindow(_window: InsightWindow): Promise<AgentRunRow[]> {
++    return (this.opts.runs ?? []).map(
++      (r) =>
++        ({
++          id: '00000000-0000-0000-0000-000000000000',
++          agentId: r.agentId,
++          status: r.status,
++          prId: null,
++          workspaceId: '00000000-0000-0000-0000-000000000000',
++          createdAt: new Date(),
++          startedAt: null,
++          finishedAt: null,
++          costUsd: null,
++          score: null,
++          model: null,
++          kind: 'review',
++          error: null,
++        }) as unknown as AgentRunRow,
++    );
++  }
++
++  async activeRepoIds(): Promise<string[]> {
++    return this.opts.repoIds ?? [];
++  }
++
++  async recordSnapshot(_window: InsightWindow, row: RepoReliability): Promise<void> {
++    this.snapshots.push(row);
++  }
++
++  async markWindowClosed(window: InsightWindow): Promise<void> {
++    this.closed.push(window);
++  }
++}
+diff --git a/server/src/modules/insights/service.ts b/server/src/modules/insights/service.ts
+new file mode 100644
+index 0000000..98e6596
+--- /dev/null
++++ b/server/src/modules/insights/service.ts
+@@ -0,0 +1,55 @@
++import type { InsightsReport, RepoReliability } from '@devdigest/shared';
++import { scoreReliability, worstAgent } from '@devdigest/reviewer-core';
++import type { InsightsDeps } from './ports.js';
++import { toRunOutcome } from './helpers.js';
++import { MAX_REPOS_PER_REPORT } from './constants.js';
++
++/**
++ * L07 — insights service. Walks the repositories active in a window, scores each
++ * from the runs it finds, and persists the result so the report is cheap to
++ * re-read.
++ */
++export class InsightsService {
++  constructor(private readonly deps: InsightsDeps) {}
++
++  async report(from: string, to: string): Promise<InsightsReport> {
++    const repoIds = (await this.deps.insights.activeRepoIds(from, to)).slice(
++      0,
++      MAX_REPOS_PER_REPORT,
++    );
++
++    const repos: RepoReliability[] = [];
++    for (const repoId of repoIds) {
++      repos.push(await this.scoreOne(repoId));
++    }
++
++    return {
++      window: this.deps.clock.currentWindow(repoIds[0] ?? ''),
++      repos,
++      generatedAt: new Date().toISOString(),
++    };
++  }
++
++  /**
++   * Score one repository and persist it. The snapshot and the window's closed
++   * flag are written together — a closed window whose snapshot is missing would
++   * be skipped forever by the next pass.
++   */
++  private async scoreOne(repoId: string): Promise<RepoReliability> {
++    const window = this.deps.clock.currentWindow(repoId);
++    const rows = await this.deps.insights.runsInWindow(window);
++    const outcomes = rows.map(toRunOutcome);
++
++    const figure: RepoReliability = {
++      repoId,
++      runs: outcomes.length,
++      reliability: scoreReliability(outcomes, window.weights),
++      worstAgent: worstAgent(outcomes, window.weights),
++    };
++
++    await this.deps.insights.recordSnapshot(window, figure);
++    await this.deps.insights.markWindowClosed(window);
++
++    return figure;
++  }
++}
+diff --git a/server/src/modules/insights/repository.ts b/server/src/modules/insights/repository.ts
+new file mode 100644
+index 0000000..98d10c3
+--- /dev/null
++++ b/server/src/modules/insights/repository.ts
+@@ -0,0 +1,80 @@
++import { and, desc, eq, gte, inArray, lt } from 'drizzle-orm';
++import type { Db } from '../../db/client.js';
++import type { AgentRunRow } from '../../db/rows.js';
++import * as t from '../../db/schema.js';
++import type { InsightWindow, RepoReliability } from '@devdigest/shared';
++
++/** L07 — insights data-access over `agent_runs` and `insight_snapshots`. */
++export class InsightsRepository {
++  constructor(private readonly db: Db) {}
++
++  runsInWindow(window: InsightWindow): Promise<AgentRunRow[]> {
++    return this.db
++      .select()
++      .from(t.agentRuns)
++      .innerJoin(t.pullRequests, eq(t.pullRequests.id, t.agentRuns.prId))
++      .where(
++        and(
++          eq(t.pullRequests.repoId, window.repoId),
++          gte(t.agentRuns.createdAt, new Date(window.from)),
++          lt(t.agentRuns.createdAt, new Date(window.to)),
++        ),
++      )
++      .orderBy(desc(t.agentRuns.createdAt))
++      .then((rows) => rows.map((r) => r.agent_runs));
++  }
++
++  async activeRepoIds(from: string, to: string): Promise<string[]> {
++    const rows = await this.db
++      .selectDistinct({ repoId: t.pullRequests.repoId })
++      .from(t.agentRuns)
++      .innerJoin(t.pullRequests, eq(t.pullRequests.id, t.agentRuns.prId))
++      .where(and(gte(t.agentRuns.createdAt, new Date(from)), lt(t.agentRuns.createdAt, new Date(to))));
++    return rows.map((r) => r.repoId);
++  }
++
++  /**
++   * Write the figure and its per-agent breakdown. Both statements land or
++   * neither does, so a snapshot never exists without the rows it summarises.
++   */
++  async recordSnapshot(window: InsightWindow, row: RepoReliability): Promise<void> {
++    await this.db.transaction(async (tx) => {
++      const [snap] = await tx
++        .insert(t.insightSnapshots)
++        .values({
++          repoId: row.repoId,
++          windowFrom: new Date(window.from),
++          windowTo: new Date(window.to),
++          reliability: row.reliability,
++          runs: row.runs,
++        })
++        .returning({ id: t.insightSnapshots.id });
++
++      if (row.worstAgent) {
++        await tx.insert(t.insightAgents).values({
++          snapshotId: snap.id,
++          agentId: row.worstAgent,
++        });
++      }
++    });
++  }
++
++  async markWindowClosed(window: InsightWindow): Promise<void> {
++    await this.db
++      .update(t.insightWindows)
++      .set({ closedAt: new Date() })
++      .where(
++        and(
++          eq(t.insightWindows.repoId, window.repoId),
++          eq(t.insightWindows.windowFrom, new Date(window.from)),
++        ),
++      );
++  }
++
++  async snapshotsFor(repoIds: string[]): Promise<{ repoId: string; reliability: number }[]> {
++    return this.db
++      .select({ repoId: t.insightSnapshots.repoId, reliability: t.insightSnapshots.reliability })
++      .from(t.insightSnapshots)
++      .where(inArray(t.insightSnapshots.repoId, repoIds));
++  }
++}
+diff --git a/server/src/modules/insights/helpers.ts b/server/src/modules/insights/helpers.ts
+new file mode 100644
+index 0000000..eb60622
+--- /dev/null
++++ b/server/src/modules/insights/helpers.ts
+@@ -0,0 +1,19 @@
++import type { AgentRunRow } from '../../db/rows.js';
++import type { RunOutcome } from '@devdigest/reviewer-core';
++import type { RepoReliability } from '@devdigest/shared';
++import type { InsightRow } from './types.js';
++
++/** Row -> the shape the scorer works in. */
++export function toRunOutcome(row: AgentRunRow): RunOutcome {
++  return { agentId: row.agentId, status: row.status };
++}
++
++/** Snapshot row -> the wire object the report renders. */
++export function toInsightDto(row: InsightRow): RepoReliability {
++  return {
++    repoId: row.repoId,
++    runs: row.runs,
++    reliability: row.reliability,
++    worstAgent: row.worstAgent ?? null,
++  };
++}
+diff --git a/server/src/adapters/insights/window-clock.ts b/server/src/adapters/insights/window-clock.ts
+new file mode 100644
+index 0000000..eb4a4c9
+--- /dev/null
++++ b/server/src/adapters/insights/window-clock.ts
+@@ -0,0 +1,25 @@
++import type { InsightWindow } from '@devdigest/shared';
++
++/**
++ * Wall-clock window boundaries.
++ *
++ * Windows are aligned to the hour so two passes started a minute apart agree on
++ * which window they are closing, which is what makes the closed flag meaningful.
++ */
++export class HourAlignedWindowClock {
++  constructor(private readonly windowHours: number) {}
++
++  currentWindow(repoId: string): InsightWindow {
++    const now = new Date();
++    const to = new Date(now);
++    to.setMinutes(0, 0, 0);
++    const from = new Date(to.getTime() - this.windowHours * 3_600_000);
++
++    return {
++      repoId,
++      from: from.toISOString(),
++      to: to.toISOString(),
++      weights: {},
++    };
++  }
++}

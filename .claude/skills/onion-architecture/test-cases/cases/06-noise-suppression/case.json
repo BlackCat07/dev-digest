@@ -1,0 +1,35 @@
+{
+  "id": "06-noise-suppression",
+  "skill": "onion-architecture",
+  "title": "One real violation among three look-alikes",
+  "prompt": "Adding export bundles to DevDigest \u2014 the files are under {{FIXTURE}}/server/src/. There's the exports module itself plus one new file in the repo-intel pipeline that gathers the facts. Go through it and tell me what needs fixing before this can land.",
+  "fixture": "fixture",
+  "expected": "expected.md",
+  "planted_violations": 1,
+  "assertions": [
+    {
+      "id": "F1_finds_octokit_violation",
+      "text": "Reports modules/exports/service.ts importing the octokit SDK directly and constructing new Octokit(...) as a violation, and names container.github() / the existing GitHubClient port as the fix."
+    },
+    {
+      "id": "F_no_fp_repository_returns_dto",
+      "text": "Does NOT report ExportsRepository returning the module's own ExportItem type (rather than a Drizzle row) as a problem \u2014 returning domain values instead of leaking rows is exactly what a repository is for."
+    },
+    {
+      "id": "F_no_fp_anemic_types",
+      "text": "Does NOT report types.ts being Zod schemas plus free functions (no class, no behaviour on the data) as a design defect, and does not recommend introducing an entity class or richer domain model."
+    },
+    {
+      "id": "F_no_fp_repo_intel_adapters",
+      "text": "Does NOT report modules/repo-intel/pipeline/exports.ts importing adapters/codeindex/extract.js and adapters/astgrep/index.js, or reading SUPPORTED_EXT from repo-intel/constants.js, as a layering violation."
+    },
+    {
+      "id": "F_recognises_gate_severity",
+      "text": "Characterises the octokit import as the kind of violation that fails the architecture gate / CI outright, not merely as a style preference or a suggestion."
+    },
+    {
+      "id": "F_no_extra_layering_violations",
+      "text": "Reports no architecture/layering violation other than the octokit one, with one exemption: flagging that this NEW service takes the whole Container rather than narrow ports is legitimate per the skill and does not count against this. Non-architectural findings (N+1 requests, missing validation, CSV escaping, missing response schema) also do not count."
+    }
+  ]
+}
