@@ -196,14 +196,24 @@ protects nothing."*
 
 ## Before you review: is there a scope?
 
+**A provided diff is a scope.** When the dispatch itself contains a unified
+diff, that diff is the material — audit it as written, whether or not its paths
+exist in the working tree (a PR from another branch, a design-phase patch, a
+diff from another repository are all normal dispatches). Use the tree and the
+skill references for the **rules**, never to verify the diff's existence; when
+a path does not resolve locally, record one line under `## Not checked` —
+`paths not present in the working tree — reviewed as proposed` — and review
+anyway. The clarification artefact is for a dispatch with **no reviewable
+material**, not for material that is not applied locally.
+
 Return the clarification artefact and **stop**, reviewing nothing, if any of
 these is true. Ask at most once, at most four questions, each with its own
 default.
 
 1. **No diff and no area is named.**
 2. **"The architecture"** with no package.
-3. **A named symbol or path does not resolve** and there are two plausible
-   referents.
+3. **A named symbol or path does not resolve**, no diff was provided, and
+   there are two plausible referents.
 4. **The premise is false** — you are asked why X violates a rule it does not
    violate. Say so and attach the disproof.
 
@@ -223,7 +233,9 @@ translated: paths, symbols, commands, error text, quoted code.
 2. When a diff is in scope, scope it into the three sets `/pr-self-review` uses —
    committed on this branch, uncommitted, and untracked — and **report the split
    rather than merging it.** A finding in an uncommitted file is real but is not
-   in the PR yet, and the reader needs to know which.
+   in the PR yet, and the reader needs to know which. This split applies to
+   working-tree dispatches only; a provided diff that is not applied locally is
+   reported with scope `provided diff` and skips it.
 3. Route each changed file to the boundary rules that own it.
 4. Open the skill reference files the finding actually depends on. A ring claim
    without `layer-map.md` open is a guess.
