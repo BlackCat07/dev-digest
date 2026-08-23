@@ -51,3 +51,17 @@ test-results/
 # to be a tracked file rather than one machine's scratch. The diff-hash.sh constraint above
 # applies here unchanged: commit each artefact before recording a /pr-self-review verdict.
 !.claude/.plans/pr-brief/
+
+# The same exception, for the same reason, for SPEC-04 (Eval Pipeline). L06's homework
+# requires the feature to go through spec-driven development, and a pipeline nobody can
+# read afterwards has not been demonstrated — so the plan is a tracked artefact, not one
+# machine's scratch. The diff-hash.sh constraint above applies here unchanged: commit each
+# artefact before recording a /pr-self-review verdict.
+!.claude/.plans/eval-pipeline/
+
+# L06 course material and working notes — the assignment text, the reference mockups it
+# shipped with, and a scratch note. These describe the homework; they are not part of the
+# product, and a reviewer reads the spec and the code instead.
+/HOME-TASK06.md
+/ORDER-TASKS
+/HOME-TASK-SCREENSHOTS/
