@@ -65,6 +65,20 @@ export type WorkflowCase =
       expectSubagents?: string[];
       expectSkills?: string[];
       expectFilesRead?: string[];
+      /**
+       * Optional judge ON TOP of the trace assertions — the answer to "did it also tell the truth".
+       * The trace tier alone cannot see a confabulation: on 2026-08-23 a session produced a
+       * fabricated verbatim quote attributed to a file it had really opened, and only a missing
+       * Read made the case go red. Practices close that gap; the case then passes only if the trace
+       * facets hold AND the judge clears `threshold`.
+       *
+       * Supplying practices DISABLES the early stop for this case (see the runner): stopWhen cuts
+       * the session the moment the trace evidence lands, which leaves almost no answer text behind
+       * (measured: 27 output tokens), and an empty answer is not something a judge can read.
+       */
+      practices?: string[];
+      /** Judge score gate for `practices` (default 0.6). */
+      threshold?: number;
       maxTurns?: number;
     };
 
@@ -79,11 +93,45 @@ export function activated(result: Result, skill: string): boolean {
 
 type Task = (prompt: string, artifact: string, opts?: RunOptions) => Promise<Result>;
 
+/**
+ * Run the model call, and if the call ITSELF throws, leave a failure record before re-throwing.
+ *
+ * `runClaude` re-throws when a session dies with nothing usable collected. The record() calls below
+ * all sit in a `finally` AFTER that await, so such a death used to leave no record at all — and
+ * `eval:repeat` counts records, so the case silently vanished from the denominator: the 2026-08-23
+ * `workflow-guarded` run printed "run 1/2 ✓ 5/5 cases" for a run where a sixth case had crashed.
+ * A crash must read as a failure, never as a smaller suite.
+ *
+ * Only the call is wrapped, so a later `expect` throw still hits the existing finally-record and
+ * nothing is recorded twice.
+ */
+async function measure(label: string, run: () => Promise<Result>): Promise<Result> {
+  try {
+    return await run();
+  } catch (err) {
+    record(label, {
+      result: {
+        text: "",
+        toolsUsed: [],
+        subagents: [],
+        skillsInvoked: [],
+        filesRead: [],
+        numTurns: 0,
+        isError: true,
+        metrics: { durationMs: 0, inputTokens: 0, outputTokens: 0, toolCallCount: 0 },
+      },
+      passed: false,
+      extra: { error: String(err) },
+    });
+    throw err;
+  }
+}
+
 function runQualityCases(artifact: string, cases: QualityCase[], task: Task): void {
   for (const c of cases) {
     test(c.name, async () => {
       const threshold = c.threshold ?? DEFAULT_THRESHOLD;
-      const result = await task(c.prompt, artifact, { maxTurns: c.maxTurns });
+      const result = await measure(c.name, () => task(c.prompt, artifact, { maxTurns: c.maxTurns }));
       logTrace(c.name, result);
 
       // measure → record → assert. Everything measurable runs in the try; record() fires in the
@@ -121,26 +169,34 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
       if (c.kind === "dispatch") {
         // Stop the moment the subagent is launched — no need to wait out its nested session.
         const expect1 = c.expectSubagent;
-        const result = await workflowTask(c.prompt, {
-          maxTurns: c.maxTurns,
-          stopWhen: (p) => p.subagents.includes(expect1),
-        });
+        const result = await measure(c.name, () =>
+          workflowTask(c.prompt, {
+            maxTurns: c.maxTurns,
+            stopWhen: (p) => p.subagents.includes(expect1),
+          }),
+        );
         logTrace(c.name, result);
+        // Compute the verdict BEFORE asserting, so the record carries the case's own pass/fail
+        // rather than "did the session end cleanly" (see RecordData.passed).
+        const passed = result.subagents.includes(c.expectSubagent);
         try {
           expect(result.subagents, `subagents: ${result.subagents.join(", ")}`).toContain(c.expectSubagent);
         } finally {
-          record(c.name, { result });
+          record(c.name, { result, passed });
         }
       } else if (c.kind === "activation") {
-        const result = await workflowTask(c.prompt, { maxTurns: c.maxTurns });
+        const result = await measure(c.name, () => workflowTask(c.prompt, { maxTurns: c.maxTurns }));
         logTrace(c.name, result);
+        // A correct negative that ran out of turns is still a correct negative — the verdict is the
+        // activation check alone, never the session's exit status.
+        const passed = activated(result, c.skill) === c.shouldActivate;
         try {
           expect(
             activated(result, c.skill),
             `skills: ${result.skillsInvoked.join(", ")} | reads: ${result.filesRead.join(", ")}`,
           ).toBe(c.shouldActivate);
         } finally {
-          record(c.name, { result });
+          record(c.name, { result, passed });
         }
       } else if (c.kind === "trace") {
         // One session, many asserts — every provided expectation is checked against the same trace.
@@ -152,55 +208,90 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
         const skillEngaged = (p: { skillsInvoked: string[]; filesRead: string[] }, skill: string) =>
           p.skillsInvoked.some((s) => s === skill || s.endsWith(`:${skill}`)) ||
           p.filesRead.some((f) => f.includes(`skills/${skill}/SKILL.md`));
-        const result = await workflowTask(c.prompt, {
-          maxTurns: c.maxTurns,
-          stopWhen: (p) =>
-            subs.every((s) => p.subagents.includes(s)) &&
-            skls.every((s) => skillEngaged(p, s)) &&
-            files.every((f) => p.filesRead.some((r) => r.includes(f))),
-        });
+        // A judged trace has to run to the end — see WorkflowCase.practices.
+        const wantsJudge = (c.practices?.length ?? 0) > 0;
+        const result = await measure(c.name, () =>
+          workflowTask(c.prompt, {
+            maxTurns: c.maxTurns,
+            stopWhen: wantsJudge
+            ? undefined
+            : (p) =>
+                subs.every((s) => p.subagents.includes(s)) &&
+                skls.every((s) => skillEngaged(p, s)) &&
+                files.every((f) => p.filesRead.some((r) => r.includes(f))),
+          }),
+        );
         logTrace(c.name, result);
+        // Every provided expectation, plus a clean exit — the same conjunction the asserts below
+        // check, evaluated once so the record and the test agree.
+        const traceOk =
+          subs.every((sub) => result.subagents.includes(sub)) &&
+          skls.every((skill) => activated(result, skill)) &&
+          files.every((file) => result.filesRead.some((f) => f.includes(file))) &&
+          !result.isError;
+        const threshold = wantsJudge ? (c.threshold ?? DEFAULT_THRESHOLD) : undefined;
+        let verdict: Verdict | undefined;
         try {
-          for (const sub of c.expectSubagents ?? []) {
-            expect(result.subagents, `subagents: ${result.subagents.join(", ")}`).toContain(sub);
+          if (wantsJudge) {
+            verdict = await llmJudge(result.text, c.practices ?? []);
+            logVerdict(c.name, verdict);
           }
-          for (const skill of c.expectSkills ?? []) {
-            expect(
-              activated(result, skill),
-              `skill ${skill} not engaged | skills: ${result.skillsInvoked.join(", ")} | reads: ${result.filesRead.join(", ")}`,
-            ).toBe(true);
-          }
-          for (const file of c.expectFilesRead ?? []) {
-            expect(
-              result.filesRead.some((f) => f.includes(file)),
-              `${file} not read | reads: ${result.filesRead.join(", ")}`,
-            ).toBe(true);
-          }
-          expect(result.isError).toBe(false);
         } finally {
-          record(c.name, { result });
+          // A case that ASKED for a judge and has no verdict did not pass — llmJudge threw (a rate
+          // limit, a malformed response). Without this the record would say PASS on `traceOk` alone
+          // while vitest failed the test: the record and the test must never disagree, which is the
+          // whole point of computing the verdict here. Scoring `true` for "no judge ran" would also
+          // silently delete the confabulation gate this case exists for.
+          const judgeOk = wantsJudge ? verdict !== undefined && verdict.score >= (threshold ?? 0) : true;
+          record(c.name, { result, verdict, threshold, passed: traceOk && judgeOk });
+        }
+        // The record has already landed (with the verdict), so the asserts need no finally.
+        for (const sub of c.expectSubagents ?? []) {
+          expect(result.subagents, `subagents: ${result.subagents.join(", ")}`).toContain(sub);
+        }
+        for (const skill of c.expectSkills ?? []) {
+          expect(
+            activated(result, skill),
+            `skill ${skill} not engaged | skills: ${result.skillsInvoked.join(", ")} | reads: ${result.filesRead.join(", ")}`,
+          ).toBe(true);
+        }
+        for (const file of c.expectFilesRead ?? []) {
+          expect(
+            result.filesRead.some((f) => f.includes(file)),
+            `${file} not read | reads: ${result.filesRead.join(", ")}`,
+          ).toBe(true);
+        }
+        expect(result.isError).toBe(false);
+        if (verdict && threshold !== undefined) {
+          expect(verdict.score, JSON.stringify(verdict.results)).toBeGreaterThanOrEqual(threshold);
         }
       } else {
         // contrast: treatment (real harness) vs control (empty tmpdir, no on-disk config).
         const tools = c.tools ?? ["Read", "Grep", "Glob"];
-        const treatment = await workflowTask(c.prompt, { allowedTools: tools, maxTurns: c.maxTurns });
+        const treatment = await measure(`${c.name} [treatment]`, () =>
+          workflowTask(c.prompt, { allowedTools: tools, maxTurns: c.maxTurns }),
+        );
         const emptyCwd = mkdtempSync(join(tmpdir(), "eval-control-"));
-        const control = await runClaude(c.prompt, {
-          allowedTools: tools,
-          maxTurns: c.maxTurns,
-          cwd: emptyCwd,
-          settingSources: [],
-        });
+        const control = await measure(`${c.name} [control]`, () =>
+          runClaude(c.prompt, {
+            allowedTools: tools,
+            maxTurns: c.maxTurns,
+            cwd: emptyCwd,
+            settingSources: [],
+          }),
+        );
         logTrace(`${c.name} [treatment]`, treatment);
         logTrace(`${c.name} [control]`, control);
+        // Each half is scored on ITS OWN half of the claim: treatment had to read the file, control
+        // had to not. Recording the conjunction on both rows would hide which side broke.
+        const treatmentRead = treatment.filesRead.some((f) => f.includes(c.expectFileRead));
+        const controlRead = control.filesRead.some((f) => f.includes(c.expectFileRead));
         try {
-          const treatmentRead = treatment.filesRead.some((f) => f.includes(c.expectFileRead));
-          const controlRead = control.filesRead.some((f) => f.includes(c.expectFileRead));
           expect(treatmentRead, `treatment reads: ${treatment.filesRead.join(", ")}`).toBe(true);
           expect(controlRead, `control reads: ${control.filesRead.join(", ")}`).toBe(false);
         } finally {
-          record(`${c.name} [treatment]`, { result: treatment });
-          record(`${c.name} [control]`, { result: control });
+          record(`${c.name} [treatment]`, { result: treatment, passed: treatmentRead });
+          record(`${c.name} [control]`, { result: control, passed: !controlRead });
         }
       }
     });

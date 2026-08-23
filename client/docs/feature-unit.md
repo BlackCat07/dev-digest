@@ -57,7 +57,7 @@ column and the detail page's filter both need it), alongside `src/lib/format.ts`
 Recorded as it was found in [`../INSIGHTS.md`](../INSIGHTS.md), **2026-08-02** (Codebase
 Patterns) — two entries, one for the placement rule and one for `src/lib/`.
 
-## Rule 2 — adding a list column is a three-place edit, and nothing checks it
+## Rule 2 — adding a list column is a four-place edit, and nothing checks three of them
 
 The PR-list table is a CSS grid, and three separate declarations have to agree on the
 column count:

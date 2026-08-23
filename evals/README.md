@@ -400,6 +400,7 @@ How each `kind` asserts:
 | `dispatch` | `workflowTask` | `result.subagents` contains `expectSubagent` |
 | `activation` | `workflowTask` | `activated(result, skill) === shouldActivate` (positive **and** near-miss negative) |
 | `contrast` | treatment (real repo) **and** control (empty tmpdir, `settingSources:[]`) | `expectFileRead` read in treatment, NOT in control |
+| `trace` + `practices` | `workflowTask` with the early stop **disabled** | the trace facets hold **and** the judge clears `threshold` — the trace proves which files were opened, the judge proves the answer reports what they say. Use it wherever a confabulated citation would otherwise pass; it costs one judge call and a full-length session. |
 
 Workflow records carry an empty `practices[]` (no judge) but a full trace; `contrast` writes two
 records — `<label>:treatment` and `<label>:control`.
@@ -421,13 +422,19 @@ pnpm vitest run src/records/stats.test.ts       # the only non-model unit test (
 ### `eval:repeat` — stability of one thing
 
 ```bash
-pnpm eval:repeat <vitest pattern> [-n times=5] [-t testNamePattern] [--label name]
-pnpm eval:repeat skills/onion-architecture -n 5 --label baseline
+pnpm eval:repeat <vitest pattern> [-n times<=2, default 2] [-t testNamePattern] [--label name]
+pnpm eval:repeat skills/onion-architecture -n 2 --label baseline
 ```
 Runs the pattern N times, then prints per-test pass rate, a per-**practice** table
 (`passed/total (pct)`), and metric stats (`turns`, `duration_ms`, `tokens_out` as mean ± stddev;
 n<5 prints an "indicative only" caveat). `--label` saves the aggregate to
 `results/repeat-<label>.json` for delta.
+
+> **Trials are capped at 2 per invocation** (`MAX_TIMES` in `src/repeat.ts`, `MAX_RUNS` in
+> `src/records/benchmark.ts`) — token economy. A larger `-n` is not an error: it prints
+> `capping -n N → 2` and runs 2. Two trials separate a stable case from a blatantly flaky one;
+> they do **not** give a trustworthy stddev, which is why n<5 always prints the "indicative
+> only" caveat. Need a real stability number? Raise the constant deliberately, in the code.
 
 ### `eval:delta` — version vs version (the canonical loop)
 
@@ -435,9 +442,9 @@ The primary "before vs after a change" workflow. **Capture the baseline label BE
 there is no way to reconstruct it afterwards short of reverting.
 
 ```bash
-pnpm eval:repeat skills/onion-architecture -n 5 --label baseline   # BEFORE the edit
+pnpm eval:repeat skills/onion-architecture -n 2 --label baseline   # BEFORE the edit
 #   ...edit SKILL.md...
-pnpm eval:repeat skills/onion-architecture -n 5 --label candidate  # AFTER the edit
+pnpm eval:repeat skills/onion-architecture -n 2 --label candidate  # AFTER the edit
 pnpm eval:delta baseline candidate
 ```
 Shows the delta at three levels: per-test pass rate, per-**practice** (which practice
@@ -447,9 +454,9 @@ improved, red = regressed, dim = unchanged. A practice on one side only renders 
 ### `eval:benchmark` — measured lift (with vs without the artifact)
 
 ```bash
-pnpm eval:benchmark <vitest pattern> [-n runs=5]
-pnpm eval:benchmark skills/engineering-insights -n 5    # a skill
-pnpm eval:benchmark agents/architecture-reviewer -n 5   # an agent
+pnpm eval:benchmark <vitest pattern> [-n runs<=2, default 2]
+pnpm eval:benchmark skills/engineering-insights -n 2    # a skill
+pnpm eval:benchmark agents/architecture-reviewer -n 2   # an agent
 ```
 
 **candidate vs baseline** — the whole idea. The benchmark runs the *same test case* in two
@@ -543,6 +550,14 @@ Record schema (`schema: 1`):
 
 Statistics semantics:
 
+- **`outcome` is the case's own verdict.** Grounding gate first, then the judge threshold, then
+  the trace assertion the workflow tier computes for itself (`RecordData.passed`). Only a
+  caller that measures nothing falls back to "the session ended cleanly" — a fallback, never
+  the answer for a tier that has a verdict. Before this, workflow records carried
+  `!result.isError`, so `eval:repeat` mis-scored that tier in both directions: a trace that
+  read nothing counted as a pass, and a correct negative that ran out of turns counted as a
+  failure.
+
 - **Sample stddev** (n−1). n<5 is indicative only — the tools say so.
 - **Practice identity is the practice text.** Reword a practice and you start a new statistics
   series by design (a practice is a prompt; a reworded prompt is a different measurement).
@@ -564,16 +579,31 @@ tokens > 125% of baseline), `missing_data` (a config has zero records for a test
 | `CLAUDE.md` / activation / dispatch | `pnpm eval:workflow` |
 | Any artifact's structure | `pnpm eval:quality` |
 | A `SKILL.md` edit you want to **measure** | repeat/delta loop: `--label baseline` before, `--label candidate` after, then `eval:delta` |
-| New skill/agent — is it **worth its tokens**? | `pnpm eval:benchmark skills/<skill> -n 5` |
+| New skill/agent — is it **worth its tokens**? | `pnpm eval:benchmark skills/<skill> -n 2` |
 | Adding evals for one of **your** skills/agents | `pnpm eval:scaffold <name>` (or `--agent <name>`) |
 | Model / Claude Code version | `pnpm eval` (whole suite) |
 | Stats math changed | `pnpm vitest run src/records/stats.test.ts` |
 
 ## Safety
 
-Sessions run with `permissionMode: "bypassPermissions"`, so `workflowTask` keeps a **read-only
-allow-list** (`Read, Grep, Glob, Task, Agent, Skill` — no `Bash`/`Write`/`Edit`). Don't copy the
-bypass pattern into a context that grants write tools.
+Sessions run with `permissionMode: "bypassPermissions"`, and **`allowedTools` does not restrict
+anything** — the SDK defines it as the auto-approve list ("To restrict which tools are available,
+use the `tools` option instead"). So the read-only-looking list in `WORKFLOW_ALLOWED_TOOLS` never
+made a session read-only. What holds the line is `disallowedTools: MUTATING_TOOLS`
+(`Edit, MultiEdit, Write, NotebookEdit, Bash, BashOutput, KillShell, KillBash`), passed by
+`runClaude` on **every** session — `disallowedTools` removes a tool from the model's context
+entirely.
+
+> This was learned the expensive way. On 2026-08-23, before that line existed, two eval sessions
+> mutated the repo they were measuring: the `engineering-insights` positive appended two fabricated
+> pgvector entries to `server/INSIGHTS.md` with `Edit`, and the near-miss negative wrote a 274-line
+> `server/docs/pgvector-dimensions.md` with `Write` (orphaned — not in the docs index, and its
+> claims contradict pgvector's actual behavior). Both were reverted by hand. If you run these evals
+> on a dirty tree, check `git status` afterwards.
+
+The content tiers were exposed by the same mistake: `skillTask`/`agentTask` pass `allowedTools: []`
+plus a "you have NO tools" line in the prompt — prose, not a constraint. They are covered by the
+same `disallowedTools` now.
 
 ## Deferred (recorded so it isn't rediscovered)
 

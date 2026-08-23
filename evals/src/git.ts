@@ -11,6 +11,24 @@ export interface GitInfo {
   dirty: boolean;
 }
 
+/**
+ * Every path git considers changed, as `XY path` lines. Used by the mutation canary in
+ * trend-reporter.ts: an eval session must never modify the repository it measures, and the SDK's
+ * own tool-restriction options were measured NOT to guarantee that (see run-claude.ts). Comparing
+ * this before and after a run catches a write no matter which layer let it through.
+ */
+export function worktreeStatus(): string[] {
+  try {
+    return execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" })
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
 export function gitInfo(): GitInfo {
   try {
     const sha = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();

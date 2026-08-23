@@ -44,8 +44,9 @@ export function agentTask(prompt: string, agentName: string, opts: RunOptions = 
  * Use for workflow-level evals: skill activation, subagent dispatch, CLAUDE.md effect.
  * Ignores EVAL_CONFIG — the workflow tier has its own control-vs-treatment design.
  *
- * Safety: keep allowedTools a read-only allow-list (no Bash/Write/Edit) — a fresh session
- * with bypassPermissions could otherwise take real actions in the repo.
+ * Safety: the read-only allow-list is NOT what makes this safe — `allowedTools` merely
+ * auto-approves. `runClaude` passes `disallowedTools: MUTATING_TOOLS` on every session, which is
+ * what actually keeps a bypassPermissions session from editing the repo it runs in.
  */
 export function workflowTask(prompt: string, opts: RunOptions = {}) {
   return runClaude(prompt, {

@@ -107,8 +107,22 @@ async function main(): Promise<void> {
       continue;
     }
     const passed = fresh.filter((r) => r.outcome).length;
-    const mark = passed === fresh.length ? `${GREEN}✓${RESET}` : `${RED}✗${RESET}`;
-    console.log(`  run ${i}/${times}  ${mark} ${passed}/${fresh.length} cases`);
+    // Denominator is the number of cases VITEST COLLECTED, not the number of records written. A
+    // case can leave no record at all — a vitest testTimeout abort runs no user code, so not even
+    // the measure() catch in dsl/case.ts fires — and scoring against `fresh.length` then printed
+    // "✓ 4/5" for a run where a sixth case had vanished (measured 2026-08-23, twice). A missing
+    // case is a failure, and it is named as one.
+    const expected = nCases ?? fresh.length;
+    const missing = expected - fresh.length;
+    const mark = passed === expected ? `${GREEN}✓${RESET}` : `${RED}✗${RESET}`;
+    console.log(`  run ${i}/${times}  ${mark} ${passed}/${expected} cases`);
+    if (missing > 0) {
+      console.log(
+        `      ${RED}${missing} case(s) produced no record${RESET} ${DIM}— crashed or hit the 240s ` +
+          `vitest testTimeout; the per-case series below is short by that many trials${RESET}`,
+      );
+      if (captured) console.log(DIM + captured.split("\n").slice(-6).join("\n") + RESET);
+    }
   }
 
   const records = loadRecords(startLine);

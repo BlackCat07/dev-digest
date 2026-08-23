@@ -3,8 +3,8 @@
  * extracts what the session ACTUALLY did (tools, subagents, skills, reads) — not its prose.
  */
 
-import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
-import { EVAL_MODEL, MAX_TURNS, SPAWN_TOOLS } from "../config.js";
+import { query, type HookInput, type HookJSONOutput, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { EVAL_MODEL, MAX_TURNS, MUTATING_TOOLS, SPAWN_TOOLS } from "../config.js";
 import { REPO_ROOT } from "../artifacts/paths.js";
 import { subscriptionEnv } from "./env.js";
 
@@ -62,7 +62,44 @@ export async function runClaude(prompt: string, opts: RunOptions = {}): Promise<
   const options: Options = {
     model: opts.model ?? EVAL_MODEL,
     maxTurns: opts.maxTurns ?? MAX_TURNS,
-    permissionMode: "bypassPermissions", // safe: evals only read/plan and tools are allow-listed
+    permissionMode: "bypassPermissions", // no prompt to answer in a headless session
+    // THREE layers, because the first two were measured NOT to hold under bypassPermissions:
+    //   1. allowedTools — auto-approve list only. Never a restriction; the SDK says so.
+    //   2. disallowedTools — documented as removing a tool from the model's context. It did NOT:
+    //      after adding it, a session still emitted Edit and, on 2026-08-23 11:27, one succeeded
+    //      and appended a fabricated entry to server/INSIGHTS.md. bypassPermissions appears to
+    //      short-circuit the layer that enforces it.
+    //   3. this PreToolUse hook — the SDK's own docs state "PreToolUse hook denies bypass
+    //      canUseTool", i.e. it is the strongest gate available and the only one that held.
+    // Layers 1-2 stay because they cost nothing and shape the model's context; layer 3 is the one
+    // that actually protects the repo an eval measures.
+    disallowedTools: MUTATING_TOOLS,
+    hooks: {
+      PreToolUse: [
+        {
+          hooks: [
+            async (input: HookInput): Promise<HookJSONOutput> => {
+              // Narrow on the union's discriminant rather than casting to a shape with an optional
+              // tool_name: a cast would turn an SDK rename into `undefined`, the guard would find
+              // nothing to block, and it would fail OPEN in silence — exactly the failure this hook
+              // exists to prevent. Narrowing makes that rename a compile error instead.
+              if (input.hook_event_name !== "PreToolUse") return { continue: true };
+              const tool = input.tool_name;
+              if (!MUTATING_TOOLS.includes(tool)) return { continue: true };
+              return {
+                hookSpecificOutput: {
+                  hookEventName: "PreToolUse",
+                  permissionDecision: "deny",
+                  permissionDecisionReason:
+                    `${tool} is blocked: an eval session must never modify the repository it measures. ` +
+                    "Describe what you would do instead.",
+                },
+              };
+            },
+          ],
+        },
+      ],
+    },
     systemPrompt,
     allowedTools,
     cwd: opts.cwd ?? REPO_ROOT,
