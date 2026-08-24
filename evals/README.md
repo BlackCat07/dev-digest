@@ -244,12 +244,28 @@ Anthropic was measured and rejected for the tool tiers: `anthropic/claude-haiku-
 **same 1/4** as gemini on the agent tier, at `$3.48` vs `$0.19` and ~8x the wall-clock per session.
 A dearer model does not buy a green gate when the cases are the problem.
 
-**Known red: the `agents` job is advisory, not blocking.** `architecture-reviewer` scores 1/4 on
-every model measured, and the misses are not model weakness — two of its cases assert things the
-artifact never promised (rule identifiers that exist nowhere but the case file; a PASS/FAIL gate
-verdict that `.claude/agents/architecture-reviewer.md` explicitly forbids). Fixing that changes what
-the eval means, so it is deliberate work, not a drive-by. Until then the job reports and does not
-block — see the comment on `continue-on-error` in the workflow.
+**One blocking gate, on purpose: `detect`.** It runs `typecheck` and `eval:quality` — no model,
+deterministic, free. Every model-backed job is **advisory** (`continue-on-error: true`): it reports
+and never blocks. That is deliberate. A cheap model is the whole point of running these on CI, cheap
+models produce genuine misses, and a gate that goes red on model variance teaches a team to route
+around it. The measurement is the deliverable; the merge decision stays human.
+
+Three findings that are red on `google/gemini-2.5-flash` and are **not** bugs in CI:
+
+- `architecture-reviewer` scores 1/4 on every model measured. Two of its cases assert things the
+  artifact never promised — rule identifiers that exist nowhere but the case file, and a PASS/FAIL
+  gate verdict `.claude/agents/architecture-reviewer.md` explicitly forbids. Fixing that changes
+  what the eval means, so it is deliberate work.
+- `onion-architecture`'s gate-attribution case is 0/3, and that is the **correct** verdict: asked
+  whether `pnpm lint:arch` catches the defects, the model asserted `ports-import-nothing` fires on a
+  `node:` specifier and `row-types-stay-in-persistence` catches `helpers.ts` — both structurally
+  impossible, and both the exact false positives the case was built to catch. Softening it would
+  suppress a true positive, which is the one thing an eval must never do.
+- The workflow tier's `activation` cases are intermittent on cheap models (~1 in 2–4), as recorded
+  in `INSIGHTS.md`.
+
+Turn a tier blocking only once its suite is honest and its model can pass it — and note that
+"blocking" means nothing until branch protection defines required status checks.
 
 Notes:
 - `OPENROUTER_API_KEY` goes in Actions **secrets**. A fork PR cannot see it, so `detect` emits

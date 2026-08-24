@@ -15,12 +15,33 @@ function stripFrontmatter(md: string): string {
   return md;
 }
 
-/** SKILL.md plus every references/*.md — the full payload the harness would assemble. */
+/**
+ * SKILL.md plus every supporting .md the skill ships — the full payload the harness would assemble.
+ *
+ * Both layouts are collected, because this repo uses both and only ONE skill (`zod`) uses
+ * `references/`. Every other skill keeps its supporting files at the skill root, so a
+ * references-only loader silently dropped them and the eval measured a crippled artifact:
+ * `dependency-checker` links to `report-format.md` for the six sections its report must have, and
+ * `onion-architecture` to `layer-map.md` / `enforcement.md` / `rules.md`. Measured before this fix —
+ * the injected payload was 11713 chars (SKILL.md alone), contained none of the six section names,
+ * and never said "mermaid" — while the case asserted all of them. The content tier has NO tools, so
+ * the model cannot open a linked file: whatever is not injected does not exist.
+ *
+ * README.md is excluded: it is the folder's index for humans, not part of the skill's instructions.
+ */
 export function skillContent(skillName: string): string {
   const dir = join(SKILLS_DIR, skillName);
   const skillMd = join(dir, "SKILL.md");
   if (!existsSync(skillMd)) throw new Error(`SKILL.md not found: ${skillMd}`);
   const parts = [readFileSync(skillMd, "utf8")];
+
+  const supporting = readdirSync(dir)
+    .filter((f) => f.endsWith(".md") && f !== "SKILL.md" && f !== "README.md")
+    .sort();
+  for (const f of supporting) {
+    parts.push(`\n\n## Reference: ${f}\n\n${readFileSync(join(dir, f), "utf8")}`);
+  }
+
   const refs = join(dir, "references");
   if (existsSync(refs)) {
     for (const f of readdirSync(refs).filter((f) => f.endsWith(".md")).sort()) {

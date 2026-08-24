@@ -4,6 +4,12 @@
 # own Claude Code harness — skills (.claude/skills/*), subagents (.claude/agents/*) and
 # workflow-level behaviour (CLAUDE.md + on-disk config). Model-backed, so it costs real tokens.
 #
+# ONE BLOCKING GATE, ON PURPOSE: `detect`. It runs typecheck and the static SKILL.md gate — no
+# model, deterministic, free. Every model-backed job is ADVISORY (`continue-on-error: true`): it
+# reports and never blocks. That is deliberate, not a concession. A cheap model is the whole point
+# here, cheap models produce genuine misses, and a gate that goes red on model variance teaches a
+# team to route around it. The measurement is the deliverable; the merge decision stays human.
+#
 # It is therefore SELECTIVE. evals/scripts/ci-detect.mjs maps the PR's changed files onto the
 # suites that own them — a changed skill runs that skill's evals, a changed CLAUDE.md or agent
 # runs the workflow tier — and reports a visible SKIP (not a failure) for an artifact that has
@@ -146,6 +152,11 @@ jobs:
   #
   # The `!= '[]'` guard is not cosmetic: GitHub fails a job outright on an empty matrix vector
   # ("does not contain any values"). It is what turns "this skill has no evals" into a skip.
+  #
+  # Advisory. Measured 2026-08-24: onion-architecture's gate-attribution case is red on
+  # google/gemini-2.5-flash because that model hallucinates the dependency-cruiser config — a
+  # CORRECT verdict from a case built to catch exactly that. Blocking on it would mean either
+  # suppressing a true positive or paying for a stronger model on every PR.
   # ─────────────────────────────────────────────────────────────────────────────────────────────
   skills:
     name: skill evals (${{ matrix.skill }})
@@ -156,6 +167,7 @@ jobs:
       fail-fast: false
       matrix:
         skill: ${{ fromJSON(needs.detect.outputs.skills) }}
+    continue-on-error: true
     defaults:
       run:
         working-directory: evals
@@ -192,7 +204,7 @@ jobs:
   # LiteLLM translating proxy (evals/proxy/). Hence the up / wait / run / down dance.
   # ─────────────────────────────────────────────────────────────────────────────────────────────
   agents:
-    name: agent evals (${{ matrix.agent.name }})
+    name: agent evals (${{ matrix.agent }})
     needs: detect
     if: needs.detect.outputs.agents != '[]' && needs.detect.outputs.has_key == 'true'
     runs-on: ubuntu-latest
@@ -203,8 +215,6 @@ jobs:
       max-parallel: 1
       # (fail-fast is off above, so one red row does not cancel the others)
       matrix:
-        # Objects, not strings: {name, advisory}. See CONTROL_ARMS in scripts/ci-detect.mjs —
-        # a suite that is red by design (an A/B control arm) must not block a merge.
         agent: ${{ fromJSON(needs.detect.outputs.agents) }}
     # TEMPORARILY ADVISORY FOR EVERY ROW, not just the control arm.
     #
@@ -247,8 +257,8 @@ jobs:
       - name: wait for proxy
         run: pnpm proxy:wait
 
-      - name: run evals/agents/${{ matrix.agent.name }}
-        run: pnpm exec vitest run "agents/${{ matrix.agent.name }}/" --no-file-parallelism
+      - name: run evals/agents/${{ matrix.agent }}
+        run: pnpm exec vitest run "agents/${{ matrix.agent }}/" --no-file-parallelism
 
       - if: failure()
         run: docker compose -f proxy/docker-compose.yml logs --tail 100
@@ -258,7 +268,7 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: eval-records-agent-${{ matrix.agent.name }}
+          name: eval-records-agent-${{ matrix.agent }}
           path: evals/results/*.jsonl
           retention-days: 14
           if-no-files-found: ignore

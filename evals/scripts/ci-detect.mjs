@@ -89,16 +89,6 @@ const agentNames = touched(
   /^evals\/agents\/([^/]+)\//,
 );
 
-// CONTROL ARMS — suites that are red BY DESIGN and must never block a merge.
-//
-// architecture-reviewer-lite has no cases of its own: its .eval.ts re-runs the STRICT variant's
-// cases against the relaxed artifact, which has the "cite the exact documented rule per finding"
-// hard rule removed. The case file says so outright — "only the strict variant ... should reliably
-// emit the identifier" (agents/architecture-reviewer/architecture-reviewer.cases.ts, the comment
-// above REVIEWER_CORE_PROMPT). Measured: it scores 3/4, and the 4th case CANNOT pass. That is the
-// A/B measurement, read via `pnpm eval:delta` — not a gate. Blocking on it would paint every PR
-// that touches the pair red for a reason that is the point of the experiment.
-const CONTROL_ARMS = new Set(["architecture-reviewer-lite"]);
 
 let skills = skillNames.filter((n) => hasEvals("skills", n));
 let agents = agentNames.filter((n) => hasEvals("agents", n));
@@ -141,10 +131,7 @@ const out = process.env.GITHUB_OUTPUT;
 const write = (k, v) => (out ? appendFileSync(out, `${k}=${v}\n`) : console.log(`${k}=${v}`));
 
 write("skills", JSON.stringify(skills));
-write(
-  "agents",
-  JSON.stringify(agents.map((name) => ({ name, advisory: CONTROL_ARMS.has(name) }))),
-);
+write("agents", JSON.stringify(agents));
 write("run_workflow", String(runWorkflow));
 write("skipped_skills", skippedSkills.join(" "));
 write("skipped_agents", skippedAgents.join(" "));
@@ -156,7 +143,7 @@ const lines = [
   `changed files : ${changed.length}`,
   `reason        : ${reason}`,
   `skills → run  : ${skills.join(", ") || "(none)"}`,
-  `agents → run  : ${agents.map((n) => (CONTROL_ARMS.has(n) ? n + " (advisory)" : n)).join(", ") || "(none)"}`,
+  `agents → run  : ${agents.join(", ") || "(none)"}`,
   `workflow tier : ${runWorkflow ? "run" : "skip"}`,
 ];
 if (skippedSkills.length) lines.push(`SKIP skills (no evals): ${skippedSkills.join(", ")}`);
