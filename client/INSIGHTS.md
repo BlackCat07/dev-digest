@@ -132,6 +132,16 @@ valuable one — the code does not record what was tried and abandoned.
 
 <!-- append below -->
 
+- **2026-08-23** — **A `curl` of a client route proves nothing about a rendered control, and
+  grepping its HTML for a label is a false green.** `/repos/<id>/pulls/<n>` returns ~98 KB carrying
+  the shell **and the entire `prReview` message catalogue inside the RSC flight payload**, so a
+  search for a button's label finds the catalogue string; `data-finding-id`, `>Accept<` and
+  `aria-disabled` are all absent, because the reviews list is client-fetched after hydration. Three
+  independent dispatches measured this on three different routes. A `200` proves the route exists
+  and nothing more — `DDG-UI-001` on any data-driven screen needs a real browser, and "the label is
+  in the HTML" is the tempting wrong evidence. Evidence:
+  `src/app/repos/[repoId]/pulls/[number]/_components/FindingsPanel/`, `src/app/eval/`.
+
 - **2026-08-20** — **A `@@` hunk header does not decide which line numbers exist — the body lines
   do — so a target-line fixture written from the header silently finds no anchor.** A patch whose
   header claims a long range but whose body carries one context line and one addition renders
@@ -475,6 +485,15 @@ Conventions and architectural decisions, each with the reason behind it.
 Dependency and tooling quirks.
 
 <!-- append below -->
+
+- **2026-08-23** — **jsdom implements no `EventSource`, and `src/test/setup.ts` does not shim it**
+  (it shims `ResizeObserver` and `scrollIntoView`). A test that mounts a component reaching a hook
+  which *constructs* one with a non-null id dies with a `ReferenceError` **inside the effect** and
+  takes the whole tree down, not just the assertion — so the failure reads as a broken component
+  rather than a missing global. Both construction sites return early on a null id, which is why no
+  existing test had hit it. Stub a `FakeEventSource` per file, or keep the id null. Evidence:
+  `src/lib/hooks/eval.ts` (`useEvalBatchEvents`), `src/lib/hooks/reviews.ts` (`useRunEvents`),
+  `src/test/setup.ts`.
 
 - **2026-08-19** — **`eslint` on a path under `src/vendor/` exits 0 while linting nothing, and
   a command listing it beside real files reads as a pass for both.** The config ignores

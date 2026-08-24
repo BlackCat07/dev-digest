@@ -357,6 +357,19 @@ Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
 
+- **2026-08-23** — **`AgentsRepository.snapshotVersion` re-reads `skillIdsForAgent(row.id)` from
+  INSIDE `update`, so a caller that wants the new version's snapshot to record a particular skill
+  set must write the links BEFORE calling `update`.** Writing them after leaves the snapshot
+  carrying the *previous* set while every assertion about the agent's live links still passes — a
+  bug that survives a green suite. Found making version promotion restore the promoted version's
+  ordered skill ids: moving the `setSkills` call after `update` turned exactly two tests red, one
+  of them the ordering assertion, and a fixture whose two sets differ only in *membership* would
+  not have caught it. Related, and what makes "promotion always yields a higher version" true even
+  when the promoted config equals the current one: `isConfigChange` treats any **defined**
+  `outputSchema` in a patch as a config change. Evidence:
+  `src/modules/agents/repository.ts` (`snapshotVersion`), `src/modules/agents/service.ts`
+  (`promoteAgentVersion`), `src/modules/agents/helpers.ts` (`isConfigChange`).
+
 - **2026-08-20** — **A feature module cannot use `node:crypto`, and the two files that appear to
   prove otherwise are the named infrastructure exception.** The `modules/<name>/` grep gates ban
   every `node:` import specifier, not only the filesystem one the 2026-08-10 entry in Tool &
@@ -637,6 +650,28 @@ Conventions and architectural decisions, each with the reason behind it.
 Dependency and tooling quirks.
 
 <!-- append below -->
+
+- **2026-08-23** — **`git status --short` reports a newly generated file as `??`, never `A`, so a
+  Done-condition written against an `A` line cannot pass on an implementer's tree** — `A` needs a
+  `git add`, and an implementer is forbidden to stage. The same shape defeats
+  `git diff --name-only` as an "exactly N paths changed" check for any task that **adds** files:
+  new files are untracked and `git diff` cannot see them at all, so the count silently comes back
+  short. Use `git status --short -- <paths>` for both. Read with the 2026-08-19 entry on
+  `_journal.json` always showing `M`, the only formulation that holds for a generated migration on
+  an unstaged tree is **"exactly one `.sql` line, and it is not `M`"**. Evidence:
+  `src/db/migrations/0020_short_the_anarchist.sql`, `../.claude/.plans/eval-pipeline/plan.md`
+  (T1 and T4 Done-conditions).
+
+- **2026-08-23** — **`depcruise`'s `core-stays-pure` rule stays GREEN with a provider import
+  sitting inside `reviewer-core`, because it only forbids edges that LEAVE the package.** Measured
+  by deliberately breaking a gate: `import type { LLMProvider } from '../llm/openrouter.js'` at the
+  top of `reviewer-core/src/eval/score.ts` — the one file whose entire purpose is that it makes no
+  model call — left the cruise at `0 errors, 22 warnings` unchanged. An intra-package edge is not a
+  violation that rule can express. So "this module reaches no provider" **cannot be gated
+  architecturally**; the only mechanical check is a grep over that file's own import statements,
+  scoped to import lines rather than whole-file text (a doc-comment naming the thing it avoids
+  otherwise reads as a violation) and run with `-a`. Evidence: `reviewer-core/src/eval/score.ts`,
+  `.dependency-cruiser.cjs` (`core-stays-pure`), `../scripts/verify-l06.sh`.
 
 - **2026-08-22** — **A side-effect subpath import (`import 'dotenv/config'`) is a third class
   of scanner-invisible dependency: `scan.mjs` reports `importedInFiles: 0` for `dotenv` while

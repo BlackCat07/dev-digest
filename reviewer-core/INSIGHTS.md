@@ -86,6 +86,15 @@ Dependency and tooling quirks.
 
 <!-- append below -->
 
+- **2026-08-23** — **`tsconfig.eslint.json` here carries a baseline of 4 `error TS` that no script
+  surfaces** — the same include-hole `server` has: `tsconfig.json`'s `include` is `src/**/*.ts` and
+  `vitest` transpiles without typechecking, so `npm test` and the typecheck script can both be green
+  over a test file holding a real type error. Measured: `test/run.test.ts` (1 × `TS7006`) and
+  `test/structured.test.ts` (3 × `TS18048`). A gate that adds a test-file typecheck here must filter
+  to the files it owns and quote 4 as the known baseline, or it is red on arrival — and a gate that
+  is red on arrival stops being read. Evidence: `tsconfig.eslint.json`, `test/structured.test.ts`,
+  `../scripts/verify-l06.sh` (`core · typecheck (L06 test files)`).
+
 - **2026-08-07** — **Anthropic models via OpenRouter reject a `json_schema` response format
   that carries numeric range keywords**, and the engine surfaces it only as
   `400 Provider returned error`. All three routes OpenRouter tried (Anthropic, Bedrock,
