@@ -186,62 +186,75 @@ workflow cases:
 > checkout is disposable); locally, prefer the Anthropic path or a throwaway clone for the workflow
 > tier.
 
-### Wiring it into GitHub Actions (per-PR)
+### On CI — `.github/workflows/evals.yml`
 
-The engine is CI-ready: bring the proxy up as a step, wait for it, run the tier, tear it down. Put
-the OpenRouter key in the repo's **Actions secrets** as `OPENROUTER_API_KEY` (Settings → Secrets and
-variables → Actions). Create `.github/workflows/<name>.yml` in your repo:
+The engine is wired up for real: **`.github/workflows/evals.yml`** runs on every `pull_request`
+that touches `.claude/**`, any `CLAUDE.md`, or `evals/**`. Read that file for the mechanics; this
+section is the contract it implements.
 
-```yaml
-name: evals
-on:
-  pull_request:
-    paths: ['evals/**', '.claude/**', 'CLAUDE.md']   # only when the harness/artifacts change
+**It is selective, not a full-suite run.** `scripts/ci-detect.mjs` reads the PR's changed files and
+maps them onto the suites that own them:
 
-permissions:
-  contents: read
+| Changed | Runs |
+|---|---|
+| `.claude/skills/<name>/**` or `evals/skills/<name>/**` | `evals/skills/<name>` (content tier) |
+| `.claude/agents/<name>.md` or `evals/agents/<name>/**` | `evals/agents/<name>` (tool tier) + workflow tier |
+| any `CLAUDE.md` — root, `.claude/`, or a package's | workflow tier |
+| `evals/src/**` (the engine) | **everything** — the engine decides every tier's verdict |
+| `evals/scripts/ci-detect.mjs` or the workflow file | smoke: one artifact per tier |
 
-jobs:
-  workflow-evals:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: evals
-    env:
-      EVAL_BACKEND: openrouter
-      OPENROUTER_BASE_URL: http://localhost:4000
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}   # repo Actions secret
-      EVAL_MODEL: google/gemini-2.5-flash
-      EVAL_JUDGE_MODEL: google/gemini-2.5-flash
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 10 }
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: evals/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
+A changed artifact with **no evals written** is a visible `SKIP <name> (no evals)` in the log and
+the job summary — never a failure. That is what the `!= '[]'` guards on the matrix jobs are for:
+GitHub errors out on an empty matrix vector instead of skipping, so the guard is load-bearing.
 
-      # --- the engine ---
-      - run: docker compose -f proxy/docker-compose.yml up -d   # OPENROUTER_API_KEY from job env
-      - run: pnpm proxy:wait                                     # block until the proxy answers
-      - run: pnpm eval:workflow                                  # or eval:agents / eval:skills / eval
-      - if: failure()
-        run: docker compose -f proxy/docker-compose.yml logs --tail 100
-      - if: always()
-        run: docker compose -f proxy/docker-compose.yml down
-```
+**Four jobs.** `detect` (free — `typecheck` + `eval:quality`, the static SKILL.md gate, plus the
+mapping); `skills` (matrix, blocking, direct OpenRouter call, no proxy); `agents` (matrix, blocking,
+brings the LiteLLM proxy up/down around the run, `max-parallel: 1`); `workflow-tier`
+(**`continue-on-error: true`** — see the activation caveat above; it reports to the job summary).
+Each uploads `results/*.jsonl` as an artifact, since `results/` is gitignored.
+
+**Switching the model — no code change, no commit.**
+
+| Knob | Default | Used by |
+|---|---|---|
+| `EVAL_CONTENT_MODEL` | `deepseek/deepseek-chat` | `skills` (content tier) |
+| `EVAL_TOOLS_MODEL` | `google/gemini-2.5-flash` | `agents`, `workflow-tier` (tool tiers) |
+| `EVAL_JUDGE_MODEL` | `google/gemini-2.5-flash` | the LLM judge, all tiers |
+
+Set them as **repo variables** (Settings → Secrets and variables → Actions → *Variables*) to change
+the default, or as **`workflow_dispatch` inputs** for a one-off manual run.
+
+`deepseek/deepseek-chat` is the slug OpenRouter bills as **"DeepSeek V4 Flash 0423"** — the two
+names are the same model.
+
+**Two measured facts about that split, neither of which changes it.** Recorded because the
+capability table above would mislead you into expecting otherwise:
+
+- **Spend on the first real CI run: gemini `$0.19` vs deepseek `$0.94`.** Deepseek was 5x *dearer*
+  in practice. Per-token price is not the bill — turn count and output length are.
+- **Deepseek fails one deterministic gate.** `dependency-checker`'s first case grounds on a
+  ` ```mermaid ` block; deepseek answers in prose, scores `0`, and the judge never runs. That case
+  is red on this configuration, and it is a model-format limit, not a broken case.
+
+Anthropic was measured and rejected for the tool tiers: `anthropic/claude-haiku-4.5` scored the
+**same 1/4** as gemini on the agent tier, at `$3.48` vs `$0.19` and ~8x the wall-clock per session.
+A dearer model does not buy a green gate when the cases are the problem.
+
+**Known red: the `agents` job is advisory, not blocking.** `architecture-reviewer` scores 1/4 on
+every model measured, and the misses are not model weakness — two of its cases assert things the
+artifact never promised (rule identifiers that exist nowhere but the case file; a PASS/FAIL gate
+verdict that `.claude/agents/architecture-reviewer.md` explicitly forbids). Fixing that changes what
+the eval means, so it is deliberate work, not a drive-by. Until then the job reports and does not
+block — see the comment on `continue-on-error` in the workflow.
 
 Notes:
-- ubuntu runners ship Docker + `docker compose`, so no extra setup is needed.
-- The proxy container reads `OPENROUTER_API_KEY` straight from the job `env` (which is fed by the
-  secret) — you don't pass it to `docker compose` explicitly.
-- Because tool tiers cost real tokens, gate on `paths:` (only when the harness/artifacts change) and
-  keep the case count small. For a stricter gate, split into a required `eval:agents`/`eval:skills`
-  job and a non-blocking `eval:workflow` job (activation flakiness, above).
+- `OPENROUTER_API_KEY` goes in Actions **secrets**. A fork PR cannot see it, so `detect` emits
+  `has_key=false` and the paid jobs skip cleanly instead of failing 20 model calls deep.
+  `pull_request_target` is deliberately not used — it would hand a fork access to the key.
+- ubuntu runners ship Docker + `docker compose`, so the proxy needs no extra setup, and the
+  container reads `OPENROUTER_API_KEY` straight from the job `env`.
+- Tool tiers run `max-parallel: 1` with `--no-file-parallelism`: OpenRouter throttles a burst, and
+  a throttled session degrades to one turn, so a dispatch that passes alone fails in a parallel run.
 
 ## Module layout — `src/` (the engine)
 

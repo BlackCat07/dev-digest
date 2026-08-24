@@ -84,6 +84,22 @@ _No entries yet._
   the three-layer comment), `src/config.ts` (`MUTATING_TOOLS`). This applies to **any** code in this
   repo that opens an SDK session, not just evals.
 
+- **2026-08-24** — **GitHub Actions does not expose the `env` context inside a job-level `env`
+  block, so `EVAL_MODEL: ${{ env.EVAL_TOOLS_MODEL }}` resolves to the empty string — silently.**
+  A workflow-level `env` entry cannot be read by a job's own `env`; only `github`, `needs`,
+  `strategy`, `matrix`, `vars`, `secrets` and `inputs` are available there. The failure is
+  invisible in the YAML: `EVAL_MODEL=""` makes `src/config.ts` fall back to `claude-haiku-4-5`, an
+  Anthropic id OpenRouter cannot resolve, so the job dies on a model-not-found far from the cause.
+  Repeat the `${{ inputs.x || vars.y || 'default' }}` expression in each job instead of factoring
+  it out. Evidence: `.github/workflows/evals.yml` (the comment above the workflow-level `env`).
+
+- **2026-08-24** — **A vitest positional filter is a substring match on the file path, not a
+  directory. `vitest run agents/architecture-reviewer` also runs
+  `agents/architecture-reviewer-lite/`** — measured: 8 tests across 2 files instead of 4 across 1.
+  This matters wherever one artifact's name is a prefix of another's: the CI job for the strict
+  agent silently pulled in the lite control arm. Always end a per-artifact filter with a slash —
+  `agents/<name>/`. Evidence: `.github/workflows/evals.yml` (the `skills` and `agents` run steps).
+
 ## Recurring Errors & Fixes
 
 <!-- append below -->
@@ -103,6 +119,34 @@ _No entries yet._
 ## Session Notes
 
 <!-- append below -->
+
+### 2026-08-24
+
+- The harness evals now run on PR (`.github/workflows/evals.yml`). First real run, on the smoke
+  path: `detect` green in 20s, and **all three model-backed jobs did real work** — the LiteLLM
+  proxy came up in CI, the Agent SDK spoke through it, subagents dispatched, skills activated, the
+  judge returned structured verdicts. Every red was a genuine eval verdict, not plumbing.
+- Scores that run: `dependency-checker` 2/3, `architecture-reviewer` 1/4, workflow tier 5/6. Total
+  model time ~200s.
+- **`architecture-reviewer` cannot pass its own suite on any model.** Two of its four cases assert
+  the rule identifiers `reviewer-core-zero-io`, `reviewer-core-ground-findings-gate`,
+  `inward-only-dependencies`, `di-discipline` — and a repo-wide grep finds all four **only** in
+  `agents/architecture-reviewer/architecture-reviewer.cases.ts`. No agent definition, no skill, no
+  doc defines them, so no model can cite them. The same cases demand a "PASS/FAIL gate verdict"
+  while `.claude/agents/architecture-reviewer.md` says "You report… you never issue a merge
+  verdict" and uses CRITICAL / WARNING / SUGGESTION. Measured 1/4 on `google/gemini-2.5-flash` and
+  1/4 on `anthropic/claude-haiku-4.5`, so it is not model weakness. The CI job is advisory until
+  the suite is made honest — that fix changes what the eval means and is deliberate work.
+- **Per-token price is not the bill.** First CI run cost gemini-2.5-flash `$0.19` vs
+  deepseek-chat `$0.94` — deepseek 5x dearer despite the cheaper rate, because turn count and
+  output length dominate. `claude-haiku-4.5` cost `$3.48` for the same 1/4 on the agent tier, at
+  ~8x the wall-clock per session (44–96s vs 6–11s). Do not infer eval cost from a price table.
+- `deepseek/deepseek-chat` is what OpenRouter bills as **"DeepSeek V4 Flash 0423"** — same model,
+  two names. Useful when reconciling the dashboard against `EVAL_MODEL`.
+- Deepseek fails `dependency-checker`'s first case deterministically: that case grounds on a
+  ` ```mermaid ` block and deepseek answers in prose, so `grounded` is `0`, the judge is skipped
+  and the case is red before any judging happens. Evidence: `src/dsl/case.ts` (`measure`, the
+  `grounded !== undefined` branch).
 
 ### 2026-08-23
 
