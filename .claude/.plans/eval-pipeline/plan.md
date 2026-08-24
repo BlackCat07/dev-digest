@@ -381,7 +381,18 @@ Red flags: a `Date` interpolated into a raw `sql` template typechecks and then t
 ### T7 — The `Turn into eval case` finding action
 Satisfies: R16
 Depends-on: T3, T5
-Owned paths: `client/src/app/repos/[repoId]/pulls/[number]/_components/FindingCard/FindingCard.tsx`, `.../FindingCard/styles.ts`, `.../FindingCard/constants.ts`, `.../FindingCard/FindingCard.test.tsx`, `client/src/app/repos/[repoId]/pulls/[number]/_components/FindingsPanel/FindingsPanel.tsx`
+Owned paths: `client/src/app/repos/[repoId]/pulls/[number]/_components/FindingCard/FindingCard.tsx`, `.../FindingCard/styles.ts`, `.../FindingCard/constants.ts`, `.../FindingCard/FindingCard.test.tsx`, `client/src/app/repos/[repoId]/pulls/[number]/_components/FindingsPanel/FindingsPanel.tsx`, `.../FindingsPanel/FindingsPanel.test.tsx`, `client/src/app/repos/[repoId]/pulls/[number]/_components/ReviewRunAccordion/ReviewRunAccordion.test.tsx`
+
+> **AMENDED mid-run, 2026-08-23, by the orchestrator.** The last two paths were added after the
+> first T7 dispatch came back `partial`. `FindingsPanel` cannot gain its first React Query hook
+> without them: both files mount it, both mock only `lib/hooks/reviews`, and neither provides a
+> `QueryClientProvider`, so `useCreateEvalCase` throws `No QueryClient set` and crashes 16
+> previously-green tests while `tsc --noEmit` stays clean. Measured, not predicted — the first
+> dispatch wrote the wiring, ran it, saw `16 failed | 10 passed` with 17 occurrences of that
+> error, and reverted rather than leave the suite red. No other task in this plan owned either
+> file, so the original Owned paths could not finish T7. Each file needs one addition: a
+> `vi.mock` of the eval hooks beside the `reviews` mock it already carries, or a provider in its
+> render helper.
 Forbidden: `client/src/vendor/**`, `client/src/lib/hooks/**`, `client/messages/**`, every other `_components/` folder under `pulls/[number]/`
 Change: the expanded card's action row today renders exactly two controls — `Accept` and `Dismiss` (`FindingCard.tsx`, the `s.actions` block). Add `Turn into eval case`, plus `Learn` and `Reply to author` as **present but unwired** controls, because AC-50's observable is five actions while N3 keeps those two unimplemented (see `## Open questions & recommendations` Q1 — this is the plan's default). On a finding carrying neither decision the eval control is present, `aria-disabled`, and its accessible name states the precondition, taken from the `prReview` catalogue. `FindingsPanel.tsx` supplies the handler, as it already does for `onAction` at line 134, and renders the refusal message inline on that card without disabling `Accept` or `Dismiss`.
 Skill: `react-best-practices` (`aria-label` on an icon-only control; a word beside every state, not colour alone; no derived state in `useState`), `frontend-ui-architecture` (the unit's own `styles.ts` and `constants.ts`; nothing promoted until a second consumer), `react-testing-library`
