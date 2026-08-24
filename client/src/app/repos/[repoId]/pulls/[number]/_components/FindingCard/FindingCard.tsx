@@ -1,7 +1,19 @@
 /* FindingCard — ported from findings.jsx (createElement → TSX).
    Severity icon+label, category, file:line, confidence, markdown rationale +
-   suggestion, accept/dismiss actions. Accept/dismiss reflect persisted
-   timestamps. */
+   suggestion, and the five-control action row. Accept/dismiss reflect persisted
+   timestamps.
+
+   The action row is five controls: `Accept`, `Dismiss`, `Turn into eval case`,
+   `Learn` and `Reply to author`. Only the first three do anything — `Learn` and
+   `Reply to author` are rendered `aria-disabled` and carry no handler, because
+   the design's action row is five wide while those two features are not built.
+   They are announced as unavailable rather than merely dimmed, which is the
+   difference between "not yet" and "broken".
+
+   `Turn into eval case` is the one control that arrives as an OPTIONAL prop: the
+   mutation belongs to the panel that owns the list (`FindingsPanel`), and a card
+   rendered by anything that does not own it simply gets no eval control instead
+   of reaching for a hook it cannot satisfy. */
 "use client";
 
 import React from "react";
@@ -18,10 +30,22 @@ import {
   type Category,
 } from "@devdigest/ui";
 import type { FindingRecord, FindingActionKind } from "@devdigest/shared";
-import { SEV_COLOR, SEV_COLOR_FALLBACK } from "./constants";
+import {
+  EVAL_REFUSAL_FALLBACK_KEY,
+  EVAL_REFUSAL_MESSAGE_KEY,
+  SEV_COLOR,
+  SEV_COLOR_FALLBACK,
+} from "./constants";
 import { lineLabel } from "./helpers";
 import { githubBlobUrl } from "../../../../../../../lib/github-urls";
 import { s } from "./styles";
+
+/**
+ * Where this card's eval-case request stands. Passed in, never stored here: the
+ * panel owns the mutation, so it owns the state, and a copy in this component
+ * would be a second source of truth for one request.
+ */
+export type EvalCaseState = "idle" | "adding" | "added";
 
 export function FindingCard({
   f,
@@ -32,6 +56,9 @@ export function FindingCard({
   pending,
   repoFullName,
   headSha,
+  onTurnIntoEvalCase,
+  evalCaseState = "idle",
+  evalRefusalCode,
 }: {
   f: FindingRecord;
   focused?: boolean;
@@ -45,6 +72,30 @@ export function FindingCard({
   pending?: boolean;
   repoFullName?: string | null;
   headSha?: string | null;
+  /**
+   * Turn this finding into an eval case for the agent that produced it.
+   *
+   * OPTIONAL, and the control renders only when it is supplied — the request is a
+   * mutation, and a card cannot own one without the query client its parent
+   * provides. Absent, the row is four controls and nothing breaks.
+   *
+   * It is called only on a DECIDED finding: an accepted or dismissed finding is
+   * what carries the expectation the case is scored against, and the server
+   * derives that expectation itself.
+   */
+  onTurnIntoEvalCase?: () => void;
+  /** Where that request stands for THIS card. */
+  evalCaseState?: EvalCaseState;
+  /**
+   * The server's named refusal for this card, straight off `ApiError.code`, or
+   * null/undefined when there is nothing to say.
+   *
+   * A `string` rather than the `EvalRefusalReason` union on purpose: what arrives
+   * over the wire is whatever the server sent, including a code this build has
+   * never heard of, and narrowing that at the prop boundary would be a cast
+   * pretending to be a check. The lookup below handles the unknown case.
+   */
+  evalRefusalCode?: string | null;
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
@@ -78,6 +129,30 @@ export function FindingCard({
   const accepted = !!f.accepted_at;
   const dismissed = !!f.dismissed_at;
   const muted = accepted || dismissed;
+
+  /**
+   * A finding becomes an eval case only once a human has decided it — the
+   * decision IS the expectation (`must_find` for an accepted finding,
+   * `must_not_flag` for a dismissed one), so there is nothing to derive before
+   * one exists.
+   *
+   * The control is still rendered in that state, `aria-disabled`, with the
+   * precondition in its accessible name. Hiding it would leave nothing on screen
+   * to teach the reader that the order is decide-then-add.
+   *
+   * Everything below is derived from props on each render; none of it is state.
+   */
+  const decided = accepted || dismissed;
+  const evalInert = !decided || evalCaseState !== "idle";
+  const evalLabel =
+    evalCaseState === "adding"
+      ? t("finding.turnIntoEvalCaseAdding")
+      : evalCaseState === "added"
+        ? t("finding.turnIntoEvalCaseAdded")
+        : t("finding.turnIntoEvalCase");
+  const evalRefusal = evalRefusalCode
+    ? t(EVAL_REFUSAL_MESSAGE_KEY[evalRefusalCode] ?? EVAL_REFUSAL_FALLBACK_KEY)
+    : null;
 
   return (
     <div ref={rootRef} data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
@@ -143,7 +218,62 @@ export function FindingCard({
             >
               {t("finding.dismiss")}
             </Button>
+            {onTurnIntoEvalCase && (
+              <Button
+                kind="ghost"
+                size="sm"
+                icon="FlaskConical"
+                /* `aria-disabled`, NOT `disabled`: the control stays focusable
+                   and announced so a screen reader reaches the sentence that
+                   names the precondition. The handler is simply absent while it
+                   is inert, which is what makes a click a no-op — there is no
+                   guard to forget inside a callback that was never attached. */
+                aria-disabled={evalInert || undefined}
+                aria-label={decided ? undefined : t("finding.turnIntoEvalCaseDisabled")}
+                style={evalInert ? s.inertAction : undefined}
+                /* Wrapped, not passed straight through: `onClick` would hand the
+                   click event to a callback declared as taking nothing, and the
+                   panel's handler already knows which finding this is. */
+                onClick={evalInert ? undefined : () => onTurnIntoEvalCase()}
+              >
+                {evalLabel}
+              </Button>
+            )}
+            {/* Not built (spec non-goal N3), and rendered anyway: the action row
+                is five controls wide in the design, and a reader who cannot see
+                them has no way to know these exist. Announced as unavailable
+                rather than silently dead — no handler, ever. */}
+            <Button
+              kind="ghost"
+              size="sm"
+              icon="Lightbulb"
+              aria-disabled
+              aria-label={t("finding.learnDisabled")}
+              style={s.inertAction}
+            >
+              {t("finding.learn")}
+            </Button>
+            <Button
+              kind="ghost"
+              size="sm"
+              icon="MessageSquare"
+              aria-disabled
+              aria-label={t("finding.replyToAuthorDisabled")}
+              style={s.inertAction}
+            >
+              {t("finding.replyToAuthor")}
+            </Button>
           </div>
+
+          {/* The refusal sits BELOW the actions and disables none of them: it is
+              about the eval case, not about the finding, so accepting or
+              dismissing stays available while it is on screen. `role="alert"`
+              because it appears in response to a press the reader just made. */}
+          {evalRefusal && (
+            <div role="alert" style={s.evalRefusal}>
+              {evalRefusal}
+            </div>
+          )}
         </div>
       )}
     </div>

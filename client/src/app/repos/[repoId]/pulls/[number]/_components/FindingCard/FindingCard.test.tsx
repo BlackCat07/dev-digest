@@ -165,3 +165,164 @@ describe("FindingCard — landing on a targeted card", () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * L06 — the five-control action row and `Turn into eval case`.
+ *
+ * The labels are read off the imported catalogue rather than retyped: the
+ * disabled control's accessible name IS the requirement (it has to state the
+ * precondition), and a literal here would let a copy edit drift away from the
+ * sentence the reader actually gets.
+ *
+ * `onTurnIntoEvalCase` is passed directly, which is the point of it being a
+ * prop: this card owns no mutation, so none of this needs a query client.
+ */
+describe("FindingCard — the eval-case action", () => {
+  const DECIDED: FindingRecord = { ...FINDING, accepted_at: "2026-08-20T10:00:00.000Z" };
+  const c = messages.finding;
+
+  /**
+   * The five actions, by accessible name, and NOT by counting buttons: with no
+   * `repoFullName`/`headSha` to build a GitHub URL from, `MonoLink` renders the
+   * `file:line` control as a sixth `<button>`, so a raw count asserts the
+   * primitive's internals rather than what the reviewer can do here.
+   */
+  const actionNames = (evalName: string) => [
+    c.accept,
+    c.dismiss,
+    evalName,
+    c.learnDisabled,
+    c.replyToAuthorDisabled,
+  ];
+
+  it("offers five actions on a decided finding, and turns this one into a case", () => {
+    const onTurnIntoEvalCase = vi.fn();
+    const onAction = vi.fn();
+    renderWithIntl(
+      <FindingCard
+        f={DECIDED}
+        defaultExpanded
+        onAction={onAction}
+        onTurnIntoEvalCase={onTurnIntoEvalCase}
+      />,
+    );
+
+    // Accept, Dismiss, Turn into eval case, Learn, Reply to author.
+    for (const name of actionNames(c.turnIntoEvalCase)) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+
+    const turn = screen.getByRole("button", { name: c.turnIntoEvalCase });
+    expect(turn).not.toHaveAttribute("aria-disabled");
+    fireEvent.click(turn);
+    // No argument: the finding id belongs to the list that owns the mutation,
+    // and the expectation type is derived server-side from the decision.
+    expect(onTurnIntoEvalCase).toHaveBeenCalledTimes(1);
+    expect(onTurnIntoEvalCase).toHaveBeenCalledWith();
+
+    // Neither unbuilt control is wired, and both say so out loud rather than
+    // being merely dim.
+    for (const name of [c.learnDisabled, c.replyToAuthorDisabled]) {
+      const inert = screen.getByRole("button", { name });
+      expect(inert).toHaveAttribute("aria-disabled", "true");
+      fireEvent.click(inert);
+    }
+    expect(onAction).not.toHaveBeenCalled();
+    expect(onTurnIntoEvalCase).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the control present on an undecided finding, stating the precondition", () => {
+    const onTurnIntoEvalCase = vi.fn();
+    renderWithIntl(
+      <FindingCard f={FINDING} defaultExpanded onTurnIntoEvalCase={onTurnIntoEvalCase} />,
+    );
+
+    // PRESENT, not hidden: the control is the only thing on screen that teaches
+    // the reader the decision comes first — which is why the precondition has to
+    // be in its accessible name and not only in a tooltip.
+    const turn = screen.getByRole("button", { name: c.turnIntoEvalCaseDisabled });
+    expect(turn).toHaveAttribute("aria-disabled", "true");
+    // Still five actions, so the row does not reflow on the first decision.
+    for (const name of actionNames(c.turnIntoEvalCaseDisabled)) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+
+    fireEvent.click(turn);
+    expect(onTurnIntoEvalCase).not.toHaveBeenCalled();
+  });
+
+  it("renders no eval control at all when no parent owns the mutation", () => {
+    renderWithIntl(<FindingCard f={DECIDED} defaultExpanded onAction={() => {}} />);
+    expect(screen.queryByRole("button", { name: c.turnIntoEvalCase })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: c.turnIntoEvalCaseDisabled }),
+    ).not.toBeInTheDocument();
+    // The other four are untouched, so a caller that never heard of eval cases
+    // renders exactly what it rendered before.
+    for (const name of [c.accept, c.dismiss, c.learnDisabled, c.replyToAuthorDisabled]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+  });
+
+  it.each([
+    ["adding", "adding" as const, c.turnIntoEvalCaseAdding],
+    ["added", "added" as const, c.turnIntoEvalCaseAdded],
+  ])("says so while the request is %s, and stops taking presses", (_l, state, label) => {
+    const onTurnIntoEvalCase = vi.fn();
+    renderWithIntl(
+      <FindingCard
+        f={DECIDED}
+        defaultExpanded
+        evalCaseState={state}
+        onTurnIntoEvalCase={onTurnIntoEvalCase}
+      />,
+    );
+    const turn = screen.getByRole("button", { name: label });
+    expect(turn).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(turn);
+    expect(onTurnIntoEvalCase).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The refusal is about the EVAL CASE, not about the finding. Accept and
+   * Dismiss keeping their handlers while it is on screen is the load-bearing
+   * half — a reviewer who cannot add a case can still decide the finding.
+   */
+  it("renders the named refusal inline, leaving accept and dismiss operable", () => {
+    const onAction = vi.fn();
+    renderWithIntl(
+      <FindingCard
+        f={DECIDED}
+        defaultExpanded
+        onAction={onAction}
+        onTurnIntoEvalCase={() => {}}
+        evalRefusalCode="case_limit_reached"
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(c.evalRefusal.case_limit_reached);
+
+    fireEvent.click(screen.getByText(c.accept));
+    expect(onAction).toHaveBeenCalledWith("accept");
+    fireEvent.click(screen.getByText(c.dismiss));
+    expect(onAction).toHaveBeenCalledWith("dismiss");
+  });
+
+  it("falls back to the generic sentence for a code this build does not know", () => {
+    // A server newer than this bundle, or a network failure with no code at all.
+    renderWithIntl(
+      <FindingCard
+        f={DECIDED}
+        defaultExpanded
+        onTurnIntoEvalCase={() => {}}
+        evalRefusalCode="something_new_the_server_added"
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(c.evalRefusalUnknown);
+  });
+
+  it("shows nothing where the refusal would be when there is none", () => {
+    renderWithIntl(<FindingCard f={DECIDED} defaultExpanded onTurnIntoEvalCase={() => {}} />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});

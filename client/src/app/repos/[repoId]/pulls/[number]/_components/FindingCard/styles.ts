@@ -105,6 +105,34 @@ export const s = {
     marginTop: 14,
     flexWrap: "wrap",
   } satisfies CSSProperties,
+  /**
+   * The look of an `aria-disabled` control.
+   *
+   * `Button` only dims itself for the native `disabled` attribute, and these
+   * controls deliberately do not carry it: an `aria-disabled` button stays
+   * focusable and announced, which is the whole reason `Turn into eval case` is
+   * RENDERED on an undecided finding rather than hidden — the control is what
+   * teaches the reader that the decision comes first. `Button` spreads `...style`
+   * last over its own defaults, so this wins with no change to the primitive.
+   */
+  inertAction: { opacity: 0.55, cursor: "not-allowed" } satisfies CSSProperties,
+  /**
+   * The eval-case refusal, inline on the card that produced it.
+   *
+   * Warning rather than critical, and deliberately BELOW the action row: the
+   * finding itself is unaffected — only the eval case was refused — so `Accept`
+   * and `Dismiss` stay operable right above this text.
+   */
+  evalRefusal: {
+    marginTop: 10,
+    padding: "8px 10px",
+    borderRadius: 6,
+    border: "1px solid var(--warn)",
+    background: "var(--warn-bg)",
+    color: "var(--warn)",
+    fontSize: 12.5,
+    lineHeight: 1.5,
+  } satisfies CSSProperties,
   composer: {
     marginTop: 12,
     display: "flex",
