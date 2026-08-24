@@ -268,6 +268,8 @@ export function toEvalAgentCase(
     expectation: readExpectation(row.expectation),
     expected_anchors: readExpectedAnchors(row.expectedOutput),
     source_finding_id: row.sourceFindingId,
+    source_severity: row.sourceSeverity,
+    source_category: row.sourceCategory,
     edited: row.edited,
     last_execution: execution ? toLastExecution(execution) : null,
   };

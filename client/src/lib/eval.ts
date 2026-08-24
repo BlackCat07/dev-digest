@@ -117,23 +117,26 @@ export interface EvalExpectationBadge {
  * Expectation → its badge, keyed by the contract enum so a third expectation
  * cannot be added to the contract without this map failing to compile.
  *
- * `must_find` reads as information (`--info`) and `must_not_flag` as a guard
- * rail (`--warn`): the negative case is the one a reader has to notice, because
- * every count on its row means the opposite of the row above it. Neither is
- * `--crit` — a case is an assertion, not a problem. The icon is a second,
- * non-colour channel for the same distinction, and the label carries the third:
- * a status this UI shows never rests on colour alone.
+ * `must_find` is the product's accent blue and `must_not_flag` a muted grey, and
+ * the asymmetry is the point: the positive case is the assertion a reader scans
+ * FOR, so it is the one that carries a hue, while the negative case is a quiet
+ * guard rail whose row is read for the absence of a number rather than for the
+ * badge. `must_not_flag` was `--warn` until 2026-08-24 and read as a caution
+ * about the case itself, which it is not — a dismissed finding is a normal,
+ * healthy expectation. Neither is `--crit`: a case is an assertion, not a
+ * problem. The icon is a second non-colour channel for the same distinction and
+ * the label a third, so nothing here rests on colour alone.
  */
 export const EVAL_EXPECTATION_BADGE: Record<EvalExpectation, EvalExpectationBadge> = {
   must_find: {
     labelKey: "expectation.mustFind",
-    color: "var(--info)",
-    bg: "var(--bg-hover)",
+    color: "var(--accent-text)",
+    bg: "var(--accent-bg)",
     icon: "Target",
   },
   must_not_flag: {
     labelKey: "expectation.mustNotFlag",
-    color: "var(--warn)",
+    color: "var(--text-muted)",
     bg: "var(--bg-hover)",
     icon: "Slash",
   },

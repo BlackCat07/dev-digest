@@ -128,6 +128,8 @@ function sourceFinding(over: Partial<EvalSourceFinding> = {}): EvalSourceFinding
     endLine: 2,
     acceptedAt: DECIDED_AT,
     dismissedAt: null,
+    severity: 'critical',
+    category: 'security',
     ...over,
   };
 }
@@ -172,6 +174,8 @@ function evalCase(over: Partial<EvalAgentCase> = {}): EvalAgentCase {
     expectation: 'must_find',
     expected_anchors: [{ file: 'src/a.ts', low_line: 2, high_line: 8 }],
     source_finding_id: 'finding-1',
+    source_severity: 'CRITICAL',
+    source_category: 'security',
     edited: false,
     last_execution: null,
     ...over,
@@ -256,6 +260,11 @@ describe('createCaseFromFinding', () => {
     expect(inserted?.ownerKind).toBe('agent');
     expect(inserted?.ownerId).toBe(AGENT);
     expect(inserted?.sourceFindingId).toBe('finding-1');
+    // Snapshotted from the finding, because `source_finding_id` carries no
+    // foreign key: this insert is the last moment the two values are reachable,
+    // so a case whose review is deleted later still renders its own chip.
+    expect(inserted?.sourceSeverity).toBe('critical');
+    expect(inserted?.sourceCategory).toBe('security');
     // 8→2 arrived inverted; the stored anchor is low-first, and the name reads
     // the same way round.
     expect(inserted?.expectedAnchors).toEqual([

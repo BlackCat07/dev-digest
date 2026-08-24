@@ -79,7 +79,7 @@ export const s = {
   /** The three cards, on one row, each taking an equal share (`MetricCard` is `flex: 1`). */
   cards: { display: "flex", gap: 14, flexWrap: "wrap" } satisfies CSSProperties,
 
-  /** One card plus the change line under it. */
+  /** One card. */
   card: {
     flex: 1,
     minWidth: 190,
@@ -88,22 +88,29 @@ export const s = {
   } satisfies CSSProperties,
 
   /**
-   * A card's signed change, rendered BESIDE the card rather than through
+   * A card's signed change, rendered INSIDE the card's value and never through
    * `MetricCard`'s own `delta` prop.
    *
-   * The primitive draws `delta` as `Math.abs(delta).toFixed(2)` with an arrow and
-   * NO unit — the `↓ 0.02` convention this feature must not ship, because a
-   * change in a metric displayed as `82%` reads as "0.02 of what?". Giving the
-   * vendored primitive a unit prop is not an option, so `delta` stays unset and
-   * the change is rendered here from the single formatter in `src/lib/eval.ts`.
+   * Two separate decisions, and both are load-bearing.
+   *
+   * *Not `delta`*: the primitive draws it as `Math.abs(delta).toFixed(2)` with an
+   * arrow and NO unit — the `↓ 0.02` convention this feature must not ship,
+   * because a change in a metric displayed as `82%` reads as "0.02 of what?".
+   * Giving a vendored primitive a unit prop is not an option, so the text comes
+   * from the single formatter in `src/lib/eval.ts` and reads `+4pt`.
+   *
+   * *Inside the value*: `MetricCard.value` is typed `React.ReactNode`, which is
+   * the one seam that puts the change on the number's own baseline instead of on
+   * a line below it. It therefore renders inside that primitive's
+   * `span.tnum` at `fontSize: 32, fontWeight: 700`, and every property below that
+   * looks redundant is in fact overriding an inherited one.
    */
   cardChange: (color: string): CSSProperties => ({
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 8,
+    marginLeft: 8,
     fontSize: 12.5,
     fontWeight: 600,
+    letterSpacing: 0,
+    whiteSpace: "nowrap",
     color,
   }),
 

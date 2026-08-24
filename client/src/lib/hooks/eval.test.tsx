@@ -49,6 +49,8 @@ const CASE: EvalAgentCase = {
   expectation: "must_find",
   expected_anchors: [{ file: "src/a.ts", low_line: 72, high_line: 75 }],
   source_finding_id: "finding-1",
+  source_severity: "WARNING",
+  source_category: "perf",
   edited: false,
   last_execution: null,
 };

@@ -105,7 +105,16 @@ function PeriodFilter({
   );
 }
 
-/** One metric card: the value, its sparkline, and the signed change beneath it. */
+/**
+ * One metric card: the value with its signed change on the same baseline, and the
+ * sparkline the primitive draws from the trend.
+ *
+ * The change goes THROUGH `value` as a node rather than into `delta`, and
+ * `styles.ts` explains why on `cardChange` — in short, `delta` renders an
+ * unsigned `0.02` with no unit, and this screen's whole job is to say a prompt
+ * edit moved recall by four points. The sparkline stays: this is the analytical
+ * screen, and the agent editor's compact tab is the one that drops it.
+ */
 function MetricCardWithChange({ figures }: { figures: MetricCardFigures }) {
   const t = useTranslations("eval");
   const change = formatMetricChange(figures.change);
@@ -114,11 +123,17 @@ function MetricCardWithChange({ figures }: { figures: MetricCardFigures }) {
     <div style={s.card}>
       <MetricCard
         label={t(METRIC_CARD_LABEL_KEY[figures.key])}
-        value={formatMetricPercent(figures.value)}
+        value={
+          <>
+            {formatMetricPercent(figures.value)}
+            <span style={s.cardChange(CHANGE_TONE_COLOR[tone])}>
+              {change ?? t("notMeasured")}
+            </span>
+          </>
+        }
         color={METRIC_COLOR[figures.key]}
         trend={figures.trend ?? undefined}
       />
-      <span style={s.cardChange(CHANGE_TONE_COLOR[tone])}>{change ?? t("notMeasured")}</span>
     </div>
   );
 }

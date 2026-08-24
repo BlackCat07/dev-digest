@@ -122,6 +122,14 @@ export const EvalAgentCase = EvalCase.extend({
   expected_anchors: z.array(EvalAnchor),
   source_finding_id: z.string().nullable(),
   edited: z.boolean(),
+  /* The derived-from finding's severity and category, snapshotted at creation
+     and null for a case created before they were stored — or for one whose
+     source finding never had them. Strings rather than the `Severity` /
+     `Category` enums: `findings.severity` and `findings.category` are plain
+     text columns, and a narrower type here would be the one link in the chain
+     that rejects a value the findings table holds. */
+  source_severity: z.string().nullable(),
+  source_category: z.string().nullable(),
   last_execution: z
     .object({
       outcome: EvalCaseOutcome,

@@ -253,6 +253,8 @@ const storedCase: StoredEvalCase = {
   notes: null,
   expectation: 'must_find',
   sourceFindingId: 'finding-1',
+  sourceSeverity: 'warning',
+  sourceCategory: 'bug',
   edited: false,
   createdAt: new Date('2026-08-01T00:00:00.000Z'),
 };
@@ -266,6 +268,9 @@ describe('toEvalAgentCase', () => {
       owner_id: 'agent-1',
       expectation: 'must_find',
       source_finding_id: 'finding-1',
+      // Mapped straight through, so the row's snapshot is what the chip renders.
+      source_severity: 'warning',
+      source_category: 'bug',
       edited: false,
     });
     expect(dto.expected_anchors).toEqual([{ file: 'src/a.ts', low_line: 2, high_line: 8 }]);

@@ -1,7 +1,8 @@
 /* Unit-private pure helpers for the agent editor's Evals tab.
 
    Everything here is a function of its arguments — no React, no fetch, no i18n
-   (the one runtime import is `ApiError`, for an `instanceof` check).
+   (the runtime imports are `ApiError`, for an `instanceof` check, and the
+   vendored `SEV` / `CAT` lookup tables, which are plain objects).
    It exists so the component reads as a composition of parts rather than as
    arithmetic interleaved with markup, and so the two decisions that are easy to
    get quietly wrong (WHICH batch a change is measured against, and WHICH of the
@@ -10,6 +11,7 @@
    None of it is promoted: a second consumer would move it to `src/lib/eval.ts`,
    where the delta formatter and the metric order already live. There is no
    second consumer today. */
+import { CAT, SEV, type Category, type Severity } from "@devdigest/ui";
 import { ApiError } from "@/lib/api";
 import { EVAL_METRIC_KEYS, type EvalMetricKey } from "@/lib/eval";
 import type {
@@ -23,7 +25,6 @@ import type { RunEvent } from "@devdigest/shared";
 import {
   BATCH_REFUSAL_FALLBACK_KEY,
   BATCH_REFUSAL_MESSAGE_KEY,
-  MIN_SPARKLINE_POINTS,
   type ChangeTone,
 } from "./constants";
 
@@ -76,8 +77,6 @@ export interface MetricTileFigures {
   value: number | null;
   /** Signed change in the metric against the previous batch, or null. */
   change: number | null;
-  /** Chronological series for the sparkline, or null when there is no trend to draw. */
-  trend: number[] | null;
 }
 
 /**
@@ -88,21 +87,19 @@ export interface MetricTileFigures {
  * also reads and a tile row that mixed sources could show a percentage from one
  * batch beside a ratio from another.
  *
- * A series is null rather than short: a sparkline over one point divides by zero
- * inside the primitive and draws `NaN`, and one batch is not a trend.
+ * No series is built: these tiles draw no sparkline. A trend needs an axis to be
+ * read against, which this compact row has no room for, so it lives on the
+ * agent's own eval page as a real chart instead. `previousTrendPoint` is still
+ * needed — the CHANGE is one point of history, which a number can carry.
  */
 export function metricTiles(row: EvalDashboardRow | null | undefined): MetricTileFigures[] {
   const previous = previousTrendPoint(row);
   return EVAL_METRIC_KEYS.map((key) => {
     const value = row?.last_batch?.[key] ?? null;
-    const series = (row?.trend ?? [])
-      .map((point) => point[key])
-      .filter((v): v is number => v != null);
     return {
       key,
       value,
       change: metricChange(value, previous?.[key] ?? null),
-      trend: series.length >= MIN_SPARKLINE_POINTS ? series : null,
     };
   });
 }
@@ -221,4 +218,32 @@ export function batchRefusalKey(error: unknown): string | null {
   if (!error) return null;
   const code = error instanceof ApiError ? error.code : undefined;
   return (code ? BATCH_REFUSAL_MESSAGE_KEY[code] : undefined) ?? BATCH_REFUSAL_FALLBACK_KEY;
+}
+
+// ===========================================================================
+// The source finding's severity and category
+// ===========================================================================
+
+/**
+ * Narrow a stored severity to one the vendored badge can render, or null.
+ *
+ * The guard is not defensive padding, it is required. `eval_cases.source_severity`
+ * is a plain `text` column mirroring `findings.severity`, so its value is a
+ * string as far as any type here knows — and `SeverityBadge` looks the value up
+ * in `SEV` and immediately reads `.icon` off the result, so an unrecognised
+ * string is a THROWN error inside a list row, not a missing chip. `CategoryTag`
+ * is kinder (it returns null on a miss) and is guarded the same way anyway, so
+ * one rule covers both and neither depends on the other's manners.
+ *
+ * The membership test is against the vendored tables themselves rather than a
+ * local list of names: a fourth severity added there must not need a second edit
+ * here to become renderable.
+ */
+export function severityChip(value: string | null | undefined): Severity | null {
+  return value != null && value in SEV ? (value as Severity) : null;
+}
+
+/** The same guard for the category half. See {@link severityChip}. */
+export function categoryChip(value: string | null | undefined): Category | null {
+  return value != null && value in CAT ? (value as Category) : null;
 }

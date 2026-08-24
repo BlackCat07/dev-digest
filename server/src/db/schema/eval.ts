@@ -65,6 +65,29 @@ export const evalCases = pgTable(
      * non-volatile default, so the ALTER does not rewrite the table.
      */
     edited: boolean('edited').notNull().default(false),
+    /**
+     * The severity and category of the finding this case was derived from — a
+     * SNAPSHOT taken at creation, not a join.
+     *
+     * A join is not available, and that follows from the decision above:
+     * `source_finding_id` deliberately carries no foreign key so a case outlives
+     * the finding that produced it, so a case whose review has been deleted must
+     * still render its own chip rather than blank out. The two values are
+     * therefore copied once and never re-read — exactly as `eval_batches`
+     * snapshots the prompt and the model, and for the same reason.
+     *
+     * NULLABLE, like every other column this lesson adds: cases created before
+     * this change carry no snapshot, and the read path presents that as "no
+     * chip" rather than inventing a severity. `db/backfill-eval-case-source.ts`
+     * fills them in for the rows whose finding still exists.
+     *
+     * Plain `text`, with no enum, on purpose. `findings.severity` and
+     * `findings.category` are themselves plain `text` (`schema/reviews.ts`), so a
+     * narrower type here would be the one link in the chain that can reject a
+     * value the findings table happily holds.
+     */
+    sourceSeverity: text('source_severity'),
+    sourceCategory: text('source_category'),
     createdAt: now(),
   },
   (t) => ({

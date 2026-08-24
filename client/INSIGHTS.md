@@ -544,6 +544,20 @@ Dependency and tooling quirks.
   `src/app/agents/[id]/_components/AgentEditor/_components/ContextTab/ContextTab.test.tsx`
   ("attaches a document and moves it one position up without a pointer").
 
+- **2026-08-24** — **`SeverityBadge`'s `compact` prop does not merely tighten the badge — it
+  renders the icon ALONE, dropping the label (`{compact ? null : s.label}`), which turns the
+  one primitive whose own docstring promises "always icon + label (WCAG AA: never color
+  alone)" into exactly colour-and-glyph.** The name reads like density, the padding really
+  does drop from `3px 9px` to `2px 6px`, and neither the types nor the render warn — the
+  badge just appears with no word in it. It was caught only by a test asserting the label
+  text, with a comment claiming "both primitives carry their own label" sitting directly
+  above the `compact` that had removed one. Pass `compact` only where the severity is ALSO
+  spelled out in the same row by something else; where the chip is the only statement of
+  severity, omit it and scale the badge from a wrapper instead — it takes no `style`
+  (2026-08-20, Codebase Patterns). Evidence: `src/vendor/ui/primitives/Badge.tsx`
+  (`SeverityBadge`),
+  `src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/EvalsTab.tsx` (`CaseRow`).
+
 ## Recurring Errors & Fixes
 
 An error string, its real cause, and the fix.

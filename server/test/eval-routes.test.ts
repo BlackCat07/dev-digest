@@ -76,6 +76,8 @@ const aCase = (id: string): EvalAgentCase => ({
   expectation: 'must_find',
   expected_anchors: [],
   source_finding_id: null,
+  source_severity: null,
+  source_category: null,
   edited: false,
   last_execution: null,
 });

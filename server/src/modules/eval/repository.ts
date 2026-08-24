@@ -271,6 +271,8 @@ export class EvalRepository implements EvalStore {
         expectedOutput: withExpectedAnchors(values.expectedOutput, values.expectedAnchors),
         expectation: values.expectation,
         sourceFindingId: values.sourceFindingId,
+        sourceSeverity: values.sourceSeverity,
+        sourceCategory: values.sourceCategory,
         edited: false,
       })
       .returning();

@@ -166,6 +166,8 @@ function evalCase(id: string, over: Partial<EvalAgentCase> = {}): EvalAgentCase 
     expectation: 'must_find',
     expected_anchors: [{ file, low_line: 2, high_line: 8 }],
     source_finding_id: null,
+    source_severity: null,
+    source_category: null,
     edited: false,
     last_execution: null,
     ...over,

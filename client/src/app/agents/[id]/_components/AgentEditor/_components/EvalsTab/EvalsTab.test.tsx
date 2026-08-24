@@ -104,6 +104,9 @@ const evalCase = (over: Partial<EvalAgentCase> & { id: string; name: string }): 
   expectation: "must_find",
   expected_anchors: [{ file: "src/a.ts", low_line: 2, high_line: 8 }],
   source_finding_id: "f1",
+  // Snapshotted from the source finding; the row renders them as its chip.
+  source_severity: "CRITICAL",
+  source_category: "security",
   edited: false,
   last_execution: null,
   ...over,
@@ -331,6 +334,12 @@ describe("AgentEditor — Evals tab", () => {
       screen.getByText(plural(evalMessages.evalsTab.casesCount, 4)),
     ).toBeInTheDocument();
 
+    // The pass chip beside the case list reads THE SAME pair as the tile, so the
+    // two cannot disagree — it is not a count over the set's four rows.
+    expect(
+      screen.getByText(msg(evalMessages.evalsTab.passingBadge, { ratio: "17/20" })),
+    ).toBeInTheDocument();
+
     // AC-56 is the one this whole file exists for: every change carries the
     // unit its value is displayed in. `82%` moved by four PERCENTAGE POINTS.
     expect(screen.getByText("+4pt")).toBeInTheDocument();
@@ -343,8 +352,12 @@ describe("AgentEditor — Evals tab", () => {
 
     // AC-57 / AC-58, both read from the catalogue rather than retyped here.
     expect(screen.getByText(evalMessages.evalsTab.mechanicalScoring)).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: evalMessages.evalsTab.dashboardLink });
-    expect(link).toHaveAttribute("href", "/eval");
+    // Exactly ONE link with this name. The dashboard link used to sit beside the
+    // scoring statement as well as in the section label; two of them makes this
+    // very query throw, so the count is asserted rather than assumed.
+    const links = screen.getAllByRole("link", { name: evalMessages.evalsTab.dashboardLink });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "/eval");
   });
 
   it("states each row's outcome in words, names a not-run reason, and marks a negative case", async () => {
@@ -354,8 +367,19 @@ describe("AgentEditor — Evals tab", () => {
 
     // A passing row and a failing row are distinguishable with colour removed:
     // each carries the WORD, inside its own row.
-    expect(within(rowFor("alpha-passing")).getByText(evalMessages.evalsTab.passed)).toBeInTheDocument();
-    expect(within(rowFor("beta-failing")).getByText(evalMessages.evalsTab.failed)).toBeInTheDocument();
+    // `passed` / `failed` are stated ONCE, by the leading mark — a green tick
+    // with the word printed beside it was the same claim twice. The mark is not
+    // colour-only: the word is its accessible name, so it is asserted by NAME and
+    // must NOT appear as visible text.
+    expect(
+      within(rowFor("alpha-passing")).getByRole("img", { name: evalMessages.evalsTab.passed }),
+    ).toBeInTheDocument();
+    expect(
+      within(rowFor("alpha-passing")).queryByText(evalMessages.evalsTab.passed),
+    ).not.toBeInTheDocument();
+    expect(
+      within(rowFor("beta-failing")).getByRole("img", { name: evalMessages.evalsTab.failed }),
+    ).toBeInTheDocument();
 
     // `not run` says so AND names its reason — and is not the failure word.
     const timeout = rowFor("gamma-timeout");
@@ -367,17 +391,26 @@ describe("AgentEditor — Evals tab", () => {
       ),
     ).toBeInTheDocument();
     expect(within(timeout).queryByText(evalMessages.evalsTab.failed)).not.toBeInTheDocument();
+    expect(
+      within(timeout).queryByRole("img", { name: evalMessages.evalsTab.failed }),
+    ).not.toBeInTheDocument();
 
     // Never executed is a third state again, distinct from `not run`.
     const negative = rowFor("delta-negative");
     expect(within(negative).getByText(evalMessages.evalsTab.neverRun)).toBeInTheDocument();
     expect(within(negative).queryByText(evalMessages.evalsTab.notRun)).not.toBeInTheDocument();
 
-    // The expectation badge, and `assert empty` where a severity and category
-    // tag would sit on a findings row.
+    // The expectation badge, and `assert empty` beside the counts on line two.
     expect(within(negative).getByText(evalMessages.expectation.mustNotFlag)).toBeInTheDocument();
     expect(within(negative).getByText(evalMessages.expectation.assertEmpty)).toBeInTheDocument();
     expect(screen.getAllByText(evalMessages.expectation.mustFind)).toHaveLength(3);
+
+    // The source finding's severity and category, snapshotted onto the case and
+    // rendered by the vendored primitives — CRITICAL carries its own word, so
+    // the chip is never colour alone. `SEV` is keyed on the uppercase value and
+    // its label is title case, which is why this reads `Critical`.
+    expect(within(negative).getByText("Critical")).toBeInTheDocument();
+    expect(within(negative).getByText("security")).toBeInTheDocument();
 
     // Expected and actual counts, per row.
     expect(

@@ -399,6 +399,11 @@ export class EvalService implements Evals {
       expectation,
       expectedAnchors: [anchor],
       sourceFindingId: finding.id,
+      // Snapshotted, not joined: `source_finding_id` carries no foreign key by
+      // design, so this call is the only moment what the finding WAS is still
+      // reachable. A case whose review is deleted later still renders its chip.
+      sourceSeverity: finding.severity,
+      sourceCategory: finding.category,
     });
   }
 

@@ -96,6 +96,13 @@ export interface EvalSourceFinding {
   endLine: number;
   acceptedAt: Date | null;
   dismissedAt: Date | null;
+  /**
+   * What the finding was, as the case's own chip will render it. Copied into the
+   * case at creation because `source_finding_id` carries no foreign key, so this
+   * read is the only moment the two values are reachable.
+   */
+  severity: string;
+  category: string;
 }
 
 /**
@@ -278,6 +285,14 @@ export interface StoredEvalCase {
   expectation: string | null;
   sourceFindingId: string | null;
   edited: boolean;
+  /**
+   * The source finding's severity and category, snapshotted at creation. Both
+   * nullable and both mapped straight through: a case created before the
+   * snapshot existed has no chip to render, which is a different statement from
+   * "this case is a low-severity one".
+   */
+  sourceSeverity: string | null;
+  sourceCategory: string | null;
   createdAt: Date;
 }
 
@@ -362,6 +377,9 @@ export interface EvalCaseInsert {
   expectation: EvalExpectation;
   expectedAnchors: readonly EvalAnchor[];
   sourceFindingId: string | null;
+  /** Snapshotted from the source finding; null for a case with no finding behind it. */
+  sourceSeverity: string | null;
+  sourceCategory: string | null;
 }
 
 /** A hand-edited case, saved as submitted. `edited` is set by the store, not passed. */

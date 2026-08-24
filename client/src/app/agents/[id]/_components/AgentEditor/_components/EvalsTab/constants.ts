@@ -31,27 +31,21 @@ export const METRIC_TILE_LABEL_KEY: Record<EvalMetricKey, string> = {
 export const CASES_TILE_LABEL_KEY = "dashboard.metrics.casesPassed";
 
 /**
- * Metric → the colour its sparkline is drawn in.
+ * Metric → the colour its VALUE is drawn in.
  *
  * The same three hues the dashboard's trend legend uses, so one metric is one
- * colour across both screens. The colour is decoration only: every tile carries
- * its caption and its signed change in words.
+ * colour across both screens. Colour is decoration only: every tile carries its
+ * caption above the number and its signed change beside it, both in words.
+ *
+ * This used to be the colour of the tile's sparkline. The tiles draw no
+ * sparkline any more — the trend lives on the agent's own eval page, which has
+ * room for a real chart — so the same three values now tint the figure itself.
  */
 export const METRIC_TILE_COLOR: Record<EvalMetricKey, string> = {
   recall: "var(--accent)",
   precision: "var(--ok)",
   citation_accuracy: "var(--info)",
 };
-
-/**
- * Points a sparkline needs before it is drawn.
- *
- * Two, and it is not cosmetic: `Sparkline` maps each point to `i / (n - 1)`, so
- * a single point divides by zero and renders a path of `NaN` coordinates — an
- * invisible failure rather than an error. One completed batch is not a trend
- * anyway.
- */
-export const MIN_SPARKLINE_POINTS = 2;
 
 /** How one case's last outcome renders. Four kinds, and each carries a WORD. */
 export type EvalRowStatusKind = "never" | "passed" | "failed" | "not_run";
