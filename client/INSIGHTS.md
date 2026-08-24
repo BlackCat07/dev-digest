@@ -88,12 +88,61 @@ Approaches and solutions that worked and should be reused.
   `../learning-platform/frontend/src/test/tokens.test.ts` (the sibling implementation),
   `.claude/skills/product-ui-language/references/tokens.md`.
 
+- **2026-08-19** — **A `vi.mock` factory can read a MUTABLE module-level variable, which is what
+  lets one test file cover several vintages of a persisted record.** `RunTraceDrawer.test.tsx`
+  mocked `useRunTrace` with a single frozen `const TRACE`, so a second trace shape was
+  untestable in that file — and the shapes matter here, because a trace is read back by a cast
+  rather than a parse, so an old one arrives with keys **absent**. Declaring `let current = …`
+  and having the factory return `current`, then resetting it in `afterEach`, covers the current
+  shape, a populated one and a key-deleted legacy one in the same file. It works because the
+  factory returns closures evaluated at render time, after the module body has run — the usual
+  "cannot reference a variable in `vi.mock`" hoisting complaint applies to the *factory's own*
+  initialisation, not to a value it reads later. Evidence:
+  `_components/RunTraceDrawer/RunTraceDrawer.test.tsx` (`current`, `LEGACY_TRACE`).
+
+- **2026-08-20** — **A whole-ROUTE flow test can stub just `fetch` and `next/navigation` and keep
+  every hook real — and mocking `@/lib/hooks` instead does not work here.** Extends the AppShell
+  entry below from "the shell mounts" to "the shell, the header and two tabs mount and navigate":
+  make the `fetch` stub a URL router with an **empty-list default** and the real query hooks do the
+  rest, which is what lets a test drive a card row → `?tab=diff&file=…` → the file expanded in the
+  diff tab as one flow. The reason the obvious alternative fails is worth knowing before trying it:
+  `src/lib/repo-context.tsx` and `src/components/app-shell/hooks/useShellContext.ts` read the same
+  barrel (`./hooks` and `@/lib/hooks` resolve to one file), so a module mock would have to
+  re-provide the shell's own hooks too. Two traps it costs. A path rendered by a **prop-derived**
+  notice resolves during the skeleton, before the grouping query settles, so asserting the notice
+  and the diff together needs `findByText` and a wait on a file — otherwise the test passes on a
+  page with no diff on it at all. And the repo name and the PR number each appear **twice** in a
+  real shell (sidebar switcher + breadcrumb), so `getByText` on either throws "found multiple
+  elements" — which is itself the evidence the shell is real rather than faked. Evidence:
+  `src/app/repos/[repoId]/pulls/[number]/_components/PrDetailView/PrDetailView.test.tsx`.
+
+- **2026-08-19** — **`AppShell` mounts cleanly in jsdom with only `vi.mock("next/navigation")`,
+  a `QueryClient` and the `shell` namespace** — `useTheme` and `useActiveRepo` both have working
+  default contexts and `next/link` needs no router provider. That is worth knowing because it
+  makes "the rest of the screen is still usable" assertable against the **real** sidebar and
+  breadcrumb instead of a faked shell: an inline-error state can be checked for the thing it
+  actually promises, that navigation still works, rather than only for the error text. No
+  existing `*View` test did this before. Evidence:
+  `src/app/repos/[repoId]/context/_components/ContextView/ContextView.test.tsx` (`tree`).
+
 ## What Doesn't Work
 
 Dead ends and antipatterns, and why they fail. The most-skipped section and the most
 valuable one — the code does not record what was tried and abandoned.
 
 <!-- append below -->
+
+- **2026-08-20** — **A `@@` hunk header does not decide which line numbers exist — the body lines
+  do — so a target-line fixture written from the header silently finds no anchor.** A patch whose
+  header claims a long range but whose body carries one context line and one addition renders
+  head-side rows 10 and 11 only; a `targetLine` of 12 then makes
+  `document.getElementById(lineId(path, line))` return `null`, the scroll never happens, and there
+  is no other symptom — no throw, no warning, and the file still renders. Count the **body** lines
+  when writing a fixture that a test will target, and assert the anchor exists before asserting
+  anything about the scroll. Related: the `scrollIntoView` receiver entry in Recurring Errors,
+  which is how you tell "scrolled to the wrong row" from "scrolled to nothing". Evidence:
+  `_components/SmartDiffViewer/helpers.ts` (`lineId`, `parsePatch`),
+  `_components/SmartDiffViewer/SmartDiffViewer.test.tsx`.
 
 - **2026-08-12** — **A "reset the cursor when the filters change" effect also runs on MOUNT,
   so it silently destroys any lazily-initialised value of the state it resets.**
@@ -256,11 +305,58 @@ valuable one — the code does not record what was tried and abandoned.
   boundary unless `next build` demands it (it errors when a static route needs it). Evidence:
   `src/app/repos/[repoId]/pulls/page.tsx`, `../e2e/specs/04-pr-findings.flow.json`.
 
+- **2026-08-21** — **An EARS `WHERE` on an OPTIONAL field silently leaves the common case
+  unspecified, and a green suite plus a met criterion is what hides it.** `specs/pr-brief.md`
+  AC-42 promised a scroll *WHERE a review-focus entry carries a line*; the brief's model never
+  sees a hunk body and is told `null` is the honest answer, so on a real pull request **all six**
+  rows had `line: null`. AC-40 and AC-41 were met — `router.push` landed on `?tab=diff&file=…`
+  and the card expanded — while `SmartFileCard`'s effect returned on its first line
+  (`if (targetLine == null || !open) return;`), so nothing scrolled and the reader sat at the top
+  of an 86-file diff with their file open below the fold. Two tests **pinned** the gap as
+  intended behaviour ("scrolls nowhere when the target carries no line"), which is what a
+  criterion written against the rarer branch buys you. The fix is a `targeted` flag beside
+  `targetLine` and a `fileCardId(path)` anchor on the card root, so the file is the fallback
+  receiver — the file was already named as the promise in that effect's own comment, and only
+  the code disagreed. Tell for the next reader: when a spec's optional field decides whether
+  anything observable happens, check what the field's real-data distribution is before writing
+  the criterion against it. Evidence:
+  `src/app/repos/[repoId]/pulls/[number]/_components/SmartDiffViewer/_components/SmartFileCard/SmartFileCard.tsx`
+  (`scrolledTarget`, `cardRef`), `SmartDiffViewer/helpers.ts` (`fileCardId`),
+  `../specs/pr-brief.md` (AC-42, AC-62).
+
 ## Codebase Patterns
 
 Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
+
+- **2026-08-20** — **`vendor/ui`'s "extend via a new file, don't restyle a primitive" rule
+  has a third path it doesn't name: most primitives take a `style` prop, so trimming one
+  for a single surface needs no `vendor/ui` edit and no fork.** `Badge` spreads
+  `...style` last over its own defaults, so a caller overrides `fontSize`/`padding` for
+  itself alone — which is what the do-not-touch rule actually wants (no other caller
+  moves), reached without a second component. Put the override in the calling unit's
+  `styles.ts` as a named member rather than inline, so the deviation from the primitive's
+  scale is a thing with a name and a comment; `VerdictBanner`'s `s.countBadge` is the
+  precedent. Check the primitive first — `style` is a prop on `Badge` but NOT on
+  `SeverityBadge` or `CategoryTag` in the same file, so the escape hatch is per-component,
+  not universal. Evidence: `src/vendor/ui/primitives/Badge.tsx` (`Badge`),
+  `src/app/repos/[repoId]/pulls/[number]/_components/VerdictBanner/styles.ts`
+  (`countBadge`).
+- **2026-08-20** — **`SectionLabel` carries its own `marginBottom: 14`, which is the gap
+  before the list it heads — so reusing it as a COLLAPSIBLE header leaves that gap
+  hanging under a section with nothing below it, and two shut sections then sit further
+  apart than two rows of content.** Reusing the primitive is still right (it owns the
+  12px/700/uppercase/0.07em scale every section label in the app shares, and re-deriving
+  that in a feature's `styles.ts` is how two headings start disagreeing) — but the
+  wrapping button has to cancel the margin while shut, which is why `s.sectionHead`
+  takes `open` and sets `marginBottom: open ? 0 : -14`. Its `right` slot is the place for
+  the count and the chevron; note that slot is `marginLeft: auto`, so a chevron style
+  copied from `riskChevron` brings a SECOND `marginLeft: auto` and shoves the chevron
+  away from the count it should sit beside — `s.sectionChevron` is the same style minus
+  that one line. Evidence: `src/vendor/ui/primitives/SectionLabel.tsx`,
+  `src/app/repos/[repoId]/pulls/[number]/_components/BriefCard/styles.ts`
+  (`sectionHead`, `sectionChevron`), `BriefCard.tsx` (`Section`).
 
 - **2026-08-11** — **`scrollMarginTop` on this app's screens cannot be a constant, because the
   scroll container is not the window and the sticky header is not a fixed height.**
@@ -361,11 +457,45 @@ Conventions and architectural decisions, each with the reason behind it.
   half only). Evidence: `_components/ConventionCard/ConventionCard.tsx`,
   `ConventionCard.test.tsx`.
 
+- **2026-08-19** — **The two editors reach their tab bodies differently, and copying a test from
+  one to the other does not work.** `AgentEditor` takes `tab` / `onTab` as **props**, while
+  `SkillEditor` reads `?tab=` itself through `useSearchParams` — so a test that exercises a panel
+  switch in the skill editor has to mock `next/navigation` with a **mutable** `URLSearchParams`,
+  where the agent editor's equivalent just passes a prop. Second trap in the same file: do not
+  let a `SkillEditor` test land on the default `config` tab, because `ConfigTab` calls
+  `useToast()`, which **throws** outside `<ToastProvider>` — mount on `?tab=preview` (or whichever
+  tab is under test) instead. Third, minor but it wastes a run: query the tab strip by role,
+  because `skills.previewTab.title` is also the word "Preview" and a text query matches two
+  nodes. Evidence: `src/app/skills/_components/SkillEditor/SkillEditor.tsx`,
+  `src/lib/toast.tsx` (`useToast`),
+  `src/app/skills/_components/SkillEditor/_components/ContextTab/ContextTab.test.tsx`.
+
 ## Tool & Library Notes
 
 Dependency and tooling quirks.
 
 <!-- append below -->
+
+- **2026-08-19** — **`eslint` on a path under `src/vendor/` exits 0 while linting nothing, and
+  a command listing it beside real files reads as a pass for both.** The config ignores
+  `src/vendor/**`, so `eslint src/vendor/ui/nav.ts src/components/app-shell/helpers.ts` exits
+  `0` having parsed only the second file, emitting `File ignored because of a matching ignore
+  pattern` as a *warning* among the output. Anyone writing a Done-condition that names a
+  vendor path — which happens exactly when a change enters that zone under a carve-out, i.e.
+  when the lint mattered most — records a green gate over an unlinted file. Assert the change
+  a different way (`git diff --stat -- src/vendor/ui/` showing exactly one file is the check
+  that actually holds), and keep vendor paths out of an `eslint` invocation whose exit code
+  someone will read as coverage. Evidence: `eslint.config.js`, `src/vendor/ui/nav.ts`.
+
+- **2026-08-19** — **Under fake timers, a TanStack Query `refetchInterval` refetch fires on the
+  timer but its data commits on the render AFTER it, so the obvious flush sees the new call
+  count and the OLD data.** `await flush(TOUR_POLL_MS)` advances the timer, the request goes
+  out and the call count moves — and the assertion on the rendered payload still reads the
+  previous value. A zero-millisecond second flush is still one turn early; `flush(1)` is what
+  lands it. Measured while asserting that the tour poll starts on `generation_state ===
+  "running"` and stops when it changes. Worth knowing before concluding the hook's interval
+  predicate is wrong: the call count is the honest signal, the rendered data lags it by one
+  commit. Evidence: `src/lib/hooks/onboarding.test.tsx`.
 
 - **2026-08-10** — **`@testing-library/user-event` is NOT a dependency of this package**, so the
   usual "always `userEvent`, never `fireEvent`" advice is unreachable here — importing it fails
@@ -381,11 +511,70 @@ Dependency and tooling quirks.
   `package.json` (devDependencies), `src/lib/hooks/intent.test.tsx`,
   `src/vendor/ui/primitives/Skeleton.tsx`.
 
+- **2026-08-19** — **jsdom dispatches no `click` for Enter on a focused native `<button>`, so
+  with `fireEvent` and no `user-event` a keyboard-operability requirement cannot be asserted the
+  way it reads.** The browser synthesizes that click; jsdom does not, and `user-event` — which
+  models it — is not a dependency here (2026-08-10, this section). Two shapes work, and the
+  choice says something about the design. For a control whose activation is *native*, assert the
+  load-bearing half directly — that it is a real, tab-reachable element with an accessible name
+  (`el.focus(); expect(el).toHaveFocus()`), not a `div` with an `onClick` — and then dispatch the
+  activation separately, disclosing the split in the test. For behaviour with **no** native
+  keyboard equivalent (a reorder, a custom navigation), put it on an explicit `onKeyDown` and the
+  test drives a genuine `keyDown` with no click at all. Prefer the second where you can: it is
+  both more assertable and the accessible design. Evidence:
+  `src/app/agents/[id]/_components/AgentEditor/_components/ContextTab/ContextTab.test.tsx`
+  ("attaches a document and moves it one position up without a pointer").
+
 ## Recurring Errors & Fixes
 
 An error string, its real cause, and the fix.
 
 <!-- append below -->
+
+- **2026-08-20** — **"Couldn't load this pull request" with the sidebar reading "No repo
+  selected" is almost never the screen you just changed — it is the app talking to an API
+  that refused it, and there are exactly two cheap causes.** Both were hit in one session
+  while visually verifying a `VerdictBanner` restyle, and both render the app's own
+  full-screen error, which is indistinguishable from a feature you just broke. (1) **Wrong
+  host in the address bar.** `server/src/app.ts` registers `cors` with
+  `origin: [config.webOrigin]`, and `webOrigin` is built as
+  `http://localhost:${WEB_PORT}` — a literal, not a pattern. Serve the app from
+  `http://127.0.0.1:3000` and the API answers 200 with **no**
+  `access-control-allow-origin` header at all, so the browser discards every response and
+  every hook errors. Always drive a browser at `http://localhost:3000`; `curl` cannot
+  reveal this because it sends no `Origin`. (2) **You tripped the rate limiter.** The same
+  file registers `@fastify/rate-limit` at `max: 120, timeWindow: '1 minute'`, so a probe
+  script that walks every PR and fetches its reviews and runs exhausts the budget in
+  seconds and the NEXT page load fails — the API then answers
+  `{"error":{"code":"internal_error","message":"Rate limit exceeded, retry in N seconds"}}`.
+  `/health` is exempt (`config: { rateLimit: false }`), which is why the stack looks up
+  while the app is down. Tell the two apart in one command:
+  `curl -sD - -H 'Origin: http://localhost:3000' localhost:3001/repos | grep -i
+  access-control`. Evidence: `../server/src/app.ts`, `../server/src/platform/config.ts`
+  (`webOrigin`), `src/lib/api.ts` (`API_BASE`).
+
+- **2026-08-20** — **`vi.spyOn(Element.prototype, "scrollIntoView")` proves that SOMETHING
+  scrolled, never WHICH element — and `mock.instances` will not tell you, because it is for
+  constructors.** The 2026-08-12 entry below establishes that the shim belongs in
+  `src/test/setup.ts` and must be a real function so a spy can wrap it; this is the next step, and
+  it is the difference between a requirement and a shrug. A requirement like "the targeted line is
+  scrolled clear of the sticky header" needs the receiver, and the way to get it is to capture
+  `this` inside a `mockImplementation` — then the assertion can name the row and check that row's
+  own `scrollMarginTop`, rather than asserting a call count that any scroll anywhere satisfies.
+  Evidence: `_components/SmartDiffViewer/SmartDiffViewer.test.tsx` (`spyOnScroll`),
+  `src/test/setup.ts`.
+
+- **2026-08-19** — **`getByRole(…, { name })` cannot match text containing consecutive spaces
+  — the accessible-name computation normalises whitespace — so a control whose name embeds a
+  verbatim string will never be found by that string.** Hit while asserting that a copy
+  control writes a shell command out exactly: the command is `npm run dev  # starts it` with
+  two spaces, the button's accessible name collapses them to one, and
+  `getByRole("button", { name: /npm run dev {2}#/ })` matches nothing while the clipboard
+  receives the original. Split the two concerns — query the control by a normalised prefix,
+  and assert the verbatim string on the clipboard, which is where the requirement actually
+  lives. This bites any test that treats an accessible name as a byte-for-byte echo of
+  content: paths, commands and code snippets are where it shows up. Evidence:
+  `src/app/repos/[repoId]/onboarding/_components/TourSection/TourSection.test.tsx`.
 
 - **2026-08-12** — **`TypeError: rootRef.current?.scrollIntoView is not a function` means
   jsdom, not your ref — and the blast radius is every test that merely RENDERS the

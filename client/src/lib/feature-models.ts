@@ -29,12 +29,17 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     defaultProvider: "openrouter",
     defaultModel: "deepseek/deepseek-v4-flash",
   },
+  // One structured call per pull request, over assembled facts rather than diff
+  // hunks, so a flash-class model is the right default. It also has to be an
+  // OpenRouter one: `SettingsModels` writes `provider: "openrouter"` for every
+  // pick, so an OpenAI default is one this screen could never restore once
+  // changed.
   {
     id: "risk_brief",
     label: "Risk Brief",
     description: "Assesses merge risks for a pull request.",
-    defaultProvider: "openai",
-    defaultModel: "gpt-4.1",
+    defaultProvider: "openrouter",
+    defaultModel: "deepseek/deepseek-v4-flash",
   },
   {
     id: "conformance",

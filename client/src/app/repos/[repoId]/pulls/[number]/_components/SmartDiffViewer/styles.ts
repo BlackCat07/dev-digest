@@ -3,6 +3,7 @@
     and `--bg-hover`, and an unknown custom property silently drops the whole
     declaration (`client/INSIGHTS.md`, 2026-08-06). */
 import type { CSSProperties } from "react";
+import { STICKY_SCROLL_MARGIN } from "@/lib/sticky-offset";
 
 export const s = {
   list: { display: "flex", flexDirection: "column", gap: 18 } satisfies CSSProperties,
@@ -22,6 +23,27 @@ export const s = {
   lineEdge: (token: string): CSSProperties => ({
     boxShadow: `inset 3px 0 0 ${token}`,
   }),
+
+  /**
+   * Clearance for the ONE row a target lands on, merged into that row's style.
+   *
+   * The value has to stay `STICKY_SCROLL_MARGIN`, not a number: `PrDetailHeader` is
+   * `position: sticky` over the `<main>` that actually scrolls, and its height
+   * varies per pull request — ~128px, ~156px on a merged or closed one, taller
+   * again when its meta row wraps — so any single figure parks some pull requests'
+   * targeted line underneath it (`client/INSIGHTS.md`, 2026-08-11). Applied only to
+   * the target, because a `scrollMarginTop` on every code row would change where
+   * every other scroll in the diff comes to rest.
+   */
+  targetRow: { scrollMarginTop: STICKY_SCROLL_MARGIN } satisfies CSSProperties,
+
+  /**
+   * The same clearance for the targeted FILE's card, which is where a target with
+   * no line comes to rest — and that is the common case, since a review-focus
+   * row's line is `null` unless the material named one. Merged into the card's
+   * style only while it is the target, so no other card's scroll position moves.
+   */
+  targetCard: { scrollMarginTop: STICKY_SCROLL_MARGIN } satisfies CSSProperties,
 
   summaryRow: {
     display: "flex",

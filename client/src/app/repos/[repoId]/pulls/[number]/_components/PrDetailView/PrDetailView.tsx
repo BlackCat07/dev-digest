@@ -2,7 +2,14 @@
    - Findings panel (VerdictBanner + FindingCards)
    - RunReviewDropdown (run all / a specific agent) + live SSE RunStatus
    - Basic file-by-file diff viewer in the Files tab
-   Tab and open-trace state live in the URL (?tab, ?trace). */
+   Tab and open-trace state live in the URL (?tab, ?trace, ?finding, ?order, and
+   ?file/?line for the file a review-focus row sent the reader to).
+
+   No `<Suspense>` boundary around any of this despite `useSearchParams`: that rule is
+   about STATICALLY prerendered routes, and this one is dynamic because of `[repoId]`,
+   so the hook costs nothing here — while a boundary makes the server emit the fallback
+   INSTEAD of the screen. That shipped a blank first paint once, with typecheck,
+   `next build` and every unit test green (`client/INSIGHTS.md`, 2026-08-04). */
 "use client";
 
 import React from "react";
@@ -69,6 +76,21 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
   // and scrolls its card into view. In the URL like every other bit of this
   // screen's state, so the landing is linkable and survives a reload.
   const targetFindingId = search.get("finding");
+  /* The file — and optionally the line — the reader was sent to read (L05, AC-40).
+     Set by a review-focus row on the brief card, consumed by the diff tab, which
+     expands that file and scrolls to the line. In the URL for the same reason as
+     everything else here: the landing survives a reload and a shared link.
+
+     The line is parsed defensively because a URL is user input: a non-numeric or
+     non-positive `?line=` costs the reader the scroll and nothing else, which is
+     the right outcome for a value that is explicitly ungrounded anyway — the model
+     never sees a hunk body, so nothing ever checked that the number means
+     something. `?file=` needs no such guard: an unknown path is a real state the
+     diff tab already reports (AC-43). */
+  const targetFile = search.get("file") ?? undefined;
+  const lineParam = Number(search.get("line"));
+  const targetLine =
+    Number.isInteger(lineParam) && lineParam > 0 ? lineParam : undefined;
 
   const href = (sp: URLSearchParams) =>
     `/repos/${repoId}/pulls/${number}${sp.toString() ? `?${sp.toString()}` : ""}`;
@@ -85,10 +107,13 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
   const setParam = (key: string, val: string | null) => {
     router.replace(href(paramsWith({ [key]: val })));
   };
-  // Switching tabs by hand drops the finding target: the landing belongs to the
-  // navigation that asked for it, not to the tab. Without this, coming back to
-  // Agent runs later would re-open and re-scroll to a finding nobody asked about.
-  const setTab = (t: string) => router.replace(href(paramsWith({ tab: t, finding: null })));
+  // Switching tabs by hand drops the finding target — AND the file target, for the
+  // same reason: the landing belongs to the navigation that asked for it, not to the
+  // tab. Without this, coming back to `Files changed` later would re-open and
+  // re-scroll to a file nobody asked about, and the diff tab would keep announcing
+  // a missing target long after the row that named it was forgotten.
+  const setTab = (t: string) =>
+    router.replace(href(paramsWith({ tab: t, finding: null, file: null, line: null })));
 
   /**
    * A findings badge in the diff → that finding's card in the Agent-runs tab.
@@ -100,6 +125,26 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
    */
   const openFinding = (findingId: string) => {
     router.push(href(paramsWith({ tab: "findings", finding: findingId })));
+  };
+
+  /**
+   * A review-focus row on the brief card → that file in the `Files changed` tab
+   * (AC-40).
+   *
+   * `push`, not `replace`, exactly as `openFinding` above: this is a real
+   * navigation across tabs, so Back has to return the reader to the card they
+   * came from. One `paramsWith` call rather than two sequential `setParam`s,
+   * because each of those would build from the SAME stale `search` and the second
+   * would silently drop the first.
+   *
+   * A row with no line clears `?line` instead of leaving the previous row's number
+   * behind — a stale line would scroll the reader into the middle of a file they
+   * were told to read from the top.
+   */
+  const openFile = (path: string, line?: number | null) => {
+    router.push(
+      href(paramsWith({ tab: "diff", file: path, line: line != null ? String(line) : null })),
+    );
   };
   // The diff's grouping (L03b). In the URL, like `?tab` and `?trace`, so a link to
   // this tab carries the reader's choice. The default is OMITTED rather than
@@ -120,6 +165,28 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
   );
   const lethalTrifecta = allFindings.filter((f) => f.kind === "lethal_trifecta");
   const findingsCount = allFindings.length;
+
+  // The verdict banner on `Overview` shows the LAST agent run, which is the
+  // product's own rule for that gauge: each run writes its own `reviews` row with
+  // its own score, and the screen reports the newest one rather than an aggregate
+  // across agents — a security agent at 30 and a style agent at 85 average to 57,
+  // which states nothing. `reviews` arrives newest-first (the API orders
+  // `desc(created_at)`), so the head of the filtered list IS that run.
+  //
+  // `kind === 'review'` for the same reason `allFindings` filters it: a
+  // `kind: 'summary'` row is not a run's verdict, and the two must not mix on one
+  // gauge. Cost and tokens live on the matching `agent_runs` row, joined by
+  // `run_id` exactly as the Agent-runs tab joins them — the seeded review carries
+  // a null `run_id` and simply contributes no usage figures.
+  const latestReview = React.useMemo(
+    () => (reviews ?? []).find((r) => r.kind === "review") ?? null,
+    [reviews],
+  );
+  const latestRun = React.useMemo(
+    () =>
+      latestReview?.run_id ? (prRuns ?? []).find((r) => r.run_id === latestReview.run_id) ?? null : null,
+    [latestReview, prRuns],
+  );
 
   const repoName = activeRepo?.full_name ?? repoId;
   // The real "owner/repo" (null until the repo is loaded) — used to build
@@ -186,6 +253,9 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
             prBody={pr.body}
             repoFullName={repoFullName}
             repoId={repoId}
+            onOpenFile={openFile}
+            latestReview={latestReview}
+            latestRun={latestRun}
           />
         )}
 
@@ -231,6 +301,11 @@ export function PrDetailView({ repoId, number }: { repoId: string; number: strin
             onOrderChange={setOrder}
             canComment={pr.status === "open"}
             onOpenFinding={openFinding}
+            // The URL's file target, straight through. The tab expands the file and
+            // scrolls to the line; it says so plainly when the target is a real
+            // changed file this page of the diff never received (AC-43).
+            targetFile={targetFile}
+            targetLine={targetLine}
           />
         )}
       </div>

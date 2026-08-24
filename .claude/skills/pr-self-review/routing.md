@@ -68,7 +68,7 @@ deduplicated. Paths are repo-relative, as step 0's `git diff --name-status` and
 |---|---|
 | `e2e/specs/*.flow.json` | `e2e/CLAUDE.md`, `e2e/docs/adding-a-flow.md`; deterministic locators only, never `chat` |
 | `e2e/run.ts`, `e2e/lib/**` | `e2e/CLAUDE.md`, `typescript-expert` |
-| `*/specs/**` | `docs/specs-convention.md` |
+| `*/specs/**`, and root `specs/**` (cross-module features — `*/specs/**` does **not** match it) | `docs/specs-convention.md`; the header carries `Spec ID` and `Status`, criteria are EARS with `AC-n` IDs, and no spec addresses the reviewing model (`DDG-SEC-002`) |
 | `*/INSIGHTS.md` | append-only → `DDG-DOC-001` |
 | `*.md`, `docs/**`, `*/CLAUDE.md`, `README.md` | prose only: are the paths it names real? (`DDG-DOC-002`) |
 | `.claude/skills/**` | `.claude/skills/README.md` catalog row; locally-authored skills stay **out** of `skills-lock.json` (`DDG-DOC-004`) |
@@ -157,7 +157,7 @@ Gate failures do **not** get an ID from here — they reuse the tool's own
 | `DDG-DOC-002` | A doc that names a path, script or symbol names a real one. Source comments cite package docs by **bare filename**, not by path. | WARNING |
 | `DDG-DOC-003` | A `pr-self-review: allow <ID>` suppression carries a reason. | WARNING |
 | `DDG-DOC-004` | A new skill gets a catalog row in `.claude/skills/README.md`; a **locally-authored** skill stays out of `skills-lock.json`, which pins vendored skills by hash. | WARNING |
-| `DDG-DOC-005` | A new feature in `client`/`server`/`reviewer-core` has a file in that package's `specs/` per `docs/specs-convention.md`. | WARNING |
+| `DDG-DOC-005` | A new feature in `client`/`server`/`reviewer-core`/`mcp-server` has a spec per `docs/specs-convention.md` — in that package's `specs/` if it lives in one package, in root `specs/` if it spans several. | WARNING |
 
 ### `TEST` — suite conventions
 

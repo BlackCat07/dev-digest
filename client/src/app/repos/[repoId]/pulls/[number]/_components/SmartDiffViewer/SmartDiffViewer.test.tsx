@@ -134,6 +134,27 @@ function mount(over: Partial<React.ComponentProps<typeof SmartDiffViewer>> = {})
   );
 }
 
+/**
+ * Which ELEMENTS were scrolled into view, which is the only interesting half of a
+ * scroll here — the call proves something happened, the receiver proves it happened
+ * to the right row.
+ *
+ * `Element.prototype.scrollIntoView` is shimmed as a real function in
+ * `src/test/setup.ts` (jsdom implements no scrolling), which is what makes it
+ * spy-able; the receiver is captured through the implementation rather than read
+ * off the mock, because a spy's recorded `this` is not part of the assertion API
+ * this suite should lean on.
+ */
+function spyOnScroll() {
+  const elements: Element[] = [];
+  const spy = vi
+    .spyOn(Element.prototype, "scrollIntoView")
+    .mockImplementation(function (this: Element) {
+      elements.push(this);
+    });
+  return { elements, restore: () => spy.mockRestore() };
+}
+
 /** Reading order of several strings in the rendered text. */
 function readingOrder(container: HTMLElement, ...needles: string[]) {
   const text = container.textContent ?? "";
@@ -216,6 +237,116 @@ describe("SmartDiffViewer — what starts open", () => {
     expect(container.textContent).toContain("lockfileVersion");
     fireEvent.click(header);
     expect(container.textContent).not.toContain("lockfileVersion");
+  });
+});
+
+/* Being SENT here — a file, and sometimes a line, chosen somewhere else on the
+   screen. Nothing passes these props in the tree yet: the component that owns the
+   URL wires them, and these tests are what let this half be finished before it. */
+describe("SmartDiffViewer — when a file is targeted", () => {
+  /**
+   * The acceptance criterion, and the reason it names a lock file: boilerplate with
+   * no findings is exactly what the expansion rule collapses, so a file that opens
+   * because it was targeted cannot be confused with one that was open anyway.
+   * Groups are never collapsible, so a file is the only thing that can hide a
+   * target.
+   */
+  it("expands the targeted file even where the rule collapses it", () => {
+    const { container } = mount({ targetFile: "package-lock.json" });
+    expect(container.textContent).toContain("lockfileVersion");
+    // …and only that file: the wiring file with no findings stays shut.
+    expect(container.textContent).not.toContain("sk_live_x");
+  });
+
+  it("still lets the reader close a file they were sent to", () => {
+    const { container } = mount({ targetFile: "package-lock.json" });
+    fireEvent.click(screen.getByText("package-lock.json").closest("button")!);
+    expect(container.textContent).not.toContain("lockfileVersion");
+  });
+
+  /**
+   * AC-42, in the two halves it actually has: the scroll happens on the row the
+   * line names, and that row's `scrollMarginTop` is the MEASURED header height
+   * rather than a number. The header is ~128px, ~156px on a merged or closed PR and
+   * taller when its meta row wraps, so a constant lands some PRs' targeted line
+   * underneath it (`client/INSIGHTS.md`, 2026-08-11).
+   *
+   * The anchor is fetched with `getElementById` here for the same reason the
+   * component uses it: `src/config.ts` contains `/` and `.`, which are selector
+   * syntax, so a `querySelector` would need `CSS.escape`.
+   */
+  it("scrolls the targeted line into view, clear of the sticky header", () => {
+    const scrolled = spyOnScroll();
+    try {
+      mount({ targetFile: "src/config.ts", targetLine: 12 });
+
+      const row = document.getElementById("sd-line-src/config.ts-RIGHT-12");
+      expect(row).toBeTruthy();
+      expect(scrolled.elements).toEqual([row]);
+      expect((row as HTMLElement).style.scrollMarginTop).toContain("--dd-sticky-h");
+      // The margin belongs to the target alone — every other row scrolls the way
+      // it always did.
+      const neighbour = document.getElementById("sd-line-src/config.ts-RIGHT-13");
+      expect((neighbour as HTMLElement).style.scrollMarginTop).toBe("");
+    } finally {
+      scrolled.restore();
+    }
+  });
+
+  /**
+   * The ordinary case, not a corner: a review-focus row's `line` comes from a model
+   * that never sees a hunk body, so it is `null` unless the material named one —
+   * every row of the brief measured on a real pull request had `line: null`. The
+   * tab holds up to 100 files, so a target that scrolls nowhere leaves the reader
+   * at the top of the diff with their file expanded far below the fold, which is
+   * indistinguishable from a link that did nothing.
+   */
+  it("scrolls the targeted file's card into view when the target carries no line", () => {
+    const scrolled = spyOnScroll();
+    try {
+      const { container } = mount({ targetFile: "src/config.ts" });
+      // The file is open — the first half of the promise, with or without a line.
+      expect(container.textContent).toContain("sk_live_x");
+
+      const card = document.getElementById("sd-file-src/config.ts");
+      expect(card).toBeTruthy();
+      expect(scrolled.elements).toEqual([card]);
+      // Same measured header height as a targeted row: the card is what the reader
+      // has to be able to read, so it cannot come to rest underneath it.
+      expect((card as HTMLElement).style.scrollMarginTop).toContain("--dd-sticky-h");
+      // And the clearance belongs to the target alone.
+      const other = document.getElementById("sd-file-package-lock.json");
+      expect((other as HTMLElement).style.scrollMarginTop).toBe("");
+    } finally {
+      scrolled.restore();
+    }
+  });
+
+  it("falls back to the card when the line names a row this patch never rendered", () => {
+    const scrolled = spyOnScroll();
+    try {
+      const { container } = mount({ targetFile: "src/config.ts", targetLine: 999 });
+      // The line is explicitly ungrounded — nothing ever checked that the number
+      // means anything — so a miss costs the reader the LINE, not the navigation:
+      // they still land on the file they were sent to. Reachable on real data, not
+      // only through a wrong number: GitHub truncates a large patch, so a true line
+      // can be absent from what the tab received (`client/INSIGHTS.md`, 2026-08-20).
+      expect(container.textContent).toContain("sk_live_x");
+      expect(scrolled.elements).toEqual([document.getElementById("sd-file-src/config.ts")]);
+    } finally {
+      scrolled.restore();
+    }
+  });
+
+  /** Nothing scrolls when nobody was sent anywhere. */
+  it("scrolls nowhere when no file is targeted", () => {
+    const scrolled = spyOnScroll();
+    try {
+      mount();
+      expect(scrolled.elements).toEqual([]);
+    } finally {
+      scrolled.restore();
+    }
   });
 });
 

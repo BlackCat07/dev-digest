@@ -11,11 +11,12 @@ package (`client`, `server`, `reviewer-core`, `e2e`, `mcp-server`):
 - `INSIGHTS.md` — dated, file-grounded findings; always present
 - `docs/` — curated deep-dives; start at `docs/README.md`
 - `specs/` — one file per feature, what it must do (`specs/README.md`); every package but
-  `e2e` — see the exception below
+  `e2e` — see the exception below. A feature spanning **more than one** package gets a
+  single spec in the **root** `specs/` instead
 - `CLAUDE.md` + `README.md` — the rules and the tour
 
-Root: `README.md` · `TESTING.md` · `docs/agent-prompts/` · `docs/skills/` ·
-`docs/specs-convention.md`.
+Root: `README.md` · `TESTING.md` · `specs/` (cross-module specs only) ·
+`docs/agent-prompts/` · `docs/skills/` · `docs/specs-convention.md`.
 One nested doc: `server/src/modules/repo-intel/README.md`.
 
 **One exception:** `e2e/specs/` holds **browser flows** (`NN-name.flow.json`), which

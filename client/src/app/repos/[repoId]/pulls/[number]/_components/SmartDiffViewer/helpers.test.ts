@@ -9,6 +9,7 @@ import type { FindingRecord, PrFile, ReviewRecord, SmartDiff } from "@devdigest/
 import { AUTO_EXPAND_MAX_LINES, parsePatch } from "@/components/diff-viewer";
 import {
   buildViewModel,
+  fileCardId,
   groupFiles,
   initialOpen,
   latestFindingsPerAgent,
@@ -362,5 +363,16 @@ describe("lineId", () => {
     // The `/` and `.` are exactly why the code uses getElementById.
     expect(id).toContain("/");
     expect(id).toContain(".");
+  });
+});
+
+describe("fileCardId", () => {
+  it("builds a per-file id distinct from any of that file's line ids", () => {
+    const id = fileCardId("src/api/users.ts");
+    expect(id).toBe("sd-file-src/api/users.ts");
+    // The two prefixes must not collide: the card is the anchor for a target with
+    // no line, and a line id is the anchor for one with a line.
+    expect(id).not.toBe(lineId("src/api/users.ts", 45));
+    expect(id.startsWith("sd-line")).toBe(false);
   });
 });

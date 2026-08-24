@@ -68,7 +68,7 @@ const SMART_DIFF = {
   split_suggestion: { too_big: false, total_lines: 1, proposed_splits: [] },
 };
 
-function mount() {
+function mount(over: Partial<React.ComponentProps<typeof DiffTab>> = {}) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -85,10 +85,16 @@ function mount() {
           order="smart"
           onOrderChange={vi.fn()}
           onOpenFinding={vi.fn()}
+          {...over}
         />
       </NextIntlClientProvider>
     </QueryClientProvider>,
   );
+}
+
+/** The notice's copy, from the catalogue — never a literal retyped here. */
+function targetMissingText(path: string) {
+  return M.targetMissing.replace("{path}", path);
 }
 
 /** Route every request by URL, so comments and smart-diff can differ per case. */
@@ -167,6 +173,51 @@ describe("DiffTab — when the grouping arrives", () => {
     mount();
     await waitFor(() => expect(screen.getByText(M.groups.wiring.label)).toBeTruthy());
     expect(screen.queryByText(M.unavailable)).toBeNull();
+  });
+});
+
+/* Being sent to a file that is not here.
+
+   This is not a defensive branch: `files` is ONE page of at most 100 files from
+   GitHub, while whoever sends the reader grounds against the PR's full `pr_files`
+   list, so on a large pull request the target is a real changed file and absent
+   from this tab at the same time. The reader must be told, or the click looks
+   broken. */
+describe("DiffTab — when the targeted file is not in the rendered diff", () => {
+  it("names the file it cannot show, and keeps the rest of the tab", async () => {
+    route({ "smart-diff": () => json(SMART_DIFF) });
+    const { container } = mount({ targetFile: "src/api/users.ts", targetLine: 42 });
+
+    // Wait for the grouping, so this asserts the notice ALONGSIDE the diff rather
+    // than during the skeleton, when no file is on the page anyway.
+    await waitFor(() => expect(screen.getByText("src/config.ts")).toBeTruthy());
+    expect(screen.getByText(targetMissingText("src/api/users.ts"))).toBeTruthy();
+    // The notice replaces nothing: the diff that DID arrive is still rendered.
+    expect(container.textContent).toContain("src/config.ts");
+    expect(screen.queryByText(M.unavailable)).toBeNull();
+  });
+
+  it("says nothing when the targeted file did arrive", async () => {
+    route({ "smart-diff": () => json(SMART_DIFF) });
+    const { container } = mount({ targetFile: "src/config.ts", targetLine: 12 });
+
+    await waitFor(() => expect(screen.getByText("src/config.ts")).toBeTruthy());
+    expect(screen.queryByText(targetMissingText("src/config.ts"))).toBeNull();
+    // And the target reaches the viewer: `src/config.ts` is wiring with no
+    // findings, so the rule collapses it and only the target opens it.
+    expect(container.textContent).toContain("sk_live_x");
+  });
+
+  it("still names it when the grouping failed and the flat diff is showing", async () => {
+    route({
+      "smart-diff": () => json({ error: { code: "internal_error", message: "boom" } }, 500),
+    });
+    mount({ targetFile: "src/api/users.ts" });
+
+    // Both notices: the grouping is gone AND the file is not here. The second is
+    // about the file list, which the degraded branch renders just the same.
+    expect(await screen.findByText(M.unavailable)).toBeTruthy();
+    expect(screen.getByText(targetMissingText("src/api/users.ts"))).toBeTruthy();
   });
 });
 

@@ -3,7 +3,12 @@
 What each `@devdigest/api` feature must do, from the API's side: endpoints, payload shapes,
 and which rows a figure is computed from.
 
-Format, naming and required sections: [`../../docs/specs-convention.md`](../../docs/specs-convention.md).
+Format, naming, `Spec ID`, the `Status` lifecycle and the required sections:
+[`../../docs/specs-convention.md`](../../docs/specs-convention.md).
+
+**Only features that live entirely inside this package belong here.** A feature spanning
+more than one package gets a single spec in [`../../specs/`](../../specs/README.md)
+instead, with a per-package section.
 
 ## Specs
 

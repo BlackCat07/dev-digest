@@ -7,11 +7,92 @@
   "unknownError": "Unknown error",
   "generate": {
     "title": "Generate onboarding tour",
-    "body": "DevDigest indexes the repo and specs, then writes a 5-section guided tour: overview, architecture, key modules, getting started, and conventions & gotchas.",
+    "body": "DevDigest reads this repository’s own index and writes a five-part tour: architecture, critical paths, run locally, reading path, and first tasks.",
     "cta": "Generate onboarding tour",
     "generating": "Generating…"
   },
   "loadError": {
-    "title": "Couldn’t load the onboarding tour"
+    "title": "Couldn’t load the onboarding tour",
+    "body": "The tour could not be read. Nothing else on this screen is affected — try again in a moment."
+  },
+  "running": {
+    "title": "Writing the tour…",
+    "body": "This takes up to a minute. The rest of the app stays usable; this screen updates itself when the tour is ready."
+  },
+  "rail": {
+    "label": "On this page"
+  },
+  "sectionTitle": {
+    "architecture": "Architecture",
+    "critical_paths": "Critical paths",
+    "run_locally": "Run locally",
+    "reading_path": "Reading path",
+    "first_tasks": "First tasks"
+  },
+  "meta": {
+    "generated": "Generated from {files} files · {age} ago",
+    "filesIndexed": "{count, plural, one {# file} other {# files}}",
+    "filesSkipped": "{count, plural, one {# file skipped} other {# files skipped}}",
+    "age": "{age} ago"
+  },
+  "notice": {
+    "stale": {
+      "title": "The repository has moved on since this tour was written",
+      "body": "The index now sits at a newer commit than the one this tour recorded. What is below is still what was read then — regenerate it to describe the code as it is today."
+    },
+    "partial": {
+      "title": "This tour was written from a partial index",
+      "body": "The sections below are real, but the index covered only part of this repository. What is here is true; what is missing proves nothing."
+    },
+    "degraded": {
+      "title": "This is not a written tour",
+      "body": "The sections below are the deterministic skeleton. They exist because a tour always has five sections, not because a tour could be written."
+    }
+  },
+  "reason": {
+    "flag_off": "Codebase indexing is turned off for this workspace.",
+    "index_failed": "The last indexing run for this repository failed.",
+    "index_partial": "The repository index covers only part of this repository.",
+    "repo_too_large": "This repository is larger than the indexer’s file cap.",
+    "index_missing": "This repository has not been indexed yet.",
+    "model_failed": "The model call failed, so only the sections that need no model were written.",
+    "model_timeout": "The model did not answer within the time limit, so only the sections that need no model were written.",
+    "model_invalid": "The model’s answer did not match the shape this tour requires, so only the sections that need no model were written.",
+    "no_commands_declared": "No runnable command is declared in this repository’s package.json, Makefile or compose files, so none is shown rather than guessed.",
+    "generic": "The tour could not be completed, and the cause is not one this version of the screen recognises."
+  },
+  "diagram": {
+    "unavailable": "The diagram for this section could not be rendered. The rest of the section is unaffected."
+  },
+  "command": {
+    "label": "Commands",
+    "declaredIn": "Declared in {file}",
+    "copy": "Copy command",
+    "copyLabel": "Copy the command {command}",
+    "copied": "Copied",
+    "none": "This repository declares no runnable command in the files this tour reads.",
+    "notRun": "Nothing here is run for you — read the command against its file before you run it."
+  },
+  "path": {
+    "open": "Open",
+    "openLabel": "Open {path} on the repository host",
+    "unavailable": "No commit is recorded for this tour, so its files cannot be linked."
+  },
+  "task": {
+    "label": "First tasks",
+    "complexityLabel": "Complexity: {level}",
+    "complexity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    }
+  },
+  "links": {
+    "label": "Links"
+  },
+  "share": {
+    "label": "Share link",
+    "ariaLabel": "Copy this screen’s link",
+    "copied": "Link copied"
   }
 }

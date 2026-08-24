@@ -9,7 +9,9 @@ Subagents are the neighbouring concept and live in [`../agents/`](../agents/READ
 | Skill | Scope | Description |
 |-------|-------|-------------|
 | [engineering-insights](engineering-insights/SKILL.md) | Meta | Reads a package's `INSIGHTS.md` before the work, appends what was learned after it |
+| [run-plan](run-plan/SKILL.md) | Workflow | Executes an existing Implementation Plan — implementer waves → Done-conditions → verify ‖ boundaries → bounded fix loop → docs → verdict. Starts at the plan; `spec-creator` and `implementation-planner` are run by hand |
 | [pr-self-review](pr-self-review/SKILL.md) | Workflow | Reviews the open local diff before a PR is opened, routes each file to the skills that own it, blocks the merge on a CRITICAL |
+| [workflow-retro](workflow-retro/SKILL.md) | Meta | Post-mortem for a multi-agent run — what it cost, where the agents struggled, which context was read twice, and the named edits to make before the next run |
 | [fastify-best-practices](fastify-best-practices/SKILL.md) | Backend | Fastify routes, plugins, JSON-schema validation, error handling |
 | [drizzle-orm-patterns](drizzle-orm-patterns/SKILL.md) | Backend | Drizzle schema, queries, relations, transactions, migrations |
 | [postgresql-table-design](postgresql-table-design/SKILL.md) | Backend | Postgres schema design, data types, indexing, constraints |
@@ -24,13 +26,31 @@ Subagents are the neighbouring concept and live in [`../agents/`](../agents/READ
 | [security](security/SKILL.md) | Full-stack | OWASP Top 10:2025, auth, injection, uploads, secrets |
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
 
-`engineering-insights`, `frontend-ui-architecture`, `onion-architecture`,
-`product-ui-language` and `pr-self-review` are authored in
-this repo. Every other
-skill is vendored from GitHub and pinned by hash in `../../skills-lock.json` —
-locally-authored skills have no upstream and do not belong in that lockfile.
+`engineering-insights`, `run-plan`, `workflow-retro`, `frontend-ui-architecture`,
+`onion-architecture`, `product-ui-language` and `pr-self-review` are authored in
+this repo. Vendored
+skills are pulled from GitHub and pinned by hash in `../../skills-lock.json`;
+locally-authored ones have no upstream and do not belong in that lockfile.
 
-`pr-self-review` is the only skill that ships executables and the only one wired
+**Three skills sit in neither group, and the difference decides whether their
+`SKILL.md` may be reshaped.** `react-testing-library`, `react-best-practices` and
+`security` carry **no entry in `skills-lock.json`** — `react-testing-library` was
+rewritten here against a source list recorded in its own `README.md`, so it is
+effectively authored in this repo and free to restructure. Everything that *does*
+have a lock entry (`postgresql-table-design`, `zod`, `typescript-expert`,
+`fastify-best-practices`, `next-best-practices`, `drizzle-orm-patterns`, …) is
+pinned by `computedHash` over its `SKILL.md`: reshaping one drifts that hash, and
+the root `CLAUDE.md` lists the lockfile as never-hand-edit. Check the lockfile
+before editing a `SKILL.md`, not after.
+
+`workflow-retro` ships one executable too — `scripts/collect.py`, stdlib-only,
+which reads the session and subagent transcripts and writes nothing. It is
+deliberately **not** wired into a hook and is never chained onto another skill: a
+retro on every `Stop` would fire on one-line turns and train everyone to skip it.
+Its reports and its append-only ledger live in [`docs/retro/`](../../docs/retro/),
+outside `.claude/`, because they are read by people and not by the harness.
+
+`pr-self-review` is the only skill wired
 into the harness: `pr-self-review/scripts/` holds the tree fingerprint and the
 merge gate, and the `PreToolUse` entry in `../settings.json` calls the latter to
 block `gh pr create` / `gh pr merge` until that skill has recorded a fresh,

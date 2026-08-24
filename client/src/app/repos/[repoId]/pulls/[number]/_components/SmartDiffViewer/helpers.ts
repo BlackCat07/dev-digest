@@ -3,6 +3,7 @@
 import type { FindingRecord, PrFile, ReviewRecord, SmartDiff } from "@devdigest/shared";
 import { AUTO_EXPAND_MAX_LINES, type Line } from "@/components/diff-viewer";
 import {
+  FILE_ID_PREFIX,
   GROUP_ORDER,
   LINE_ID_PREFIX,
   OFFDIFF_ID_PREFIX,
@@ -13,6 +14,19 @@ import type { SmartFileVm, SmartGroupVm, ViewRole } from "./types";
 /** Paths from three sources have to meet, so they all pass through this first. */
 function normalize(path: string): string {
   return path.trim().replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "").toLowerCase();
+}
+
+/**
+ * Do two paths name the same changed file?
+ *
+ * Exported because a second consumer needs the SAME comparison the view model
+ * uses: a target handed to this tab from elsewhere on the screen (a review-focus
+ * row, a link) has to be matched against `pr.files` before the reader can be told
+ * their file is not here, and matching it a second way would let a file be
+ * simultaneously "expanded" by one rule and "missing" by another.
+ */
+export function samePath(a: string, b: string): boolean {
+  return normalize(a) === normalize(b);
 }
 
 /** Worst severity first, then by line, so a file's list reads top-down by urgency. */
@@ -234,6 +248,22 @@ export function severityByLine(
  */
 export function lineId(path: string, line: number): string {
   return `${LINE_ID_PREFIX}-${path}-RIGHT-${line}`;
+}
+
+/**
+ * DOM id of one file's card.
+ *
+ * The anchor a target lands on when it names no line — which is the ordinary case,
+ * not the exception: a review-focus row's `line` comes from a model that never saw
+ * a hunk body, so it is `null` unless the material happened to name one. Without
+ * this the reader was pushed to a tab of up to 100 files with the right one
+ * expanded somewhere below the fold, which reads as a link that went nowhere.
+ *
+ * `getElementById`, never `querySelector`, for the same reason as {@link lineId}:
+ * a path's `/` and `.` are legal in an id and are selector syntax.
+ */
+export function fileCardId(path: string): string {
+  return `${FILE_ID_PREFIX}-${path}`;
 }
 
 /** DOM id of a file's off-diff findings footer. */
