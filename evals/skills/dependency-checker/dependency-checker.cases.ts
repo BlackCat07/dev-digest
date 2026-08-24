@@ -50,11 +50,19 @@ export const cases: SkillCase[] = [
     // below, judged like everything else, and `threshold: 0.7` (5 of 6) means one format miss
     // costs a point instead of voiding the whole measurement.
     practices: [
-      "the report has a section named 'Scope' listing which packages (client, server, reviewer-core, e2e) were analyzed",
+      // Aligned to the artifact's own contract. `.claude/skills/dependency-checker/report-format.md`
+      // prescribes exactly six sections — A·Method, B·Map, C·Inventory, D·Weight, E·Risks,
+      // F·Priorities — and there is no section called 'Scope'. Asserting one made this practice
+      // unpassable by any model; `Method` is where the coverage and the how-measured belong.
+      "the report opens with a 'Method' section stating how the numbers were measured and which packages (client, server, reviewer-core, e2e) the audit covered",
       "the report includes a Mermaid diagram (a fenced ```mermaid code block using flowchart) showing dependency relationships between packages",
       "the report has a section with a size breakdown table showing dependencies and their installed size, not just a vague size statement",
       "the report has a 'Findings & Priorities' section (or equivalently named) that groups findings under explicit severity tiers such as P0, P1, P2, or Info — not an unranked bullet list",
-      "the report ends with a Summary section giving 3-5 concrete, actionable takeaways ordered by priority",
+      // Was "ends with a Summary section". report-format.md ends with F·Priorities and defines no
+      // Summary at all, so that practice could never pass either. Replaced with the thing the
+      // skill genuinely promises in its own description — every P-item carries all five fields —
+      // which is checkable from a verbatim quote and is a STRICTER bar, not a laxer one.
+      "every P0/P1/P2 item carries all five fields the format requires: the evidence, the effort, the impact, the exact command to run, and the exact verification step",
       "every finding names a specific package, dependency, or file rather than giving generic advice like 'consider optimizing dependencies'",
     ],
     threshold: 0.7,

@@ -60,7 +60,25 @@ _No entries yet._
 
 <!-- append below -->
 
-_No entries yet._
+- **2026-08-24** — **Writing a case's practices from what the artifact *ought* to produce instead
+  of from the artifact's own contract. Two suites in this repo did it, and both were unpassable by
+  any model — neither a better model nor a lower `threshold` could rescue them.** `dependency-checker`
+  demanded a `'Scope'` section and a closing `'Summary'` section; `report-format.md` prescribes
+  exactly six — A·Method, B·Map, C·Inventory, D·Weight, E·Risks, F·Priorities — and defines neither,
+  so 2 of 6 practices scored 0 always, capping the case at 0.667 under a 0.7 threshold.
+  `architecture-reviewer` demanded rule identifiers (`reviewer-core-zero-io`,
+  `inward-only-dependencies`) that a repo-wide grep finds ONLY in the case file, plus a "PASS/FAIL
+  gate verdict" its own definition forbids ("You report… you never issue a merge verdict"). **Before
+  writing a practice, grep the artifact for the noun you are about to assert** — a section name, a
+  rule id, a verdict word. If it lives only in your case file, the case measures your expectation,
+  not the artifact. Evidence: `skills/dependency-checker/dependency-checker.cases.ts`,
+  `agents/architecture-reviewer/architecture-reviewer.cases.ts`.
+
+- **2026-08-24** — **Reading "blocking" vs "advisory" off the workflow file. It means nothing until
+  branch protection defines required status checks.** With none configured, GitHub left
+  `Merge pull request` enabled through three red jobs, so the `continue-on-error` design was
+  cosmetic. Configure required checks in Settings → Branches first, otherwise a carefully chosen
+  blocking tier enforces exactly as much as an advisory one.
 
 ## Codebase Patterns
 
