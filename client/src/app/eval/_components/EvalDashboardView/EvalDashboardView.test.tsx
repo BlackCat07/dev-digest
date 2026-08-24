@@ -149,6 +149,12 @@ const DASHBOARD: EvalWorkspaceDashboard = {
 const msg = (template: string, values: Record<string, string | number>) =>
   Object.entries(values).reduce((out, [k, v]) => out.replace(`{${k}}`, String(v)), template);
 
+/** The branch next-intl picks for `count`, so a plural string is not retyped. */
+const plural = (template: string, count: number) => {
+  const branch = count === 1 ? /one \{([^}]*)\}/ : /other \{([^}]*)\}/;
+  return (branch.exec(template)?.[1] ?? template).replace("#", String(count));
+};
+
 type Route = { status: number; body: unknown } | "pending";
 
 let routes: Map<string, Route>;
@@ -226,37 +232,55 @@ const rowFor = (name: string) =>
   screen.getByRole("button", { name: msg(evalMessages.dashboard.openAgent, { name }) });
 
 describe("EvalDashboardView", () => {
-  it("renders every agent — including one with no batch and one whose agent is gone — and omits the sparkline below two batches", async () => {
-    // AC-70, AC-71, AC-72, and AC-45's "an agent with no completed batch appears".
+  it("cards only the agents with a completed batch, counts the rest, and omits the sparkline below two batches", async () => {
+    // AC-70, AC-71, AC-72. AC-45 is a statement about the READ, which still
+    // returns the never-run agent — this asserts what the SECTION renders.
     render(tree());
 
-    // The agent that HAS run: metrics as percentages, the pass ratio over the
-    // batch's own covered count, and a version.
+    // The agent that HAS run: its three metrics as percentages, and one sentence
+    // carrying the version, the age and the pass ratio over the batch's OWN
+    // covered count.
     const withTrend = await waitFor(() => rowFor("Security Reviewer"));
     expect(within(withTrend).getByText("82%")).toBeInTheDocument();
-    expect(within(withTrend).getByText("17/20")).toBeInTheDocument();
-    expect(within(withTrend).getByText("v3")).toBeInTheDocument();
+    /* Both ends of the sentence are pinned, plus the SHAPE of the stamp between
+       them — an absolute `YYYY-MM-DD HH:mm`, which is what distinguishes two runs
+       an hour apart and is the thing a regression to `formatAge`'s "1h" would
+       quietly undo. The stamp's exact value is not pinned: `formatDateTime` uses
+       the local-time getters, so it moves with the runner's timezone. */
+    expect(
+      within(withTrend).getByText(
+        (content) =>
+          content.startsWith("Last run v3 · 2026-08-") &&
+          /· \d{4}-\d{2}-\d{2} \d{2}:\d{2} ·/.test(content) &&
+          content.endsWith("17/20 pass"),
+      ),
+    ).toBeInTheDocument();
 
-    // The agent that has NOT: present, and every figure is an em dash rather
-    // than a zero — "we could not measure recall" is not "recall is 0%".
-    const noBatch = rowFor("Perf Reviewer");
-    expect(within(noBatch).getByText(evalMessages.dashboard.rowNoBatch)).toBeInTheDocument();
-    expect(within(noBatch).getAllByText("—")).toHaveLength(5);
-    expect(within(noBatch).queryByText("0%")).not.toBeInTheDocument();
-
-    // The deleted agent: still a row, presented as unavailable, and NOT a
-    // navigable one — there is no page left to open.
+    // The agent with NO completed batch is not carded — a card reading `—` three
+    // times is what this section stopped showing — but it is not dropped in
+    // silence either: one line says how many were left out.
     const region = agentsRegion();
-    expect(within(region).getByText(evalMessages.agentUnavailable)).toBeInTheDocument();
-    expect(within(region).getAllByRole("button")).toHaveLength(2);
+    expect(
+      screen.queryByRole("button", {
+        name: msg(evalMessages.dashboard.openAgent, { name: "Perf Reviewer" }),
+      }),
+    ).not.toBeInTheDocument();
+    expect(within(region).queryByText(evalMessages.dashboard.rowNoBatch)).not.toBeInTheDocument();
+    expect(
+      within(region).getByText(plural(evalMessages.dashboard.neverRunCount, 1)),
+    ).toBeInTheDocument();
 
-    // Exactly one row earns a sparkline: two completed batches. A one-point
+    // The deleted agent HAS a batch, so it is still carded — history stays
+    // readable — presented as unavailable and NOT navigable: no page to open.
+    expect(within(region).getByText(evalMessages.agentUnavailable)).toBeInTheDocument();
+    expect(within(region).getAllByRole("button")).toHaveLength(1);
+
+    // Exactly one card earns a sparkline: two completed batches. A one-point
     // trend is a dot on an empty grid, which reads as a bug.
     expect(within(region).getAllByTestId(SPARKLINE_TESTID)).toHaveLength(1);
-    expect(within(noBatch).queryByTestId(SPARKLINE_TESTID)).not.toBeInTheDocument();
 
     // The cross-agent recent-runs table: one row per BATCH, and a batch whose
-    // agent is gone is still listed.
+    // agent is gone is still listed. Each metric keeps its NUMBER beside its bar.
     const runs = runsRegion();
     expect(within(runs).getAllByText("82%")).toHaveLength(2);
     expect(within(runs).getByText(evalMessages.agentUnavailable)).toBeInTheDocument();

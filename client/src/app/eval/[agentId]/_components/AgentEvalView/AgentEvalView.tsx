@@ -55,6 +55,7 @@ import { AppShell } from "@/components/app-shell";
 import { formatAge, formatCost } from "@/lib/format";
 import {
   DEFAULT_EVAL_PERIOD,
+  EVAL_METRIC_COLOR,
   EVAL_METRIC_KEYS,
   EVAL_METRIC_LABEL_KEY,
   EVAL_PERIODS,
@@ -67,7 +68,6 @@ import { CompareModal } from "./_components/CompareModal";
 import {
   CHANGE_TONE_COLOR,
   METRIC_CARD_LABEL_KEY,
-  METRIC_COLOR,
   METRIC_LEGEND_KEY,
   RUNS_COLUMN_KEYS,
   SKELETON_ROW_KEYS,
@@ -131,7 +131,7 @@ function MetricCardWithChange({ figures }: { figures: MetricCardFigures }) {
             </span>
           </>
         }
-        color={METRIC_COLOR[figures.key]}
+        color={EVAL_METRIC_COLOR[figures.key]}
         trend={figures.trend ?? undefined}
       />
     </div>
@@ -166,7 +166,7 @@ function MetricsRegion({ query }: { query: ReturnType<typeof useAgentEvalDashboa
   const points = chartPoints(row);
   const series: ChartSeries[] = EVAL_METRIC_KEYS.map((key) => ({
     name: t(METRIC_LEGEND_KEY[key]),
-    color: METRIC_COLOR[key],
+    color: EVAL_METRIC_COLOR[key],
     // Non-null by construction: `chartPoints` keeps only fully measured points.
     data: points.map((p) => p[key] ?? 0),
   }));
@@ -207,7 +207,7 @@ function MetricsRegion({ query }: { query: ReturnType<typeof useAgentEvalDashboa
             <div style={s.legend}>
               {EVAL_METRIC_KEYS.map((key) => (
                 <span key={key} style={s.legendItem}>
-                  <span style={s.legendSwatch(METRIC_COLOR[key])} />
+                  <span style={s.legendSwatch(EVAL_METRIC_COLOR[key])} />
                   {t(METRIC_LEGEND_KEY[key])}
                 </span>
               ))}

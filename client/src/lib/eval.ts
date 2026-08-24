@@ -104,6 +104,26 @@ export const EVAL_METRIC_LABEL_KEY: Record<EvalMetricKey, string> = {
 // The expectation badge
 // ===========================================================================
 
+/**
+ * Metric → the colour it is drawn in, on every eval surface.
+ *
+ * Promoted here from the three units that each held a copy (the agent editor's
+ * Evals tab, the agent's own eval page, the workspace dashboard): one metric must
+ * be one colour across all three, and three private maps with "mirrors the other
+ * screen" in their docstrings is the drift this file exists to prevent.
+ *
+ * Blue, green, amber. Note what `citation_accuracy` is NOT: `--info` is
+ * `#6b7280`, a grey — so the earlier `--info` choice drew citation in nearly the
+ * same non-colour as a muted label and left recall and citation looking alike.
+ * `--warn` here is a hue, not a warning; nothing reads severity off these, since
+ * every surface captions the number and states its change in words.
+ */
+export const EVAL_METRIC_COLOR: Record<EvalMetricKey, string> = {
+  recall: "var(--accent)",
+  precision: "var(--ok)",
+  citation_accuracy: "var(--warn)",
+};
+
 /** How one expectation renders as a `Badge` from `@devdigest/ui`. */
 export interface EvalExpectationBadge {
   /** Resolves under the `eval` namespace. */

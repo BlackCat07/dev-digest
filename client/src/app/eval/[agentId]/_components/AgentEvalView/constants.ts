@@ -12,20 +12,6 @@
 import type { EvalMetricKey } from "@/lib/eval";
 
 /**
- * Metric → the colour its trend series and its card sparkline are drawn in.
- *
- * The same three hues the agent editor's Evals tab uses for the same three
- * metrics, so one metric is one colour wherever it appears. Colour is decoration
- * only: every card carries its caption and its signed change in words, and the
- * chart carries a named legend.
- */
-export const METRIC_COLOR: Record<EvalMetricKey, string> = {
-  recall: "var(--accent)",
-  precision: "var(--ok)",
-  citation_accuracy: "var(--info)",
-};
-
-/**
  * Metric → its ALL-CAPS card caption, under the `eval` namespace.
  *
  * The `dashboard.metrics.*` set, which is what the workspace dashboard and the

@@ -10,11 +10,17 @@
 
    Two things this screen must not do, both of them load-bearing:
 
-     - NO agent is ever omitted. A disabled agent and an agent that has never
-       run a batch both appear, with null metrics and an empty trend, because
-       omitting them leaves a reader unable to tell a disabled agent from a
-       missing one. A row whose agent has since been DELETED also stays, and is
-       presented as unavailable rather than removed.
+     - The AGENTS section lists only agents with a completed batch, and says in
+       one line how many it left out. AC-45 is a statement about the READ — the
+       server still returns every agent, `skipNotices` still names every agent
+       `Run all agents` skipped, and an agent with cases but no batch is still
+       reachable from its editor's Evals tab. What changed is presentation: a
+       screen whose first four rows all read "No completed batch" buries the one
+       agent that has data. The documented worry behind AC-45 — that a reader
+       cannot tell a never-run agent from a missing one — is what the count line
+       answers, and it is why the agents are counted rather than silently
+       dropped. A card whose agent has since been DELETED still shows, presented
+       as unavailable, because it has a batch and therefore history to read.
      - A null metric renders `—` and a null change renders "not measured", never
        a zero. "We could not measure recall" and "recall is 0%" are different
        claims, and the contract makes every metric nullable precisely so they
@@ -36,6 +42,7 @@ import {
   EmptyState,
   ErrorState,
   Icon,
+  ProgressBar,
   SectionLabel,
   SelectInput,
   Skeleton,
@@ -43,9 +50,10 @@ import {
 } from "@devdigest/ui";
 import type { EvalBatch, EvalDashboardRow, EvalPeriod } from "@devdigest/shared";
 import { AppShell } from "@/components/app-shell";
-import { formatAge, formatCost } from "@/lib/format";
+import { formatAge, formatCost, formatDateTime } from "@/lib/format";
 import {
   DEFAULT_EVAL_PERIOD,
+  EVAL_METRIC_COLOR,
   EVAL_METRIC_KEYS,
   EVAL_PERIODS,
   formatCaseCounts,
@@ -53,15 +61,14 @@ import {
 } from "@/lib/eval";
 import { useEvalDashboard, useRunAllEvalBatches } from "@/lib/hooks/eval";
 import {
-  AGENT_COLUMN_KEYS,
-  AGENT_GRID,
+  CARD_STAT_LABEL_KEY,
   RUNS_COLUMN_KEYS,
   RUNS_GRID,
   SKELETON_ROW_KEYS,
-  SPARKLINE_COLOR,
+  SPARKLINE_METRIC,
   SPARKLINE_TESTID,
 } from "./constants";
-import { isNavigable, skipNotices, sparklineSeries } from "./helpers";
+import { hasBatch, isNavigable, skipNotices, sparklineSeries } from "./helpers";
 import { s } from "./styles";
 
 /** The period filter. A real `<select>`, so it is keyboard-operable as it is. */
@@ -86,77 +93,102 @@ function PeriodFilter({
   );
 }
 
-/** A table header row, from a list of catalogue keys plus one unlabelled track. */
-function HeadRow({ grid, keys, trailing }: { grid: string; keys: readonly string[]; trailing?: boolean }) {
+/** The recent-runs table's header row. One caller, so no `trailing` escape. */
+function HeadRow({ grid, keys }: { grid: string; keys: readonly string[] }) {
   const t = useTranslations("eval");
   return (
     <div style={s.headRow(grid)}>
       {keys.map((key) => (
         <span key={key}>{t(key)}</span>
       ))}
-      {trailing && <span />}
     </div>
   );
 }
 
 /**
- * One agent's row.
+ * One agent's card.
+ *
+ * A card and not a table row, and the trade is worth naming: a table gave every
+ * agent's numbers a shared column and a heading, which a card list does not. The
+ * three stat columns are therefore FIXED-width (`s.stat`), so they still line up
+ * down the stack, and each carries its own caption — that is what buys back what
+ * the heading row provided.
  *
  * A real `<button>` when the agent still exists — tab-reachable, with the
  * accessible name the catalogue gives it (`Open the eval history for {name}`) —
- * so activating it navigates to that agent's eval page. A row whose agent has
- * been deleted renders the same cells inside a plain `<div>`: it is still
+ * so activating it navigates to that agent's eval page. A card whose agent has
+ * been deleted renders the same content inside a plain `<div>`: it is still
  * readable history, and there is no page to go to.
+ *
+ * Only reached for an agent WITH a completed batch, so `last` is non-null by
+ * construction — asserted here rather than defended against, because a card
+ * rendering `—` in all three columns is the thing this section stopped showing.
  */
-function AgentRow({ row }: { row: EvalDashboardRow }) {
+function AgentCard({ row }: { row: EvalDashboardRow }) {
   const t = useTranslations("eval");
   const router = useRouter();
   const [hover, setHover] = React.useState(false);
 
-  const last = row.last_batch;
+  const last = row.last_batch!;
   const series = sparklineSeries(row);
   const navigable = isNavigable(row);
   const name = row.agent_name;
 
-  const cells = (
+  const content = (
     <>
-      {name ? (
-        <span style={s.name}>{name}</span>
-      ) : (
-        <span style={s.unavailable}>{t("agentUnavailable")}</span>
-      )}
-      <Badge mono style={s.modelChip}>
-        {row.model}
-      </Badge>
-      <span className="tnum" style={s.cell}>
-        {last ? `v${last.agent_version}` : "—"}
+      <span style={s.iconBox} aria-hidden>
+        <Icon.Cpu size={16} />
       </span>
-      {/* A row with no completed batch says so in words, not with a blank. */}
-      <span style={s.mutedCell}>
-        {last ? formatAge(last.started_at) : t("dashboard.rowNoBatch")}
-      </span>
-      <span className="tnum" style={s.metricCell}>
-        {formatCaseCounts(last?.cases_passed, last?.cases_covered)}
-      </span>
-      {EVAL_METRIC_KEYS.map((key) => (
-        <span key={key} className="tnum" style={s.metricCell}>
-          {formatMetricPercent(last?.[key])}
+
+      <span style={s.cardMain}>
+        <span style={s.cardTitleRow}>
+          {name ? (
+            <span style={s.name}>{name}</span>
+          ) : (
+            <span style={s.unavailable}>{t("agentUnavailable")}</span>
+          )}
+          <Badge mono style={s.modelChip}>
+            {row.model}
+          </Badge>
         </span>
-      ))}
+        {/* One sentence, so it wraps as one rather than as three fragments. */}
+        <span style={s.cardMeta}>
+          {t("dashboard.cardLastRun", {
+            version: last.agent_version,
+            /* The absolute stamp, not `formatAge`: this card exists to be read
+               beside the next card down, and two runs an hour apart both read
+               "1h". A date and a time tell them apart. */
+            ranAt: formatDateTime(last.started_at),
+            pass: formatCaseCounts(last.cases_passed, last.cases_covered),
+          })}
+        </span>
+      </span>
+
       {/* Omitted entirely below two completed batches — a one-point sparkline is
           a dot on an empty grid, which reads as a bug. */}
-      <span style={s.trendCell}>
-        {series && (
-          <span data-testid={SPARKLINE_TESTID} aria-hidden="true">
-            <Sparkline data={series} color={SPARKLINE_COLOR} w={56} h={20} />
+      {series && (
+        <span data-testid={SPARKLINE_TESTID} aria-hidden="true">
+          <Sparkline data={series} color={EVAL_METRIC_COLOR[SPARKLINE_METRIC]} w={72} h={26} />
+        </span>
+      )}
+
+      <span style={s.cardStats}>
+        {EVAL_METRIC_KEYS.map((key) => (
+          <span key={key} style={s.stat}>
+            <span style={s.statLabel}>{t(CARD_STAT_LABEL_KEY[key])}</span>
+            <span className="tnum" style={s.statValue(EVAL_METRIC_COLOR[key])}>
+              {formatMetricPercent(last[key])}
+            </span>
           </span>
-        )}
+        ))}
       </span>
+
+      {navigable && <Icon.ChevronRight size={16} style={s.chevron} aria-hidden />}
     </>
   );
 
   if (!navigable) {
-    return <div style={s.row(false, false)}>{cells}</div>;
+    return <div style={s.card(false, false)}>{content}</div>;
   }
 
   return (
@@ -166,14 +198,22 @@ function AgentRow({ row }: { row: EvalDashboardRow }) {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={() => router.push(`/eval/${row.agent_id}`)}
-      style={s.row(true, hover)}
+      style={s.card(true, hover)}
     >
-      {cells}
+      {content}
     </button>
   );
 }
 
-/** One batch's row in the cross-agent recent-runs table. */
+/**
+ * One batch's row in the cross-agent recent-runs table.
+ *
+ * Each metric is a bar AND its number. The bar carries no information the number
+ * does not — it exists so a column of six runs is comparable without reading six
+ * percentages — which is why it is `aria-hidden` and why the number is never
+ * dropped in its favour. A null metric renders `—` and draws a bar at zero
+ * width, not a bar at zero VALUE that would read as "measured, and it is 0%".
+ */
 function RunRow({ batch }: { batch: EvalBatch }) {
   const t = useTranslations("eval");
   return (
@@ -184,15 +224,27 @@ function RunRow({ batch }: { batch: EvalBatch }) {
         <span style={s.unavailable}>{t("agentUnavailable")}</span>
       )}
       <span style={s.mutedCell}>{formatAge(batch.started_at)}</span>
-      <span className="tnum" style={s.cell}>
+      <span className="tnum" style={s.versionCell}>
         v{batch.agent_version}
       </span>
-      {EVAL_METRIC_KEYS.map((key) => (
-        <span key={key} className="tnum" style={s.metricCell}>
-          {formatMetricPercent(batch[key])}
-        </span>
-      ))}
-      <span className="tnum" style={s.metricCell}>
+      {EVAL_METRIC_KEYS.map((key) => {
+        const value = batch[key];
+        return (
+          <span key={key} style={s.barCell}>
+            <span style={s.barTrack} aria-hidden="true">
+              <ProgressBar
+                value={value == null ? 0 : value * 100}
+                color={EVAL_METRIC_COLOR[key]}
+                height={6}
+              />
+            </span>
+            <span className="tnum" style={s.barValue}>
+              {formatMetricPercent(value)}
+            </span>
+          </span>
+        );
+      })}
+      <span className="tnum" style={s.passCell}>
         {formatCaseCounts(batch.cases_passed, batch.cases_covered)}
       </span>
       <span className="tnum" style={s.cell}>
@@ -219,7 +271,12 @@ export function EvalDashboardView() {
   const dashboard = useEvalDashboard(period);
   const runAll = useRunAllEvalBatches();
 
+  /* `rows` stays the FULL list the read returned: `skipNotices` looks an agent up
+     in it by id to name a skip, so filtering here would make a skipped agent that
+     has never run report as an unnamed one. Only the rendered list is narrowed. */
   const rows = dashboard.data?.rows ?? [];
+  const withBatch = rows.filter(hasBatch);
+  const neverRun = rows.length - withBatch.length;
   const recent = dashboard.data?.recent_batches ?? [];
   /* Derived from the mutation's own result, never mirrored into state: a skip is
      a fact about the last run-all, and copying it would keep reporting a skip
@@ -263,20 +320,32 @@ export function EvalDashboardView() {
           {dashboard.isError && (
             <ErrorState body={t("dashboard.error")} onRetry={() => void dashboard.refetch()} />
           )}
-          {!dashboard.isLoading && !dashboard.isError && rows.length === 0 && (
+          {/* No agent has a completed batch — including the case where the
+              workspace has agents but none has ever run. The empty state names
+              the step that produces the first one. */}
+          {!dashboard.isLoading && !dashboard.isError && withBatch.length === 0 && (
             <EmptyState
               icon="FlaskConical"
               title={t("evalsTab.emptyCasesTitle")}
               body={t("evalsTab.emptyCasesBody")}
             />
           )}
-          {!dashboard.isLoading && !dashboard.isError && rows.length > 0 && (
-            <div style={s.table}>
-              <HeadRow grid={AGENT_GRID} keys={AGENT_COLUMN_KEYS} trailing />
-              {rows.map((row) => (
-                <AgentRow key={row.agent_id ?? `batch-agent:${row.agent_name ?? row.model}`} row={row} />
-              ))}
-            </div>
+          {!dashboard.isLoading && !dashboard.isError && withBatch.length > 0 && (
+            <>
+              <div style={s.cards}>
+                {withBatch.map((row) => (
+                  <AgentCard
+                    key={row.agent_id ?? `batch-agent:${row.agent_name ?? row.model}`}
+                    row={row}
+                  />
+                ))}
+              </div>
+              {/* What the list is NOT showing, counted rather than dropped in
+                  silence — see the note at the top of this file. */}
+              {neverRun > 0 && (
+                <p style={s.hiddenNote}>{t("dashboard.neverRunCount", { count: neverRun })}</p>
+              )}
+            </>
           )}
         </section>
 

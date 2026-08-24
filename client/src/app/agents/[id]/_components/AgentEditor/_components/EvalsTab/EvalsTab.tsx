@@ -48,6 +48,7 @@ import {
 import type { Agent, EvalAgentCase } from "@devdigest/shared";
 import {
   EVAL_EXPECTATION_BADGE,
+  EVAL_METRIC_COLOR,
   formatCaseCounts,
   formatMetricChange,
   formatMetricPercent,
@@ -66,7 +67,6 @@ import {
   CASES_TILE_LABEL_KEY,
   CHANGE_TONE_COLOR,
   EVAL_DASHBOARD_HREF,
-  METRIC_TILE_COLOR,
   METRIC_TILE_LABEL_KEY,
   ROW_STATUS_STYLE,
   SKELETON_ROW_KEYS,
@@ -128,7 +128,7 @@ function MetricTile({ tile }: { tile: MetricTileFigures }) {
     <div style={s.tile}>
       <span style={s.tileLabel}>{t(METRIC_TILE_LABEL_KEY[tile.key])}</span>
       <div style={s.tileValueRow}>
-        <span className="tnum" style={s.tileValue(METRIC_TILE_COLOR[tile.key])}>
+        <span className="tnum" style={s.tileValue(EVAL_METRIC_COLOR[tile.key])}>
           {formatMetricPercent(tile.value)}
         </span>
         <span style={s.tileChange(CHANGE_TONE_COLOR[tone])}>

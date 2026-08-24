@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { AGENT_GRID, RUNS_GRID } from "./constants";
+import { RUNS_GRID } from "./constants";
 
 /**
  * Co-located styles for the workspace eval dashboard.
@@ -91,27 +91,120 @@ export const s = {
     color: "var(--text-muted)",
   }),
 
+  /** The agent cards, stacked. Not a table: see the note in this unit's view. */
+  cards: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  } satisfies CSSProperties,
+
   /**
-   * One agent row. A real `<button>` when the agent still exists, so the row is
-   * tab-reachable and carries an accessible name; a plain cell when it does not,
-   * because there is no page to go to.
+   * One agent card. A real `<button>` when the agent still exists, so the card is
+   * tab-reachable and carries an accessible name; a plain container when it does
+   * not, because there is no page to go to.
    */
-  row: (interactive: boolean, hover: boolean): CSSProperties => ({
-    display: "grid",
-    gridTemplateColumns: AGENT_GRID,
+  card: (interactive: boolean, hover: boolean): CSSProperties => ({
+    display: "flex",
     alignItems: "center",
-    gap: 12,
+    gap: 16,
     width: "100%",
     textAlign: "left",
-    padding: "12px 16px",
-    border: "none",
-    borderBottom: "1px solid var(--border)",
-    background: hover ? "var(--bg-hover)" : "transparent",
+    padding: "14px 18px",
+    borderRadius: 10,
+    border: "1px solid var(--border)",
+    background: hover ? "var(--bg-hover)" : "var(--bg-elevated)",
     color: "var(--text-primary)",
     font: "inherit",
     cursor: interactive ? "pointer" : "default",
     transition: "background .1s",
   }),
+
+  /** The product's signature "a thing of type X" mark. */
+  iconBox: {
+    width: 30,
+    height: 30,
+    borderRadius: 7,
+    background: "var(--accent-bg)",
+    color: "var(--accent)",
+    display: "grid",
+    placeItems: "center",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+
+  /** Name + model chip on line one, the last-run sentence on line two. */
+  cardMain: { flex: 1, minWidth: 0 } satisfies CSSProperties,
+
+  cardTitleRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+  } satisfies CSSProperties,
+
+  /** `Last run v5 · 1h · 5/7 pass` — one sentence, so it wraps as one. */
+  cardMeta: {
+    marginTop: 3,
+    fontSize: 12,
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+
+  /**
+   * The three stat columns on the card's right.
+   *
+   * A fixed 62px per column rather than `auto`, so every card's numbers line up
+   * vertically down the stack — ragged columns are what made the previous table
+   * readable and are the one thing a card list gives up for free.
+   */
+  cardStats: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 22,
+    flexShrink: 0,
+  } satisfies CSSProperties,
+
+  /**
+   * One stat column: caption over figure.
+   *
+   * `display: "flex"` is load-bearing and was the bug. These are `<span>`s, so
+   * they were inline by default — an inline box ignores `width`, and its inline
+   * children flow side by side rather than stacking, which put `RECALL` and
+   * `71%` on one line and let the three columns collide. A flex column stacks
+   * them and makes the fixed width take effect, which is what keeps the figures
+   * aligned down the stack of cards.
+   */
+  stat: {
+    width: 66,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+
+  statLabel: {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+
+  statValue: (color: string): CSSProperties => ({
+    marginTop: 3,
+    fontSize: 19,
+    fontWeight: 700,
+    letterSpacing: "-0.01em",
+    color,
+  }),
+
+  /** The affordance that says the card opens something. */
+  chevron: { color: "var(--text-muted)", flexShrink: 0 } satisfies CSSProperties,
+
+  /** One line under the cards, naming what the list is not showing. */
+  hiddenNote: {
+    marginTop: 10,
+    fontSize: 12,
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
 
   runRow: {
     display: "grid",
@@ -140,6 +233,43 @@ export const s = {
   cell: { fontSize: 12.5, color: "var(--text-secondary)" } satisfies CSSProperties,
 
   metricCell: { fontSize: 12.5, color: "var(--text-primary)" } satisfies CSSProperties,
+
+  /**
+   * One metric in a run row: a bar, then the number.
+   *
+   * The bar is redundant by design — the percentage beside it is the actual
+   * value, and the bar only makes a column of them comparable at a glance. It is
+   * therefore `aria-hidden`, and losing it costs a reader nothing.
+   */
+  barCell: {
+    display: "flex",
+    alignItems: "center",
+    gap: 9,
+  } satisfies CSSProperties,
+
+  barTrack: { flex: 1, minWidth: 40 } satisfies CSSProperties,
+
+  barValue: {
+    fontSize: 12,
+    color: "var(--text-secondary)",
+    width: 34,
+    textAlign: "right",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+
+  /** The pass ratio, the one figure on a run row that is not a percentage. */
+  passCell: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: "var(--text-primary)",
+  } satisfies CSSProperties,
+
+  /** The version, rendered as the accent so it reads as the run's identity. */
+  versionCell: {
+    fontSize: 12.5,
+    fontWeight: 600,
+    color: "var(--accent-text)",
+  } satisfies CSSProperties,
 
   mutedCell: { fontSize: 12.5, color: "var(--text-muted)" } satisfies CSSProperties,
 

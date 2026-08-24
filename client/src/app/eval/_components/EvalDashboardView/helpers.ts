@@ -31,6 +31,23 @@ export function sparklineSeries(row: EvalDashboardRow): number[] | null {
 }
 
 /**
+ * Whether this row has a completed batch, and therefore anything to show.
+ *
+ * The AGENTS section renders only these. The predicate is a type guard so the
+ * card can read `row.last_batch` without a second null check and without a
+ * non-null assertion at every field — a card is only built for a row that has
+ * one, and the compiler should be the thing that knows it.
+ *
+ * `last_batch` is the MOST RECENT COMPLETED batch, so a running first batch is
+ * correctly still "nothing to show": its metrics do not exist yet.
+ */
+export function hasBatch(row: EvalDashboardRow): row is EvalDashboardRow & {
+  last_batch: NonNullable<EvalDashboardRow["last_batch"]>;
+} {
+  return row.last_batch != null;
+}
+
+/**
  * Whether activating this row can go anywhere.
  *
  * A batch outlives its agent, so a row may describe an agent that no longer

@@ -53,7 +53,14 @@
       "no_cases": "the agent has no eval cases"
     },
     "error": "Couldn’t load the eval dashboard.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "cardStats": {
+      "recall": "RECALL",
+      "precision": "PREC",
+      "citation": "CITE"
+    },
+    "cardLastRun": "Last run v{version} · {ranAt} · {pass} pass",
+    "neverRunCount": "{count, plural, one {# more agent has no completed batch yet} other {# more agents have no completed batch yet}}"
   },
   "caseEditor": {
     "newCase": "New eval case",

@@ -30,23 +30,6 @@ export const METRIC_TILE_LABEL_KEY: Record<EvalMetricKey, string> = {
 /** The fourth tile — a ratio rather than a percentage, hence its own key. */
 export const CASES_TILE_LABEL_KEY = "dashboard.metrics.casesPassed";
 
-/**
- * Metric → the colour its VALUE is drawn in.
- *
- * The same three hues the dashboard's trend legend uses, so one metric is one
- * colour across both screens. Colour is decoration only: every tile carries its
- * caption above the number and its signed change beside it, both in words.
- *
- * This used to be the colour of the tile's sparkline. The tiles draw no
- * sparkline any more — the trend lives on the agent's own eval page, which has
- * room for a real chart — so the same three values now tint the figure itself.
- */
-export const METRIC_TILE_COLOR: Record<EvalMetricKey, string> = {
-  recall: "var(--accent)",
-  precision: "var(--ok)",
-  citation_accuracy: "var(--info)",
-};
-
 /** How one case's last outcome renders. Four kinds, and each carries a WORD. */
 export type EvalRowStatusKind = "never" | "passed" | "failed" | "not_run";
 

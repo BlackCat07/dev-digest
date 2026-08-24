@@ -13,31 +13,16 @@
 import type { EvalMetricKey } from "@/lib/eval";
 
 /**
- * The agent table's grid tracks, and the column order that must agree with them.
+ * The recent-runs table's grid tracks, and the column order that must agree with
+ * them.
  *
  * The two live side by side deliberately: a column added to one list and not the
  * other shifts every cell to its right by one, which is a defect no type and no
- * gate can see. The trend cell has a track and no label — a sparkline is
- * decoration and captions nothing.
+ * gate can see. The three metric tracks are wide because each now holds a bar
+ * AND its number, not a number alone.
  */
-export const AGENT_GRID =
-  "minmax(150px, 1.7fr) minmax(96px, 1fr) 64px 78px 96px 68px 68px 68px 64px";
-
-/** The agent table's header labels, left to right, under the `eval` namespace. */
-export const AGENT_COLUMN_KEYS: readonly string[] = [
-  "dashboard.agentColumns.agent",
-  "dashboard.agentColumns.model",
-  "dashboard.agentColumns.version",
-  "dashboard.agentColumns.lastRun",
-  "dashboard.agentColumns.cases",
-  "dashboard.agentColumns.recall",
-  "dashboard.agentColumns.precision",
-  "dashboard.agentColumns.citation",
-];
-
-/** The recent-runs table's grid tracks. Same rule as `AGENT_GRID`. */
 export const RUNS_GRID =
-  "minmax(140px, 1.6fr) 86px 64px 68px 68px 68px 78px minmax(72px, 1fr)";
+  "minmax(130px, 1.4fr) 80px 52px minmax(96px, 1fr) minmax(96px, 1fr) minmax(96px, 1fr) 60px 74px";
 
 /** The recent-runs table's header labels, left to right. */
 export const RUNS_COLUMN_KEYS: readonly string[] = [
@@ -63,15 +48,27 @@ export const RUNS_COLUMN_KEYS: readonly string[] = [
 export const MIN_SPARKLINE_POINTS = 2;
 
 /**
- * Which metric the row sparkline draws, and in which colour.
+ * Which metric the card sparkline draws.
  *
  * Recall, because it is the first metric in the display order every eval surface
- * uses and the row has room for exactly one line. The colour matches the same
- * metric's series on the per-agent trend chart, so one metric is one colour
- * across both screens.
+ * uses and a card has room for exactly one line. Its colour is not declared here
+ * — it comes from `EVAL_METRIC_COLOR` in `src/lib/eval.ts`, so the line and the
+ * `RECALL` figure beside it cannot end up different blues.
  */
 export const SPARKLINE_METRIC: EvalMetricKey = "recall";
-export const SPARKLINE_COLOR = "var(--accent)";
+
+/**
+ * The three stat columns on an agent card, and the SHORT caption each carries.
+ *
+ * `PREC` and `CITE` rather than the full words: at 62px a column captioned
+ * `PRECISION` wraps, and the reference abbreviates for the same reason. The
+ * full words stay in use wherever there is room (the tiles, the tab).
+ */
+export const CARD_STAT_LABEL_KEY: Record<EvalMetricKey, string> = {
+  recall: "dashboard.cardStats.recall",
+  precision: "dashboard.cardStats.precision",
+  citation_accuracy: "dashboard.cardStats.citation",
+};
 
 /**
  * Marks the sparkline wrapper so its presence and absence are assertable.
