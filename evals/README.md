@@ -232,9 +232,13 @@ capability table above would mislead you into expecting otherwise:
 
 - **Spend on the first real CI run: gemini `$0.19` vs deepseek `$0.94`.** Deepseek was 5x *dearer*
   in practice. Per-token price is not the bill — turn count and output length are.
-- **Deepseek fails one deterministic gate.** `dependency-checker`'s first case grounds on a
-  ` ```mermaid ` block; deepseek answers in prose, scores `0`, and the judge never runs. That case
-  is red on this configuration, and it is a model-format limit, not a broken case.
+- **A grounding gate is binary, and `threshold` does not apply to it.** It is asserted with
+  `.toBe(1)` (`src/dsl/case.ts`), so lowering a case's `threshold` cannot rescue it. Deepseek
+  answered `dependency-checker`'s first case in prose instead of a ` ```mermaid ` block, scored
+  `0`, and the judge never ran — the case went red having measured nothing about its other five
+  practices. That gate is now removed from the case and the diagram is a **judged practice**
+  instead, so a format miss costs one point out of six rather than voiding the run. Reach for
+  `grounding` only where the substring genuinely settles the question.
 
 Anthropic was measured and rejected for the tool tiers: `anthropic/claude-haiku-4.5` scored the
 **same 1/4** as gemini on the agent tier, at `$3.48` vs `$0.19` and ~8x the wall-clock per session.

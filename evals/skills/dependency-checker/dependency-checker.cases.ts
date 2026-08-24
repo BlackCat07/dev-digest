@@ -42,7 +42,13 @@ export const cases: SkillCase[] = [
     name: "full report follows the required 5-section structure with a Mermaid graph",
     kind: "quality",
     prompt: `Run a dependency check on this repo. I want the full report: graph, sizes, prioritized findings, recommendations.\n\n${REPO_DATA}`,
-    grounding: ["```mermaid", "flowchart"],
+    // No `grounding` gate here on purpose. A grounding gate is asserted with `.toBe(1)`
+    // (src/dsl/case.ts) — it is binary and `threshold` does NOT apply to it, so a model that
+    // answers in prose scores 0 and the judge never runs at all. Measured: deepseek/deepseek-chat
+    // does exactly that and the case went red before any judging happened, which tells us nothing
+    // about the other five practices. The diagram requirement is not lost — it is practice #2
+    // below, judged like everything else, and `threshold: 0.7` (5 of 6) means one format miss
+    // costs a point instead of voiding the whole measurement.
     practices: [
       "the report has a section named 'Scope' listing which packages (client, server, reviewer-core, e2e) were analyzed",
       "the report includes a Mermaid diagram (a fenced ```mermaid code block using flowchart) showing dependency relationships between packages",
