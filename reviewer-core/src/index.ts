@@ -54,6 +54,17 @@ export {
   type ReviewMode,
 } from './review/run.js';
 
+// The eval scorer — recall / precision / citation accuracy as arithmetic (L06).
+// Pure comparison: file equality plus line-range overlap, and no model call.
+export {
+  scoreEvalBatch,
+  type EvalScoredFinding,
+  type EvalCaseOutput,
+  type EvalScoreCase,
+  type EvalCaseScore,
+  type EvalBatchScore,
+} from './eval/score.js';
+
 // Output: grounded Review → GitHubReviewPayload (body + inline comments + event).
 export {
   toReviewPayload,
