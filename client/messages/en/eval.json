@@ -12,7 +12,8 @@
     "metrics": {
       "recall": "RECALL",
       "precision": "PRECISION",
-      "citationAccuracy": "CITATION ACCURACY"
+      "citationAccuracy": "CITATION ACCURACY",
+      "casesPassed": "CASES PASSED"
     },
     "legend": {
       "recall": "Recall",
@@ -25,10 +26,34 @@
       "precision": "Precision",
       "citation": "Citation",
       "pass": "Pass",
-      "cost": "Cost"
+      "cost": "Cost",
+      "agent": "Agent",
+      "version": "Version"
     },
     "pass": "pass",
-    "fail": "fail"
+    "fail": "fail",
+    "agentsHeading": "Agents",
+    "agentColumns": {
+      "agent": "Agent",
+      "model": "Model",
+      "version": "Version",
+      "lastRun": "Last run",
+      "cases": "Cases passed",
+      "recall": "Recall",
+      "precision": "Precision",
+      "citation": "Citation"
+    },
+    "openAgent": "Open the eval history for {name}",
+    "rowNoBatch": "No completed batch",
+    "runAllAgents": "Run all agents",
+    "runAllAgentsRunning": "Starting…",
+    "skipped": "Skipped {name} — {reason}",
+    "skipReason": {
+      "agent_disabled": "the agent is disabled",
+      "no_cases": "the agent has no eval cases"
+    },
+    "error": "Couldn’t load the eval dashboard.",
+    "retry": "Retry"
   },
   "caseEditor": {
     "newCase": "New eval case",
@@ -42,7 +67,8 @@
     "inputLabel": "Input",
     "tabs": {
       "diff": "Diff",
-      "prMeta": "PR meta"
+      "prMeta": "PR meta",
+      "files": "Files"
     },
     "diffPlaceholder": "--- a/src/config.ts\n+++ b/src/config.ts\n@@ -10,6 +10,7 @@\n+  stripeKey: \"sk_live_...\"",
     "titleLabel": "Title",
@@ -55,7 +81,18 @@
     "invalidJson": "invalid JSON",
     "lastRunPassed": "Last run passed",
     "lastRunFailed": "Last run failed",
-    "resultSummary": "recall {recall}% · precision {precision}% · citation {citation}% · {duration}s"
+    "resultSummary": "recall {recall}% · precision {precision}% · citation {citation}% · {duration}s",
+    "expectationLabel": "Expectation",
+    "anchorsLabel": "Expected anchors",
+    "anchorRow": "{file} lines {low}-{high}",
+    "negativeBanner": "Negative case — this asserts NO finding in {file}, lines {low}-{high}.",
+    "negativeExpectedOutputLabel": "Expected output — asserts no finding at this anchor",
+    "saveDisabledInvalidJson": "Save — fix the expected output JSON first",
+    "runDisabledInvalidJson": "Run case — fix the expected output JSON first",
+    "lastRunHeading": "Last run",
+    "lastRunNotRun": "Last run did not complete",
+    "lastRunSummary": "expected {expected} · actual {actual} · {duration} · {cost}",
+    "close": "Close"
   },
   "evalsTab": {
     "metricsTitle": "Eval metrics",
@@ -71,7 +108,83 @@
     "run": "Run",
     "running": "Running…",
     "edit": "Edit",
-    "delete": "Delete"
+    "delete": "Delete",
+    "mechanicalScoring": "Scoring is mechanical: a finding counts when its file matches and its line range overlaps an expected anchor. The scorer makes no model call.",
+    "dashboardLink": "Open the eval dashboard",
+    "casesCount": "{count, plural, one {# case in the set} other {# cases in the set}}",
+    "runAll": "Run all cases",
+    "runAllDisabledNoCases": "Run all cases — add an eval case first",
+    "batchRunning": "Batch running",
+    "progress": "Running — {done} of {total} cases",
+    "notRun": "not run",
+    "notRunWithReason": "not run — {reason}",
+    "counts": "expected {expected} · actual {actual}",
+    "runRow": "Run {name}",
+    "editRow": "Edit {name}",
+    "deleteRow": "Delete {name}",
+    "deleteConfirm": "Delete the eval case {name}?",
+    "emptyCasesTitle": "No eval cases yet",
+    "emptyCasesBody": "Accept or dismiss a finding on a pull request, then choose “Turn into eval case” on that finding to add it here.",
+    "loadError": "Couldn’t load this agent’s eval cases.",
+    "retry": "Retry"
+  },
+  "agentPage": {
+    "loading": "Loading eval history…",
+    "error": "Couldn’t load this agent’s eval history.",
+    "retry": "Retry",
+    "trendHeading": "Metric trend",
+    "noTrend": "Not enough completed batches to draw a trend.",
+    "runsHeading": "Recent runs",
+    "selectRun": "Select this run for comparison",
+    "selectedRuns": "{count, plural, =0 {No runs selected} one {# run selected} other {# runs selected}}",
+    "casesPassed": "Cases passed"
+  },
+  "metric": {
+    "recall": "Recall",
+    "precision": "Precision",
+    "citationAccuracy": "Citation accuracy"
+  },
+  "expectation": {
+    "mustFind": "MUST FIND",
+    "mustNotFlag": "MUST NOT FLAG",
+    "assertEmpty": "assert empty"
+  },
+  "notRunReason": {
+    "deadline": "timed out",
+    "provider_error": "provider error",
+    "diff_unparseable": "the stored diff parsed to no files",
+    "not_scorable": "nothing to score",
+    "cancelled": "cancelled"
+  },
+  "notMeasured": "not measured",
+  "agentUnavailable": "Agent unavailable",
+  "period": {
+    "label": "Period",
+    "7d": "Last 7 days",
+    "30d": "Last 30 days",
+    "90d": "Last 90 days",
+    "all": "All time"
+  },
+  "alert": {
+    "title": "Metric regression",
+    "regression": "{metric} {change} against the previous batch"
+  },
+  "compare": {
+    "open": "Compare",
+    "openDisabled": "Compare — select exactly two runs",
+    "title": "Compare runs",
+    "subtitle": "v{earlier} → v{later}",
+    "earlier": "Earlier",
+    "later": "Later",
+    "change": "Change",
+    "cost": "Cost",
+    "promptHeading": "System prompt",
+    "promptUnchanged": "Both runs used agent version {version} — the prompt is unchanged.",
+    "promptSide": "Version {version}",
+    "promote": "Promote version {version}",
+    "promoting": "Promoting…",
+    "promoted": "Promoted — this agent is now version {version}.",
+    "close": "Close"
   },
   "page": {
     "crumbSkillsLab": "Skills Lab",

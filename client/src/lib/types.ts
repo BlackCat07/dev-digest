@@ -34,6 +34,36 @@ export type {
 export type { Review, Finding, Severity, Verdict } from "@devdigest/shared";
 export type { PrBrief, SmartDiff } from "@devdigest/shared";
 
+/**
+ * Eval Pipeline (L06) — `contracts/eval-batch.ts`.
+ *
+ * TYPES ONLY, like everything else in this file. The runtime values these
+ * screens need — the period options, the metric order, the expectation badges
+ * and the percentage-point formatter — live in `src/lib/eval.ts` and are never
+ * taken from the contract's zod enums: a VALUE import of `@devdigest/shared`
+ * resolves under `tsc` and under `vitest`, then 500s every route that
+ * transitively reaches it (`client/INSIGHTS.md`, 2026-08-03).
+ */
+export type {
+  EvalExpectation,
+  EvalAnchor,
+  EvalCaseOutcome,
+  EvalNotRunReason,
+  EvalRefusalReason,
+  EvalAgentCase,
+  EvalCaseSave,
+  EvalBatchStatus,
+  EvalBatch,
+  EvalBatchCaseResult,
+  EvalMetrics,
+  EvalComparison,
+  EvalPeriod,
+  EvalBatchTrendPoint,
+  EvalDashboardRow,
+  EvalWorkspaceDashboard,
+  EvalRunAllResult,
+} from "@devdigest/shared";
+
 /** UI-only view model for a PR list row (derives display fields from PrMeta). */
 export interface PrRowView {
   number: number;
