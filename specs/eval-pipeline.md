@@ -1,4 +1,4 @@
-# Spec: Eval Pipeline | Spec ID: SPEC-04 | Status: approved
+# Spec: Eval Pipeline | Spec ID: SPEC-04 | Status: implemented
 Supersedes: —
 
 A reviewer can turn their own accept/dismiss decisions on real findings into an eval set for
@@ -100,9 +100,11 @@ decision this spec records:
 7. **`verify:l06`**. Only `verify:l03` exists, and it is the model to copy.
 
 Two facts about the starting state that shape the whole feature. The workspace holds 122 real
-findings across 40 reviews and 5 agents, **and zero accepted and zero dismissed** — so the
-dataset does not exist until a human clicks decisions, and an agent with no cases is the
-**first** state every user sees, not an edge case. And the scoring makes **zero LLM calls**:
+findings across 40 reviews and 5 agents. As of this feature's implementation that dataset carries
+**8 accepted and 4 dismissed** decisions, all on `General Reviewer`, plus one real eval case
+created by a Done-condition — so most agents in the workspace still have no cases, and an agent
+with no cases remains the **first** state most users see, not an edge case (the framing is
+unchanged; only the starting count was stale). And the scoring makes **zero LLM calls**:
 the expectation is a `file:line` anchor and the match is arithmetic, so there is no judge to
 build, no judge to pay for, and no judge to disagree with itself between two runs. That last
 property is an acceptance criterion (AC-71, AC-72, AC-82), not an optimisation, because a
@@ -891,7 +893,7 @@ one existing symbol is reshaped** (N4).
 | `EvalRunRecord` | the persisted per-case row the API returns, including the three metrics and `pass` |
 | `EvalRunResult` | the single-case run response |
 | `EvalTrendPoint` | one chronological point: the three metrics, `pass_rate`, `cost_usd` |
-| `EvalDashboard` | **already the dashboard payload** — `cases_total`, `current`, `delta`, `trend`, `recent_runs`, and a nullable `alert`; its nullable `owner_kind`/`owner_id` already express "the whole workspace" |
+| `EvalDashboard` | drawn on for its **shape**, not reused as the payload — see the correction below |
 | `EvalPerTrace` | name, pass, expected, actual — the per-case row inside a run |
 | `EvalOwnerKind` | keeps `skill` **and** `agent`. The `skill` half stays unused (N1) and is not to be removed. |
 | `Finding` | the anchor source: `file`, `start_line`, `end_line`, and no guarantee that start ≤ end (AC-84) |
@@ -899,10 +901,13 @@ one existing symbol is reshaped** (N4).
 | `UnifiedDiff` | what `parseUnifiedDiff` produces and the engine consumes |
 
 **Relied upon and unchanged, in `reviewer-core`:** `wrapUntrusted` (which wraps the diff
-section of every review prompt), `groundFindings` and `groundingSummary` (which supply
-citation accuracy with no new logic), `reviewPullRequest` (the replay seam), `parseUnifiedDiff`
-and `toJsonSchema`'s numeric-keyword stripping. This spec adds a scorer beside them and
-changes none of them.
+section of every review prompt), `reviewPullRequest` (the replay seam) and `toJsonSchema`'s
+numeric-keyword stripping. This spec adds a scorer beside them and changes none of them.
+Two corrections to where the remaining two live, made once the code shipped: `parseUnifiedDiff`
+is **not** a `reviewer-core` export — it lives at `server/src/adapters/git/diff-parser.ts`,
+re-exported from `server/src/adapters/index.ts`. And `groundFindings` / `groundingSummary`
+(which supply citation accuracy with no new logic) reach the server through
+`server/src/platform/grounding.ts`, a six-line re-export shim.
 
 **New symbols, in both copies:**
 
@@ -919,6 +924,20 @@ changes none of them.
 | `EvalBatchCaseResult` | the case id, its outcome, its not-run reason, expected and actual finding counts, kept and dropped citation counts, duration and cost |
 | `EvalMetrics` | the three metrics, each **nullable**, plus the true-positive, false-negative and false-positive counts they were computed from |
 | `EvalComparison` | both batch ids, both agent version numbers, both prompt snapshots, a flag saying whether the two configurations are identical, and per metric an earlier value, a later value and a nullable signed change — for recall, precision, citation accuracy **and** cost |
+| `EvalCaseSave` | the case editor's save payload — name, input diff, expectation type and expected anchors, as submitted |
+| `EvalPeriod` | `7d` \| `30d` \| `90d` \| `all` — the dashboard's period filter (open question 6) |
+| `EvalBatchTrendPoint` | one chronological point over an agent's retained batches: the three metrics, the pass count and the cost |
+| `EvalDashboardRow` | one workspace-dashboard row: the agent's name and model, its most recent batch (including the batch id), the three metrics, and a **structured** `alert` — `{ metric, change } \| null`, not a composed sentence, so the client's own formatter is the only place a delta is worded |
+| `EvalWorkspaceDashboard` | the workspace read: one `EvalDashboardRow` per agent plus a cross-agent `recent_runs` list |
+| `EvalRunAllResult` | the response to `Run all agents` — one created batch per eligible agent, plus the id and reason of every agent skipped |
+
+**Correction to what shipped.** This section originally counted eleven new symbols and described
+the already-shipped `EvalDashboard` as "already the dashboard payload". Seventeen new symbols
+shipped, not eleven — the six rows above this note are additions the original text did not
+enumerate. And `EvalDashboard` is **not** used as the dashboard payload: its three metric fields
+(`EvalDashboard.current.recall` etc.) are `z.number()` and cannot be `null`, which AC-45 requires
+for an agent with no completed batch. `EvalWorkspaceDashboard` / `EvalDashboardRow` (both new) are
+the payload the workspace dashboard and the per-agent read actually return.
 
 **Data the two entities must carry**, stated once so no reader has to infer it from the
 criteria:
@@ -1179,8 +1198,137 @@ records the decision that now governs, so the criterion it touches has no open d
 | 7 | Who names a batch | **Unset unless a caller supplies one.** The agent version number is the identity every screen shows. |
 | 8 | Disabled agents in `Run all agents` | **Skipped, and named as skipped.** The dashboard still lists them with their last recorded metrics (AC-45) — omitting them would leave a reader unable to tell a disabled agent from a missing one. |
 
+## Data
+
+- **Contracts.** `server/src/vendor/shared/contracts/eval-batch.ts`, copied byte-identically to
+  `client/src/vendor/shared/contracts/eval-batch.ts`, 17 exported symbols; both `index.ts` barrels
+  re-export it. See the corrected `## Contracts` table above for what shipped versus what this
+  spec originally enumerated.
+- **Schema.** A new table, `eval_batches` (20 columns, 2 foreign keys, 2 indexes: `agent_id` nullable
+  with `ON DELETE SET NULL`), plus four added columns on `eval_cases` (`expectation`,
+  `source_finding_id` — nullable, no FK, `edited`, `created_at`) and seven on `eval_runs`
+  (`batch_id` — nullable, `ON DELETE CASCADE`, `outcome`, `not_run_reason`, `expected_count`,
+  `actual_count`, `kept_count`, `dropped_count`). Seven indexes total, named `<table>_<purpose>_idx`;
+  every one of the five orderings this feature relies on ends in `id` as a tiebreaker
+  (`name, id`; `started_at desc, id desc`; `case_id, ran_at desc, id desc`), which is what EC-21
+  and its neighbours ask for. Migration `server/src/db/migrations/0020_short_the_anarchist.sql`,
+  applied and verified against `information_schema` and `pg_indexes`.
+- **Endpoints**, all under the `eval` module registered in `server/src/modules/index.ts`, except
+  the last:
+  - `POST /eval/cases`, `GET /eval/agents/:agentId/cases`, `PUT /eval/cases/:caseId`,
+    `DELETE /eval/cases/:caseId`
+  - `POST /eval/agents/:agentId/batches`, `GET /eval/batches/:batchId`,
+    `GET /eval/batches/:batchId/events` (server-sent events, `rateLimit: false`)
+  - `GET /eval/agents/:agentId/batches`, `GET /eval/compare`
+  - `GET /eval/dashboard`, `GET /eval/agents/:agentId/dashboard`, `POST /eval/dashboard/runs`
+  - `POST /agents/:id/versions/:version/promote` — lives in the **agents** module and reuses
+    `AgentsRepository.update`'s existing bump-and-snapshot, rather than adding a second one.
+- **Which rows.** A case's expected anchor lives inside the shipped `eval_cases.expected_output`
+  (typed `unknown` in the contract, so no existing field was reshaped to hold it). A batch's
+  prompt and model snapshot are taken once, at `eval_batches.system_prompt_snapshot` /
+  `model_snapshot`, and never re-read even if the agent's prompt changes mid-run (AC-20, EC-20).
+  `eval_runs.batch_id` cascades, so a batch's own 50-per-agent retention delete (`eval_batches_agent_started_idx`)
+  takes its case-execution rows with it, and a deleted case's contribution to an already-recorded
+  batch's counts and metrics is unaffected (AC-17).
+
+## States
+
+- **Zero cases** — the empty state named in AC-63. As of this implementation the workspace holds
+  8 accepted and 4 dismissed decisions (all on `General Reviewer`) plus one real case created by a
+  Done-condition, so most agents in the workspace are still at this state.
+- **A batch running** — the `Evals` tab renders live per-case progress from the SSE stream in
+  place of an enabled run control (AC-64); its metric tiles keep showing the **previous**
+  completed batch's numbers until the running one finishes (EC-38) — a partial state, not an
+  empty one and not an error.
+- **A metric with a zero denominator is `null`, never `0`** (AC-34, AC-93) — "we could not measure
+  recall" and "recall is 0%" are different claims. The dashboard's trend chart (the vendored
+  `LineChart`) maps a missing value to `0`, so a `null` point is **dropped** from the series
+  rather than plotted, or the chart would draw the first claim as the second; the batch still
+  appears in the recent-runs table as `—`.
+- **`not_run`, `never run` and a failure are three distinct row states**, each carrying its own
+  word rather than colour alone (AC-59, AC-61, AC-62): a case with no recorded execution reads
+  `never run`; a case that executed but reached no outcome reads `not run` with its reason
+  (`deadline`, `provider_error`, `diff_unparseable`, `not_scorable`, `cancelled`); only an
+  executed case that scored wrong reads as failed.
+- **A deleted agent's batches stay readable**, with an "agent unavailable" marker rather than a
+  failed read (AC-49); a deleted case's contribution to a stored batch's counts is unaffected
+  (AC-17, EC-26).
+- **An agent with fewer than two completed batches has no trend to show**: its dashboard row omits
+  the sparkline rather than drawing a single point (AC-71).
+- **`Run all agents` against an agent whose previous batch is still running is not distinguishable
+  from an ordinary skip.** `EvalRunAllResult.skipped[].reason` is
+  `z.enum(['agent_disabled', 'no_cases'])` and has no member for "already running", so that
+  agent's in-flight batch is returned inside `created` rather than named as a skip. **AC-47 is
+  `partial`, not fully met** — an accepted, deliberate gap (see `## History`); widening the enum
+  is a `vendor/shared` change in both hand-synced copies, deferred by the user's decision.
+- **Nothing in this feature has been seen rendered in a browser.** Every implementation report
+  says so explicitly — a `curl` against a route proves registration, never paint. Recorded here as
+  `not checked`, not as done.
+
+## Implementation
+
+- `reviewer-core/src/eval/score.ts` (`scoreEvalBatch`, pure, one type-only import from
+  `@devdigest/shared`), exported from `reviewer-core/src/index.ts`.
+- `server/src/vendor/shared/contracts/eval-batch.ts`, byte-identical at
+  `client/src/vendor/shared/contracts/eval-batch.ts`; both barrels' `index.ts` re-export it.
+- `server/src/db/schema/eval.ts`; migration `server/src/db/migrations/0020_short_the_anarchist.sql`.
+- `server/src/modules/eval/{constants,types,helpers,repository,service,runner,schemas,routes}.ts`,
+  registered statically in `server/src/modules/index.ts`; container bindings for `eval` and
+  `diffParser` in `server/src/platform/container.ts`.
+- `server/src/modules/agents/{service,routes}.ts` — the promotion endpoint, reusing
+  `AgentsRepository.update`'s existing bump-and-snapshot.
+- `client/src/lib/eval.ts` (formatters and constants — the single point every metric change is
+  worded and unit-carrying from), `client/src/lib/hooks/eval.ts` (the read/write hooks and the
+  SSE subscription), `client/src/lib/types.ts` (contract re-exports).
+- `client/src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/**` — the tab body and
+  the `CaseEditorModal`.
+- `client/src/app/eval/**` — the workspace dashboard, the per-agent page and its `CompareModal`;
+  `client/src/vendor/ui/nav.ts` — one `SKILLS LAB` entry.
+- `client/src/app/repos/[repoId]/pulls/[number]/_components/{FindingCard,FindingsPanel}/**` — the
+  `Turn into eval case` action and its inline refusal.
+- `scripts/verify-l06.sh` (15 gates) plus `verify:l06` / `verify:l06:db` in `server/package.json`.
+- Fix round 1 (`.claude/.plans/eval-pipeline/fix-1.md`): `server/src/modules/eval/{types,runner}.ts`
+  and `server/src/platform/container.ts` (the replay now resolves the agent's current skill bodies
+  once per batch and spreads them onto `ReviewInput`, matching
+  `server/src/modules/reviews/run-executor.ts`); `server/src/modules/agents/service.ts` (promotion
+  now sets the promoted version's ordered skill ids before `update` runs, refusing with a `422`
+  naming `{ version, skill_ids }` when a snapshotted skill no longer exists in the workspace).
+
 ## History
 
 - **2026-08-23** — spec written.
 - **2026-08-23** — all eight open questions resolved at their stated defaults; promoted
   `draft` → `approved` by the spec's owner. No criterion changed.
+- **2026-08-23** — implemented across twelve tasks (T1–T12) plus a two-task fix round (FT1, FT2);
+  `Status: approved` → `implemented`. AC-43 was graded `partial` at first pass — promotion did
+  not restore a promoted version's skill links, because `AgentsRepository.update`'s patch carried
+  no skills field and `snapshotVersion` re-read the agent's *current* links, so promoting v6 while
+  v7 was current produced a v8 carrying v7's skill set. **Now met**: FT2 links the version's
+  ordered skill ids before `update` runs, and refuses the promotion with a `422` naming
+  `{ version, skill_ids }` when the snapshot references a skill no longer in the workspace.
+  AC-47 stays `partial`, an accepted gap rather than a fix: `EvalRunAllResult.skipped[].reason`
+  (`z.enum(['agent_disabled', 'no_cases'])`) cannot express "this agent already has a batch in
+  flight", so `runAllAgents` returns that agent's in-flight batch inside `created` instead of
+  naming it a skip; widening the enum is a `vendor/shared` change in both hand-synced copies,
+  deferred by the user's decision. AC-21 is now narrower than what shipped: it says a case is
+  replayed "with the batch's snapshotted prompt and model", and after the fix round the replay
+  also passes the agent's **current** linked skill bodies — not the batch's snapshot, because
+  `agent_versions.config_json.skills` stores skill ids with no version number, so a byte-for-byte
+  reproducible replay of an old batch is already impossible by this schema — resolved through the
+  same skills service the real review path uses and spread onto `ReviewInput` omit-when-empty.
+  Without this, editing a linked skill could not move a single metric, leaving one of the
+  feature's three stated levers (prompt, model, skill) dead. The criterion's text is unchanged by
+  this entry; a narrower-than-shipped AC is a decision for the spec's owner, not an edit made here.
+- **2026-08-23** — `## Contracts` corrected to what shipped: seventeen new symbols, not eleven —
+  `EvalCaseSave`, `EvalPeriod`, `EvalBatchTrendPoint`, `EvalDashboardRow`, `EvalWorkspaceDashboard`
+  and `EvalRunAllResult` were not enumerated — and the claim that the already-shipped
+  `EvalDashboard` "is already the dashboard payload" is corrected: its three metric fields are
+  `z.number()` and cannot be `null`, which AC-45 requires for an agent with no completed batch.
+  `EvalWorkspaceDashboard` / `EvalDashboardRow` are the payload that shipped instead.
+- **2026-08-23** — `## Problem & why`'s "zero accepted and zero dismissed" corrected to the
+  measured state (8 accepted, 4 dismissed, one real eval case, all on `General Reviewer`) — the
+  requirement it supports (an agent with no cases is the first state most users see) is unchanged.
+- **2026-08-23** — two locator corrections in `## Contracts`: `parseUnifiedDiff` is not a
+  `reviewer-core` export — it lives at `server/src/adapters/git/diff-parser.ts`, re-exported from
+  `server/src/adapters/index.ts` — and `groundFindings` / `groundingSummary` reach the server
+  through `server/src/platform/grounding.ts`, a six-line re-export shim.
