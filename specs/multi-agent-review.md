@@ -3,8 +3,8 @@ Supersedes: —
 
 A reviewer can choose a set of agents, fan one pull request out to all of them in one action
 with the time and cost stated **before** committing, then read the results side by side — with
-the places two or more agents landed on the same code collapsed into one group that shows each
-agent's stance, including the agents that looked and said nothing.
+every place one agent flagged and another looked at and did not collapsed into one group that
+shows each agent's stance, including the agents that looked and said nothing.
 
 ## Problem & why
 
@@ -50,9 +50,11 @@ ones.
   that can be read back, linked to and reloaded.
 - **G-4** — Show the results two ways: one column per agent (status, cost, score, findings), and
   per-agent tabs with a finding detail carrying confidence, rationale and the suggested fix.
-- **G-5** — Group findings from different agents that are about the same code location, without
-  losing a single original finding or its attribution, and show each agent's stance on that
-  location — including `did not flag`.
+- **G-5** — Group findings that are about the same code location, without losing a single
+  original finding or its attribution, and show every agent's stance on that location —
+  including `did not flag`. A location earns a group exactly when the agents did not all reach
+  the same conclusion about it: **at least one flagged it and at least one other did not**. One
+  flagging agent is enough, and a location every agent flagged earns none (AC-29, AC-100).
 - **G-6** — Reuse the existing run trace and live log unchanged: each column offers a trace
   affordance that opens the **same** drawer the pull-request page opens.
 - **G-7 — Make the fan-out actually parallel, deliberately and in place.** The executor loads
@@ -259,6 +261,17 @@ are here because the request states them:
 
 **Grouping findings across agents**
 
+**A stance is computed, never copied from the picture.** Every stance in a group is derived from
+the multi-run's persisted findings: an agent that has a finding in the group is a flagger, full
+stop, and an agent with none is `ignored`. This is worth stating because **the reference mockup
+is not internally consistent at one location**, and the shipped screen will therefore not match
+it cell for cell there. At `src/middleware/ratelimit.ts:52` the Security **column** carries a
+finding titled "Retry-After header omitted on 429", while the `:52` group in the disagreement
+block lists Security as `did not flag` with the note "No security impact"; Customer-Facing has
+two findings at the same location. A block derived from those columns by the rule below puts
+Security in that group as a flagger. The spec resolves the contradiction by rule rather than by
+copying the mockup, because a rule is the only thing an implementation can be checked against.
+
 - **AC-25** — the system **shall** group two findings of a multi-run into one location group
   when all three hold: their file paths are equal, their inclusive line ranges intersect, and
   their titles pass the similarity test of AC-26.
@@ -288,22 +301,36 @@ are here because the request states them:
   false-split rate (one problem in two groups) are counted by hand.
   `Verify: inspection` — *observable: the threshold appears once, as a named constant carrying
   that comment, and nowhere as an inline literal.*
-- **AC-29** — the system **shall** emit a location group only when the findings in it come from
-  at least two distinct agents of the multi-run.
-  `Verify: test` — *observable: a location only one agent flagged produces no group, and its
-  finding still appears in that agent's column. This is what reproduces the design's two panels
-  rather than one panel per finding: a place only one agent mentioned is not a place where the
-  agents can be compared, and the columns already show it.*
+- **AC-29** — the system **shall** emit a location group only when at least one agent of the
+  multi-run flagged the location and at least one other agent of the multi-run did not.
+  `Verify: test` — *observable: in a three-agent multi-run where one agent flagged
+  `lib/rate-limit.ts:28` and the other two did not, one group is emitted, carrying three stances
+  — one severity and two `ignored`. In a one-agent multi-run the same finding emits none, because
+  there is no second agent to be silent (EC-8). This is the design's rule: both panels on the
+  Columns screen have exactly one flagging agent — `Magic number 3600` (Junior Mentor
+  `SUGGESTION`, Security and Architecture silent) and `429 response shape` (Customer-Facing
+  `WARNING`, Performance and Security silent) — so a two-flagger entry condition would render
+  that screen with zero panels. It is also the rule the `Conflict` contract's own doc-comment
+  already states. The two-flagger condition is not discarded: it becomes the `Show only
+  conflicts` filter instead (AC-81).*
 - **AC-30** — the system **shall** include, in every group, one stance per agent of the
   multi-run: the severity that agent assigned when it flagged the location, and `ignored` when
   it did not.
   `Verify: test` — *observable: a four-agent multi-run yields four stances in every group, two of
   them `ignored`.*
-- **AC-31** — the system **shall** report a group's line as the lowest `start_line` among its
-  findings, and its title as the title of its highest-severity finding, ties broken by lowest
+- **AC-31** — WHERE the multi-run carries no synthesised label for a group, the system **shall**
+  report that group's title as the title of its highest-severity finding, ties broken by lowest
   `start_line` and then by lowest finding id.
-  `Verify: test` — *observable: a group of a `SUGGESTION` at line 30 and a `WARNING` at line 28
-  reports line 28 and the warning's title.*
+  `Verify: test` — *observable: a group of a `SUGGESTION` at line 30 and a `WARNING` at line 28,
+  read before the synthesis has run, reports the warning's title. **This is the common case, not
+  the rare one**, and the criterion is written that way on purpose: the synthesis fires only once
+  every run is terminal (AC-35), so every read taken while the fan-out is in flight — which is
+  every poll of AC-65 — renders every group under this rule, and so does every read after a
+  synthesis failure (AC-38). Its counterpart AC-101 covers the labelled case, so neither branch
+  is left unspecified (`client/INSIGHTS.md`, 2026-08-21). The tie-breaks are load-bearing for the
+  same reason any client-rendered ordering is: without them the title of a group whose two
+  findings share a severity is whatever order the rows came back in
+  (`server/INSIGHTS.md`, 2026-08-06).*
 - **AC-32** — the system **shall** order the groups of a multi-run by file path ascending, then
   line ascending, then title ascending — a total order.
   `Verify: test` — *observable: two reads of the same multi-run return the groups in the same
@@ -319,23 +346,31 @@ are here because the request states them:
 **Synthesising the stance notes**
 
 - **AC-35** — WHEN every run of a multi-run has reached a terminal status, the system **shall**
-  make exactly one structured model call to produce the stance notes for that multi-run.
+  make exactly one structured model call to produce that multi-run's stance notes and group
+  labels.
   `Verify: test` — *observable: a four-agent multi-run makes one call after the last run
-  finishes, and none before.*
+  finishes, and none before — one call carrying both outputs, never one call for the notes and a
+  second for the labels.*
 - **AC-36** — WHEN the note-synthesis call is made, the system **shall** supply it with each
   contended location and what each agent said there, and **shall** obtain one sentence per agent
   of the multi-run — including for the agents that flagged nothing.
   `Verify: test` — *observable: the returned notes cover every (group, agent) pair the read will
-  render.*
-- **AC-37** — the system **shall** persist the synthesised notes with the multi-run, so that a
-  second read returns them without a model call.
+  render. The labels the same call returns are AC-102's; this criterion is about the notes.*
+- **AC-37** — the system **shall** persist the synthesised notes and the synthesised group labels
+  with the multi-run, so that a second read returns them without a model call.
   `Verify: test` — *observable: with the provider fake counting calls, two reads of a completed
-  multi-run leave the count at one.*
+  multi-run leave the count at one, and the second read's group titles are the same labels as the
+  first's.*
 - **AC-38** — IF the note-synthesis call fails, exceeds its deadline or returns something the
-  contract cannot parse, THEN the system **shall** still return the groups with every stance
-  present and its note empty, and **shall not** fail the multi-run or any of its runs.
-  `Verify: test` — *observable: with the provider throwing, the read succeeds, every stance has
-  an empty note, and every column's status is unchanged.*
+  contract cannot parse, THEN the system **shall** still return every group, with every stance
+  present, every note empty and every title taken from the deterministic fallback of AC-31, and
+  **shall not** fail the multi-run or any of its runs.
+  `Verify: test` — *observable: with the provider throwing, the read succeeds, the group count is
+  the same as it is with a working provider, every stance has an empty note, every group's title
+  is its highest-severity finding's title, and every column's status is unchanged. This is the
+  property that keeps the synthesis droppable: nothing above it depends on the call having
+  happened, so deferring the whole cluster costs no rework anywhere else — which is why the
+  title's fallback is a requirement and not a nicety.*
 - **AC-39** — the system **shall** wrap every foreign text section of the note-synthesis prompt
   — finding titles, rationales, agent names and the code location — as delimited data, and the
   prompt template **shall** carry its own clause telling the model to treat that content as data
@@ -408,15 +443,27 @@ are here because the request states them:
   that order; the results view sits under it at `/repos/:repoId/multi-agent/:number`, and the
   shell's active-key derivation already lights the sidebar for any path containing
   `/multi-agent`.*
-- **AC-53** — the system **shall** list, in the pull-request step, every pull request of the one
-  repository the route is scoped to, ordered by pull-request number descending, with **no cap and
-  no truncation**.
-  `Verify: test` — *observable: the query is the repository's existing pull-request list read —
-  the same one the pull-request list screen uses, so the two screens cannot disagree about which
-  pull requests exist; the options come back in strictly descending number order, which is a
-  total order because the number is unique per repository; and a repository with 400 pull
-  requests yields 400 options, because a cap would silently hide the pull request the reviewer
-  came for (EC-20).*
+- **AC-53** — the system **shall** list, in the pull-request step, every **open** pull request of
+  the one repository the route is scoped to, ordered by pull-request number descending, with **no
+  cap and no truncation**.
+  `Verify: test` — *observable: **open** means the pull request's status is neither `merged` nor
+  `closed`. Those two are the only values `PrStatus` carries that come from GitHub's own state;
+  the other three (`needs_review`, `reviewed`, `stale`) are review statuses the server derives
+  for a pull request that is open, so "not merged and not closed" is the whole of the definition
+  and no new column is needed for it. A repository holding 7 pull requests of which 5 are open
+  yields 5 options, which is the design's picker — five entries against a sidebar badge of 7. The
+  options come back in strictly descending number order, which is a total order because the
+  number is unique per repository; and a repository with 400 open pull requests yields 400
+  options, because a cap would silently hide the pull request the reviewer came for (EC-20). The
+  sidebar's Pull Requests badge is **not** this count — it counts `needs_review` alone — so the
+  two numbers legitimately differ, and neither is to be changed to agree with the other.*
+
+**The two pickers are deliberately asymmetric, and that is not an inconsistency.** The
+Configure-run screen's pull-request step lists open pull requests only, because its job is to
+choose something still worth reviewing. The **pull-request page's** agent picker (AC-45 to AC-51)
+is unaffected: it already knows which pull request it is on, so there is nothing to filter, and a
+merged or closed pull request can still be fanned out from there — which is what EC-21 allows and
+what the pull-request page's existing merged/closed warning already covers.
 - **AC-54** — WHILE no pull request is selected, the system **shall** render the agent step in a
   disabled state carrying an explanation of what to do first, and **shall** keep the run action
   disabled.
@@ -457,8 +504,12 @@ are here because the request states them:
   multi-run, whose header carries the agent's name, that run's status, its cost and its score.
   `Verify: test` — *observable: four columns for a four-agent multi-run, each naming its agent.*
 - **AC-63** — the system **shall** render each column's findings as rows carrying the severity,
-  the title and the file and line.
-  `Verify: test` — *observable: a column with three findings renders three rows with their paths.*
+  the category, the title and the file and line.
+  `Verify: test` — *observable: a column with three findings renders three rows with their paths,
+  each row also naming its finding's category beside the title — one of the five values
+  `FindingCategory` allows (`bug`, `security`, `perf`, `style`, `test`), which is what the design
+  draws as a small tag. `AgentColumnFinding` already carries `category`, so this renders an
+  existing field and adds none.*
 - **AC-64** — WHEN a column's trace affordance is activated, the system **shall** open the same
   run-trace drawer the pull-request page opens, for that column's run.
   `Verify: inspection` — *observable: exactly one `RunTraceDrawer` implementation exists in the
@@ -527,15 +578,24 @@ are here because the request states them:
   `Verify: inspection` — *observable: the block carries one statement saying the sentences are
   generated from what each agent reported; no note is presented as a quotation.*
 - **AC-81** — WHEN the `Show only conflicts` control is enabled, the system **shall** keep only
-  those groups whose stances carry **more than one distinct verdict value**, counting `ignored`
-  as a value, and **shall** hide every group in which every agent of the multi-run assigned the
-  same severity.
-  `Verify: test` — *observable: a four-agent group whose four stances all read `WARNING`
-  disappears; a group of one `WARNING`, one `SUGGESTION` and two `ignored` stays; a group of two
-  `WARNING` and two `ignored` stays, because "two flagged it and two did not" is a disagreement.
-  The baseline the toggle narrows is already multi-agent — AC-29 admits a group only when two or
-  more agents flagged the location — so what the toggle removes is precisely the unanimous
-  groups, which is the narrow set: the places where the agents genuinely agreed.*
+  those groups that **two or more agents of the multi-run flagged**.
+  `Verify: test` — *observable: three cases, against a four-agent multi-run. One `WARNING` and
+  three `ignored` **disappears** — one flagger. One `WARNING`, one `SUGGESTION` and two `ignored`
+  **stays** — two flaggers. Two `WARNING` and two `ignored` **stays** — two flaggers, even though
+  the two agree on the severity.*
+  The old rule — "the stances carry more than one distinct verdict value, counting `ignored` as a
+  value" — is **not** merely narrower under AC-29's new entry condition, it is a no-op: every
+  group now has, by construction, at least one flagger contributing a severity and at least one
+  silent agent contributing `ignored`, so the test is true of every group and the toggle would
+  filter nothing. The old entry condition becomes the filter instead: the block is the merged
+  picture, and the toggle narrows it to the locations where more than one agent had something to
+  say. The alternative narrowing — *the flagging agents carry more than one distinct severity* —
+  was considered and **rejected because it returns nothing on the design's own demo data**, where
+  both groups have exactly one flagger; a toggle that empties the block on the reference screen
+  is not a filter anyone will trust. **The naming tension is real and is kept deliberately:** two
+  agents both flagging a location is an *overlap*, not literally a *conflict*, and the control is
+  named `Show only conflicts` in the design and in the already-written `conflicts.*` copy. The
+  name stays; this criterion is where the discrepancy is on the record.
 - **AC-82** — IF a multi-run has no groups, THEN the system **shall** render the block's empty
   state rather than omitting the block.
   `Verify: test` — *observable: the empty copy from the `runs` namespace is rendered.*
@@ -659,6 +719,55 @@ list), and mounts the drawer only while the param is set.
   quietly dropped a section would pass a typecheck, which is why this is a test rather than an
   inspection.*
 
+### AC-100 … AC-105 — the design review (server, then client)
+
+Six criteria added after the six reference screens were compared to this spec directly. They are
+appended rather than renumbered into the blocks above so that every `AC-n` already quoted in a
+plan, a task or a review finding still means what it meant. Four of them state the second half of
+a rule amended above — the case an amended criterion would otherwise leave implicit, which is the
+half a downstream check cannot see (`server/INSIGHTS.md`, 2026-08-19).
+
+- **AC-100** — IF every agent of a multi-run flagged a location, THEN the system **shall** emit
+  no group for that location.
+  `Verify: test` — *observable: a three-agent multi-run in which all three flagged
+  `lib/rate-limit.ts:28` yields zero groups, and all three findings still appear in their own
+  columns. This is the half of AC-29 a reader will otherwise take for a bug: the block is named
+  "where agents disagree", and a location every agent flagged carries no disagreement to show. It
+  is also the reason the block can shrink when a **later** agent agrees with an earlier one.*
+- **AC-101** — WHERE the multi-run carries a synthesised label for a group, the system **shall**
+  report that label as the group's title.
+  `Verify: test` — *observable: a group whose findings are titled "Retry-After header omitted on
+  429" and "429 body has no machine-readable error code" reports the synthesised
+  `429 response shape` — a phrase that is no finding's title, which is why the label has to be
+  produced rather than selected, and which is what the design's own panel headers are. AC-31
+  covers the unlabelled case, so the pair specifies both branches rather than only the optional
+  one (`client/INSIGHTS.md`, 2026-08-21).*
+- **AC-102** — WHEN the note-synthesis call is made, the system **shall** obtain from that same
+  call one short label per group of the multi-run.
+  `Verify: test` — *observable: with three groups and four agents, the one call AC-35 counts
+  returns three labels and twelve notes; the call count stays at one. Adding a second model call
+  for the labels would fail this criterion even if every label were right.*
+- **AC-103** — the system **shall** report a group's line as the lowest `start_line` among its
+  findings.
+  `Verify: test` — *observable: a group of a `SUGGESTION` at line 30 and a `WARNING` at line 28
+  reports line 28. This rule was the first half of AC-31 before the synthesised label arrived; it
+  is unchanged, and it is stated separately so that a group's line and a group's title can be
+  marked met or unmet independently.*
+- **AC-104** — the system **shall** render each finding's category beside its title in tabs mode,
+  in the collapsed row and in the expanded one.
+  `Verify: test` — *observable: a finding of category `bug` shows that word before it is expanded
+  and still shows it after — the design draws the tag in both states, on two different agents'
+  tabs, so it is not one tab's decoration. The value comes from `AgentColumnFinding.category`,
+  which already exists; no contract field is added, and the same field is what AC-63 renders in
+  columns mode.*
+- **AC-105** — IF the repository has no open pull request, THEN the system **shall** render the
+  pull-request step's empty state saying so, rather than an empty list or a picker with no
+  options.
+  `Verify: test` — *observable: a repository whose every pull request is merged or closed renders
+  the empty copy from the `runs` namespace, the agent step stays disabled (AC-54) and the run
+  action stays disabled. This case did not exist while the step listed every pull request; AC-53
+  creates it.*
+
 ## Edge cases
 
 - **EC-1** — `agentIds` contains the same id twice. The system runs that agent once; a duplicate
@@ -674,7 +783,7 @@ list), and mounts the drawer only while the param is set.
   one reads `failed`; the multi-run's total cost sums the three, and the note synthesis still
   runs.
 - **EC-5** — every run of a multi-run fails. There are no findings, therefore no groups; the
-  disagreement block renders its empty state and no model call is made for notes.
+  disagreement block renders its empty state and no model call is made for notes or labels.
 - **EC-6** — a column is `running` but its model call has not started, because the concurrency
   bound is holding it — a real case now that the bound is 4 and the cap is 8. `agent_runs` has no
   `queued` status; a row is `running` from creation, so the column reads as running while idle
@@ -683,12 +792,20 @@ list), and mounts the drawer only while the param is set.
 - **EC-7** — a run is cancelled mid-fan-out. Its column reads `cancelled`; its cost is null; it
   still receives a stance of `ignored` in every group.
 - **EC-8** — the reviewer selects one agent. The screen renders one column, and the disagreement
-  block is empty by construction, because a group needs two distinct agents.
-- **EC-9** — two agents flag intersecting ranges with unrelated titles. Two groups, or none if
-  neither location has a second agent on it — the similarity test is what stops "same lines" from
-  meaning "same problem".
-- **EC-10** — three agents flag the same location and all assign `WARNING`. That is a group, and
-  it is hidden by `Show only conflicts` because there is no disagreement in it.
+  block is empty by construction — **and the reason has changed with AC-29**: it is no longer
+  "a group needs two flagging agents" but "a group needs an agent that stayed silent", and a
+  one-agent multi-run has no second agent to be silent. The outcome is the same and the rule
+  behind it is not, which is why the reason is written out rather than left to be re-derived.
+- **EC-9** — two agents flag intersecting ranges with unrelated titles. The similarity test
+  refuses to merge them, so they are two separate locations rather than one; each becomes its own
+  group as long as some agent of the multi-run stayed silent on it, and each carries the other
+  agent as `ignored`. The similarity test is what stops "same lines" from meaning "same problem".
+- **EC-10** — three agents of a four-agent multi-run flag the same location and all assign
+  `WARNING`; the fourth stays silent. That is a group — one agent did not flag it — and
+  `Show only conflicts` **keeps** it, because three agents flagged it. Had all four flagged it
+  there would be no group at all (AC-100). Under the pre-amendment rules this case was a group
+  that the toggle hid; both halves of that sentence are now wrong, and it is kept here as the
+  worked example of what changed.
 - **EC-11** — an agent produces two findings that both fall in one group. It contributes one
   stance, carrying the higher severity of the two; both findings remain visible in its column.
 - **EC-12** — a finding's `start_line` is greater than its `end_line`. The range is normalised
@@ -696,12 +813,18 @@ list), and mounts the drawer only while the param is set.
 - **EC-13** — a finding cites a line outside the diff. It never reaches this feature: the
   grounding gate drops it at run time. This feature relies on that and does not restate it.
 - **EC-14** — the note-synthesis call returns a note for an agent that is not in the multi-run,
-  or omits one that is. Unknown agents are discarded; a missing note renders as empty.
-- **EC-15** — the note-synthesis response contains an instruction ("ignore the other agents").
-  It is data. It is rendered as a sentence and interpreted by nothing.
-- **EC-16** — a finding title is 300 characters long, or a stance note is a paragraph. The panel
-  cells are of equal width; long text wraps or is clipped with the full text reachable, and never
-  pushes a neighbouring agent's cell off the row.
+  or omits one that is; or it returns a label for a location that is not a group, or omits one
+  for a group that is. Unknown agents and unknown locations are discarded; a missing note renders
+  as empty and a missing label falls back to AC-31's title, per group, so one absent label does
+  not cost the other groups theirs.
+- **EC-15** — the note-synthesis response contains an instruction ("ignore the other agents"),
+  in a note or in a group label. It is data either way. It is rendered as a sentence or as a
+  heading and interpreted by nothing.
+- **EC-16** — a finding title is 300 characters long, a stance note is a paragraph, or a
+  synthesised group label comes back as a sentence rather than a phrase. The panel cells are of
+  equal width; long text wraps or is clipped with the full text reachable, and never pushes a
+  neighbouring agent's cell off the row. A label is asked for as a short phrase and is not
+  guaranteed to be one, so the panel header is sized for the case where it is not.
 - **EC-17** — two agents in the workspace share a name. `agents.name` has no unique constraint.
   Columns, tabs and stances are keyed on the agent id, and two identically named columns are
   legal.
@@ -709,11 +832,16 @@ list), and mounts the drawer only while the param is set.
   colour collides; this is why AC-88 requires the name in text.
 - **EC-19** — the multi-run's pull request is deleted. `multi_agent_runs.pr_id` cascades, so the
   multi-run goes with it and the read answers `404`.
-- **EC-20** — the repository has 400 pull requests. The Configure-run picker lists all of them in
-  descending number order; nothing is truncated, because a truncated list silently hides the pull
-  request the reviewer came for.
-- **EC-21** — the pull request is merged or closed. The run is allowed; the pull-request page
-  already warns on that condition and this feature does not add a second gate.
+- **EC-20** — the repository has 400 **open** pull requests. The Configure-run picker lists all
+  400 in descending number order; nothing is truncated, because a truncated list silently hides
+  the pull request the reviewer came for. Merged and closed ones are not among them and are not
+  counted toward any cap, because there is no cap (AC-53).
+- **EC-21** — the pull request is merged or closed. The run is **allowed**, and no route refuses
+  it: the pull-request page already warns on that condition and this feature does not add a
+  second gate. What AC-53 changes is only which pull requests the Configure-run screen *offers*,
+  and that is a picker's default rather than a rule about what may be reviewed — a merged pull
+  request is still reachable from its own page, and its fan-out still works. The two statements
+  are consistent: one is about discovery, the other about permission.
 - **EC-22** — a second reviewer opens the results view while the first is running the fan-out.
   Both see the same server-side state; there is no client-held run state to disagree about.
 - **EC-23** — the browser is offline, or the API is unreachable. The results view renders the
@@ -740,6 +868,20 @@ list), and mounts the drawer only while the param is set.
 - **EC-30** — the `?trace=` param names a run that belongs to no column of this multi-run, by a
   hand-edited URL or a stale link. Nothing is opened for a run this view does not own, and the
   param is treated as absent rather than as an error.
+- **EC-31** — the repository has no open pull request, because everything it holds is merged or
+  closed. The Configure-run screen's pull-request step says so (AC-105) instead of offering an
+  empty control. The case is new: it could not arise while the step listed every pull request, so
+  it arrives with AC-53 rather than with the screen.
+- **EC-32** — a group's title changes between two polls, because the note synthesis landed in
+  between: the reader sees the fallback title first and the synthesised label afterwards. This is
+  the intended arrival of the label and not a defect. Nothing else about the group moves — a
+  group's identity is its file and its line (AC-103), not its title, so no group appears or
+  disappears on that read. Two groups **can** share a file and a line and be separated only by
+  their titles — that is exactly EC-9 — and for those two the label's arrival can swap their
+  order, because AC-32 sorts on the title the reader is shown. Sorting instead on the fallback
+  title would keep the order stable at the cost of a visible list that is not in the order of its
+  own visible titles, which is the worse of the two; the swap happens once, on the read that
+  changes the titles anyway.
 
 ## Cross-module interactions
 
@@ -779,7 +921,7 @@ sequenceDiagram
     Llm-->>Engine: findings, or an error
     Engine-->>Reviews: grounded findings, cost, duration
     Multi->>Llm: ONE call, each agent stance per contended location
-    Llm-->>Multi: one sentence per agent, persisted with the multi-run
+    Llm-->>Multi: a sentence per agent and a label per group, both persisted
     loop while any column is not terminal
         Client->>Multi: read the latest multi-run for this pull request
         Multi-->>Client: columns and groups from persisted findings
@@ -819,10 +961,10 @@ appear in exactly two files, the two copies of the contract that declares them.
 |---|---|
 | `MultiAgentRun` | the whole read: id, pull request, `ran_at`, agent count, total duration, total cost, columns, groups |
 | `AgentColumn` | one agent's column — run id, agent id and name, provider, model, status, verdict, score, summary, duration, cost, findings |
-| `Conflict` | one location group: file, line, title, stances. Its single `line` is kept — AC-31 defines it as the group's lowest `start_line`, which is what the design renders |
+| `Conflict` | one location group: file, line, title, stances. Its single `line` is kept — AC-103 defines it as the group's lowest `start_line`, which is what the design renders. Its `title` needs no change either, but **what fills it does**: the synthesised label when the multi-run has one (AC-101), and the highest-severity finding's title otherwise (AC-31). A reader of the type cannot tell those apart, which is why both criteria exist. Its doc-comment already states this feature's entry condition — "a file:line that at least one agent flagged and at least one other agent (that also reviewed) did NOT" — and AC-29 now matches it rather than being stricter than it |
 | `ConflictTake` | one agent's stance: agent id, persona, verdict or `ignored`, note. Unchanged; an unavailable note is the empty string |
 | `Severity` | the three severities a stance can carry beside `ignored` |
-| `Finding` / `FindingRecord` | every field the detail panel needs already exists — `rationale`, `suggestion`, `confidence`, `accepted_at`, `dismissed_at`. No new finding field |
+| `Finding` / `FindingRecord` | every field the detail panel needs already exists — `rationale`, `suggestion`, `confidence`, `accepted_at`, `dismissed_at`. No new finding field. `category` is among the ones that already exist, on `Finding` as the five-value `FindingCategory` enum and on `AgentColumnFinding` as a string; the design's row tags render it (AC-63, AC-104) and nothing about the field changes |
 | `RunRequest` | **untouched.** The new selector arrives as a new symbol that extends it, not as an edit to it |
 | `RunTrace`, `RunEvent`, `RunSummary` | the trace and live log, relied upon and unchanged |
 | `Agent` | the picker's rows. It carries **no colour**, which is why AC-88 exists |
@@ -849,8 +991,10 @@ of DDL:
   `agent_runs` has no reference to `multi_agent_runs` — so this needs a schema change and a
   generated migration. It is what AC-2 and AC-15 rest on, and it is the one migration this
   feature ships.
-- **The synthesised stance notes must be stored with the multi-run**, keyed so that a note can
-  be matched to one (location, agent) pair on read (AC-37).
+- **The synthesised stance notes and the synthesised group labels must be stored with the
+  multi-run**, keyed so that a note can be matched to one (location, agent) pair and a label to
+  one location, on read (AC-37). They are stored together because one call produces both
+  (AC-35), and a read that found the notes but not the labels would make a second call.
 - **`multi_agent_runs` already exists** with a workspace, a pull request and a timestamp, and is
   written by nothing. It is the parent record; it is not dead schema to replace.
 - **The note-synthesis model is its own `FEATURE_MODELS` entry**, so it can be changed from
@@ -894,7 +1038,9 @@ reader can move it deliberately.
   start. It is a bounded set of indexed row reads plus arithmetic over persisted findings;
   nothing is recomputed from a diff and no model is called (AC-23).
 - **Estimate read: p95 < 200 ms** at 8 agents × 10 sampled runs. One grouped aggregate.
-- **Note synthesis: one structured call per multi-run, deadline 60 000 ms, retries disabled.**
+- **Note synthesis: one structured call per multi-run — carrying both the stance notes and the
+  group labels — deadline 60 000 ms, retries disabled.** The labels ride the same call and move
+  none of these numbers; a second call for them would double the budget for one phrase per group.
   Load-bearing rather than tidy: `StructuredRequest.timeoutMs` is silently ignored and
   `maxRetries` defaults to two, so an *unbounded* call is three attempts of up to 90 s — 270 s
   for one sentence per agent (`server/INSIGHTS.md`, 2026-08-06). 60 s is generous for a call over
@@ -966,7 +1112,10 @@ reader can move it deliberately.
 | A column's score | the run's `reviews` row, not `agent_runs.score` | the review | yes |
 | A column's cost and duration | `agent_runs` | the run | yes |
 | The location groups | computed on read from the multi-run's persisted findings | this feature | **no** |
-| The stance notes | one structured model call after every run is terminal | the model | **no** |
+| The stance notes and the group labels | one structured model call after every run is terminal | the model | **no** |
+| A group's title before that call lands | the highest-severity finding's own title, deterministically (AC-31) | the findings | yes — no new data; it is the state every read sees while the fan-out is in flight |
+| A finding's category | `findings.category`, already carried through to `AgentColumnFinding` | the review that produced the finding | yes — persisted and unread by any screen until now |
+| Which pull requests the Configure-run step offers | the repository's pull-request list, restricted to those whose status is neither `merged` nor `closed` | the pulls module | yes — the status column and its GitHub-derived values already exist |
 | The run trace and live log | the existing trace document and SSE stream | the reviews module | yes, unchanged |
 | Screen copy | the `runs` message namespace, plus the shell's `multi-agent` label | the client | mostly written and unused — see below |
 
@@ -1002,7 +1151,10 @@ Yes — this feature reads, groups and replays foreign text, and it handles all 
   system or inside a model.
 - **The synthesis output.** Model-authored prose about model-authored prose. It is stored and
   rendered as a sentence; nothing branches on it, and it can create, delete or reclassify no
-  finding.
+  finding. **Since this amendment it also supplies a group's title** (AC-101), which is more
+  prominent than a note and no more trusted: it is a string rendered as a heading, it decides
+  nothing, and a group's identity remains its file and its line. A label that arrives as an
+  instruction is rendered as an instruction-shaped heading and obeyed by nobody (EC-15).
 - **Agent names and personas.** Workspace-authored, and rendered as labels.
 
 Two invariants of `reviewer-core` this feature depends on and does not redefine: the
@@ -1044,7 +1196,7 @@ than a new requirement.
 | AC-28 | US-5 | server | inspection |
 | AC-29 | US-5, EC-8 | server | test |
 | AC-30 | US-5 | server | test |
-| AC-31 | US-5, EC-12 | server | test |
+| AC-31 | US-5, EC-32 | server | test |
 | AC-32 | US-5 | server | test |
 | AC-33 | US-7, EC-11 | server | test |
 | AC-34 | US-7 | server | test |
@@ -1113,6 +1265,12 @@ than a new requirement.
 | AC-97 | US-3, EC-4 | client | test |
 | AC-98 | US-3, EC-29 | client | test |
 | AC-99 | US-3 | client | test |
+| AC-100 | US-5, EC-10 | server | test |
+| AC-101 | US-5 | server | test |
+| AC-102 | US-5 | server | test |
+| AC-103 | US-5, EC-12 | server | test |
+| AC-104 | US-4 | client | test |
+| AC-105 | US-1, EC-31 | client | test |
 | — | EC-1 | — | `accepted` — a duplicate id is deduplicated silently; refusing it would fail a request whose intent is unambiguous |
 | — | EC-2 | — | `accepted` — the null-agent fallback key is a repository-wide rule, not this feature's behaviour to re-verify |
 | — | EC-3 | — | covered by AC-14's mechanism; the pre-work failure path already fails every queued run |
@@ -1126,8 +1284,9 @@ than a new requirement.
 
 ## Open questions — none
 
-All twelve are answered and each is now a criterion or a constraint above. Recorded here so a
-reader can see which decisions were made deliberately rather than by default, and what would
+All sixteen are answered and each is now a criterion or a constraint above — twelve settled the
+day the spec was written, four more settled by the design review of 2026-08-25. Recorded here so
+a reader can see which decisions were made deliberately rather than by default, and what would
 reopen each:
 
 | # | Decision | Where it now lives | What would reopen it |
@@ -1135,7 +1294,7 @@ reopen each:
 | 1 | The per-agent loop becomes bounded-concurrent, knowingly changing the existing `all: true` path | G-7, AC-12, AC-89–AC-92 | a provider concurrency limit that 4 in flight trips |
 | 2 | The note synthesis gets its own `FEATURE_MODELS` entry, defaulting to an OpenRouter model | Contracts | the Settings picker learning about providers |
 | 3 | Both screens are repo-scoped under `/repos/:repoId/multi-agent`; the sidebar entry joins `WORKSPACE` | AC-52, AC-85 | a cross-repository fan-out, which is a different picker and a different query |
-| 4 | A group needs ≥2 distinct flagging agents; titles are similar at Jaccard ≥ 0.4 | AC-25–AC-29 | the hand-count of false merges and false splits AC-28 names |
+| 4 | A group needs ≥1 flagging agent **and** ≥1 silent one; titles are similar at Jaccard ≥ 0.4 | AC-25–AC-29, AC-100 | the hand-count of false merges and false splits AC-28 names |
 | 5 | ≤ 8 agents per multi-run | AC-8, scale | a workspace that legitimately runs more |
 | 6 | ≤ 4 agent runs in flight | AC-12, scale | the same measurement as 1 |
 | 7 | A second multi-run while one is in flight is refused with `409`; the review route gains no such guard | AC-9, AC-11 | a reviewer who genuinely wants two fan-outs at once |
@@ -1144,6 +1303,10 @@ reopen each:
 | 10 | Sidebar shortcut `g m` | AC-85 | a collision with a later screen |
 | 11 | The detail fields go on `AgentColumnFinding`, so the results view is one read | Contracts | nothing foreseen; the alternative is strictly worse |
 | 12 | The trace drawer moves, as a pure relocation with its test | C-3, AC-99 | nothing foreseen |
+| 13 | `Show only conflicts` narrows to the groups **two or more agents flagged**, keeping a name that says *conflict* for a set that means *overlap* | AC-81 | a rename of the control, or demo data on which a severity-divergence filter returns something |
+| 14 | A group's title is synthesised by the same call that writes the notes, over a deterministic fallback | AC-31, AC-101, AC-102, AC-38 | a measurement showing the labels are worse than the finding titles they replace |
+| 15 | The Configure-run pull-request step lists open pull requests only; the PR-page picker is unfiltered | AC-53, EC-21, EC-31 | a reviewer who routinely fans out over merged pull requests from the Configure screen |
+| 16 | Finding rows carry the category tag in both modes, from the field the contract already has | AC-63, AC-104 | nothing foreseen; the field is persisted and was simply unread |
 
 ## History
 
@@ -1155,5 +1318,21 @@ when the feature lands.
 
 - **2026-08-25** — spec written. Twelve open questions were raised and answered the same day;
   the decisions and what would reopen each are in `## Open questions`.
+- **2026-08-25** — amended after the six reference screens were compared to the spec directly,
+  which the first pass could not do — it was written against a textual description of the design.
+  Four discrepancies, all decided rather than opened. **The grouping entry condition** moved from
+  "≥2 distinct agents flagged" to "≥1 flagged and ≥1 did not" (AC-29, AC-100), because both
+  panels on the Columns screen have exactly one flagging agent and the old rule rendered that
+  screen empty. **`Show only conflicts`** was redefined to "two or more agents flagged" (AC-81),
+  because the new entry condition made the old verdict-diversity test true of every group.
+  **A group's title** is now a label synthesised by the existing note-synthesis call (AC-101,
+  AC-102), over the old highest-severity-finding rule kept as the deterministic fallback (AC-31)
+  so the synthesis cluster stays droppable. **The Configure-run pull-request step** lists open
+  pull requests only (AC-53). One rendering addition came with them: finding rows carry the
+  category tag the screens draw (AC-63, AC-104), from a contract field that already exists.
+  AC-1 to AC-99 keep their numbers; the six new criteria are AC-100 to AC-105, and AC-31's
+  line rule moved to AC-103 so a group's line and its title can be verified apart. Three edge
+  cases were restated (EC-8, EC-9, EC-10), six extended (EC-5, EC-14, EC-15, EC-16, EC-20,
+  EC-21) and two added (EC-31, EC-32). No contract gains a field.
 </content>
 </invoke>
