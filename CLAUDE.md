@@ -6,7 +6,7 @@ adds one feature.
 ## Before answering
 
 Search the curated docs FIRST — they may already answer it — then read code. In each
-package (`client`, `server`, `reviewer-core`, `e2e`, `mcp-server`, `evals`):
+package (`client`, `server`, `reviewer-core`, `e2e`, `mcp-server`, `evals`, `agent-runner`):
 
 - `INSIGHTS.md` — dated, file-grounded findings; always present
 - `docs/` — curated deep-dives; start at `docs/README.md`
@@ -31,6 +31,13 @@ subagents and `CLAUDE.md` — not a product package. It has `INSIGHTS.md` (SDK q
 measurement traps) and a long `README.md` that carries the rules, plus a thin `docs/` with one
 design note. It has **no `CLAUDE.md`** and **no `specs/`**: what it must do is the README, and
 what it measures is the case files in `evals/{skills,agents,workflow}/`.
+
+**And one package that ships outward:** `agent-runner/` is the CI runner — ncc-bundled into a
+single `dist/index.js` and executed by a **target** repo's GitHub Actions, outside this server,
+its DI graph and its Postgres. It has `CLAUDE.md` and `README.md` like the rest, but **no
+`docs/`** and **no `specs/`**, and its journal lives at `agent-runner/insights/INSIGHTS.md` —
+**not** at the package root. It is the one package where the `INSIGHTS.md` path in the session
+protocol below is different, so look for it there before concluding the file is missing.
 
 ## Session protocol (engineering-insights loop)
 
@@ -86,7 +93,8 @@ Never hand-edit:
 
 - Stack, commands, architecture, how to run → read `README.md`
 - Working inside a package → read that package's CLAUDE.md: `server/CLAUDE.md`,
-  `client/CLAUDE.md`, `reviewer-core/CLAUDE.md`, `e2e/CLAUDE.md`, `mcp-server/CLAUDE.md`
+  `client/CLAUDE.md`, `reviewer-core/CLAUDE.md`, `e2e/CLAUDE.md`, `mcp-server/CLAUDE.md`,
+  `agent-runner/CLAUDE.md`
 - Agent prompt templates → read `docs/agent-prompts/`
 - Skill bodies meant to be **imported** rather than seeded → read `docs/skills/`
 - Writing a feature spec → read `docs/specs-convention.md`

@@ -19,6 +19,17 @@ agent-runner/
 └── vitest.config.ts      # hermetic tests, LLM stubbed
 ```
 
+## Gotchas
+
+`pnpm install` alone leaves this package unusable. pnpm 11 blocks the postinstall script of
+`esbuild` (a transitive dep of vitest) and then fails **every** `pnpm <script>` here with
+`ERR_PNPM_IGNORED_BUILDS` — `pnpm typecheck` and `pnpm test` exit 1 inside pnpm's pre-run
+dependency check, before `tsc` or `vitest` is ever spawned, so the error names esbuild and never
+the command you ran. Run `pnpm approve-builds esbuild` once. It writes the tracked
+`pnpm-workspace.yaml`, which despite the filename is a settings file, **not** a workspace
+declaration — it carries no `packages:` key and this repo is still not a monorepo. Details:
+`insights/INSIGHTS.md` (2026-08-25).
+
 ## What This Package Does
 
 1. Reads the checked-in `.devdigest/agents/<slug>.yaml` manifest and `.devdigest/skills/*.md` from
