@@ -1,4 +1,4 @@
-# Spec: Export to CI | Spec ID: SPEC-05 | Status: draft
+# Spec: Export to CI | Spec ID: SPEC-05 | Status: approved
 Supersedes: —
 
 A reviewer can take an agent they tuned in the studio and put it to work on a real
