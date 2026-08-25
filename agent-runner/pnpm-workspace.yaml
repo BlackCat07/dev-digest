@@ -1,0 +1,12 @@
+# NOT a workspace declaration — this repo is deliberately not a pnpm workspace
+# (see the root CLAUDE.md). pnpm 11 moved package-level settings out of
+# package.json's "pnpm" field and out of .npmrc into this file, so it is the
+# only place this setting is still read.
+#
+# esbuild (a transitive dep of vitest) ships a postinstall script. pnpm 11
+# blocks build scripts by default and then fails EVERY `pnpm <script>` in this
+# package with ERR_PNPM_IGNORED_BUILDS — `pnpm test` and `pnpm typecheck`
+# both exit 1 before the command itself ever runs. Written by
+# `pnpm approve-builds esbuild`.
+allowBuilds:
+  esbuild: true
