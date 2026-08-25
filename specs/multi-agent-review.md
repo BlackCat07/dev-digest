@@ -1,4 +1,4 @@
-# Spec: Multi-Agent Review | Spec ID: SPEC-05 | Status: draft
+# Spec: Multi-Agent Review | Spec ID: SPEC-05 | Status: approved
 Supersedes: —
 
 A reviewer can choose a set of agents, fan one pull request out to all of them in one action
@@ -1336,3 +1336,6 @@ when the feature lands.
   EC-21) and two added (EC-31, EC-32). No contract gains a field.
 </content>
 </invoke>
+
+- 2026-08-25 — `draft` → `approved`. The 105 acceptance criteria were agreed by the
+  author of the request, on the record, as the gate before implementation began.
