@@ -357,6 +357,26 @@ Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
 
+- **2026-08-24** — **Deleting every `reviews` and `agent_runs` row for a repo does NOT reset its
+  pull requests to `needs_review` — the list status is DERIVED from
+  `pull_requests.last_reviewed_sha`, which no delete touches.** `deriveReviewStatus` compares
+  that column against `head_sha` and never reads a review row, so a wipe that misses it leaves
+  the whole list showing `reviewed`/`stale` with no score, no cost and no findings behind it —
+  the one state the screen cannot otherwise reach. The column survives because it has a single
+  writer (`markReviewed`, called on the run's success path) and neither an FK nor a cascade
+  pointing at it. A demo reset for one repo is therefore four statements, not two: delete
+  `reviews` by `pr_id` (findings cascade via `findings.review_id`), delete `agent_runs` by
+  `pr_id` (`run_traces` + `run_skills` cascade), delete `pr_intent` / `pr_brief` if the
+  derivations should re-run, then `UPDATE pull_requests SET last_reviewed_sha = NULL`. Two
+  things that look wrong afterwards and are not: closed PRs still read `Closed`, because the
+  `pull_requests.status` column is GitHub's merge state and `deriveReviewStatus` returns it
+  untouched; and `eval_cases` survive the findings they came from by design
+  (`source_finding_id` carries no FK, `schema/eval.ts`). No API restart is needed — unlike the
+  re-seed case in Recurring Errors (2026-08-06), the workspace row is not recreated, so the
+  memoised `currentWorkspace` stays valid. Evidence: `src/modules/pulls/status.ts`
+  (`deriveReviewStatus`), `src/db/schema/pulls.ts` (`lastReviewedSha`),
+  `src/modules/reviews/repository/pull.repo.ts` (`markReviewed`).
+
 - **2026-08-23** — **`AgentsRepository.snapshotVersion` re-reads `skillIdsForAgent(row.id)` from
   INSIDE `update`, so a caller that wants the new version's snapshot to record a particular skill
   set must write the links BEFORE calling `update`.** Writing them after leaves the snapshot
