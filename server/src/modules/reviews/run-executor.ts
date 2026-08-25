@@ -5,7 +5,7 @@ import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
-import { REVIEW_STRATEGY } from './constants.js';
+import { MAX_CONCURRENT_AGENT_RUNS, REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 
@@ -118,7 +118,8 @@ const INTENT_INLINE_BUDGET_MS = 10_000;
  * Owns the background execution of queued agent runs (extracted from
  * ReviewService; behaviour unchanged). Loads the diff and derives the intent
  * once — concurrently, and the intent only until the review's own budget runs
- * out — then map-reduces each agent, streaming events over the runBus and
+ * out — then runs each agent through a bounded worker pool
+ * ({@link MAX_CONCURRENT_AGENT_RUNS}), streaming events over the runBus and
  * persisting each review. Per-agent failures are isolated.
  */
 export class ReviewRunExecutor {
@@ -130,9 +131,11 @@ export class ReviewRunExecutor {
 
   /**
    * Background execution of the queued agent runs (NOT awaited by the route).
-   * Loads the diff and derives the intent once, concurrently, then map-reduces
-   * each agent, streaming events over the runBus and persisting each review.
-   * Per-agent failures are isolated.
+   * Loads the diff and derives the intent once, concurrently, then runs the
+   * agents through a bounded worker pool of {@link MAX_CONCURRENT_AGENT_RUNS},
+   * streaming events over the runBus and persisting each review. Per-agent
+   * failures are isolated: one run failing or being cancelled never stops a
+   * sibling from reaching a terminal status.
    */
   async executeRuns(
     workspaceId: string,
@@ -215,7 +218,13 @@ export class ReviewRunExecutor {
 
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
-    for (const { agent, runId } of jobs) {
+    /**
+     * One queued agent, start to terminal status. NEVER throws: `runOneAgent`
+     * has already persisted the failure/cancel (trace, then status, then bus)
+     * by the time it rethrows, so a pool worker that catches here cannot leave
+     * a sibling run unfinished. This is what AC-14 / AC-91 rest on.
+     */
+    const runJob = async ({ agent, runId }: { agent: AgentRow; runId: string }): Promise<void> => {
       const agentStart = Date.now();
       logger?.info(
         { runId, agent: agent.name, provider: agent.provider, model: agent.model, prId: pull.id },
@@ -251,7 +260,32 @@ export class ReviewRunExecutor {
           `review: agent "${agent.name}" ${cancelled ? 'cancelled' : 'failed'}`,
         );
       }
-    }
+    };
+
+    // ---- Bounded fan-out over the queued agents ----------------------------
+    // A promise POOL, not batching. `chunk(jobs, N).map(Promise.all)` would make
+    // the fifth agent wait for the SLOWEST of the first four; here each worker
+    // pulls the next job the instant its own run settles, so a free slot is
+    // refilled immediately (AC-12, AC-89). Only this loop changed: the diff is
+    // still loaded once, the intent still derived once and raced against its own
+    // budget, `failAll` still fails every queued run on a pre-work failure, and
+    // `runOneAgent`'s write order is untouched (AC-13, AC-90, AC-92).
+    //
+    // `queue.shift()` needs no lock: the runtime is single-threaded and there is
+    // no `await` between the emptiness check and the take, so two workers can
+    // never claim the same job.
+    const queue = [...jobs];
+    const workers = Array.from(
+      { length: Math.min(MAX_CONCURRENT_AGENT_RUNS, queue.length) },
+      async () => {
+        for (;;) {
+          const job = queue.shift();
+          if (!job) return;
+          await runJob(job);
+        }
+      },
+    );
+    await Promise.all(workers);
   }
 
   /** Execute a single agent's review against a PR, streaming progress. */

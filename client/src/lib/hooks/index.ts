@@ -16,3 +16,4 @@ export * from "./trace";
 export * from "./repo-intel";
 export * from "./onboarding";
 export * from "./eval";
+export * from "./multi-agent";

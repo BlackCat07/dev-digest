@@ -86,6 +86,17 @@ valuable one — the code does not record what was tried and abandoned.
 
 <!-- append below -->
 
+- **2026-08-25** — **`@fastify/rate-limit` is not registered at all under `NODE_ENV=test`, so a
+  test asserting a per-route `config.rateLimit` passes with the declaration DELETED.** `src/app.ts`
+  guards the `app.register` on `config.nodeEnv !== 'test'`, which makes the per-route config inert
+  and the assertion vacuous — the same class of false green as the 2026-08-20 injection-defence
+  entry, and invisible for the same reason: the test exercises the mechanics around the thing
+  rather than the thing. What works, and stays hermetic: build the app with
+  `NODE_ENV=development` + `LOG_LEVEL=silent`. The limiter runs in `onRequest`, **ahead of
+  validation**, so ten deliberately-invalid requests and then a `429` exercise the limit without a
+  handler, a service or a query ever running. Evidence: `src/app.ts` (the guarded register),
+  `test/reviews-multi-run.test.ts` ("the per-route rate limit").
+
 - **2026-08-20** — **A test suite that checks WRAPPING MECHANICS is not evidence of an
   injection defence, and the gap is measurable: 9 of 10 passed with the defence deleted.**
   Measured on the PR Brief prompt — with the `## SECURITY` section removed from
@@ -651,6 +662,18 @@ Dependency and tooling quirks.
 
 <!-- append below -->
 
+- **2026-08-25** — **`depcruise`'s `application-no-db-schema` does not cover `src/db/client.ts`**,
+  so a service can acquire a Drizzle *handle* — and with it `db.transaction` — while the onion gate
+  stays at its 22-warning baseline. The rule's `to.path` is
+  `^src/db/schema|node_modules/drizzle-orm/`, and `src/db/client.ts` matches neither. Found while
+  assessing whether a service could own a transaction spanning two repositories: the answer is that
+  nothing mechanical would have stopped it, and the rule that actually forbids it (a Drizzle type
+  crossing a consumer-declared port) is checked by no tool in this repo. Read with the 2026-08-04
+  entry on anchored `to.path` patterns silently never firing — same failure, different cause: there
+  the pattern could not match, here the pattern was never meant to. Evidence:
+  `.dependency-cruiser.cjs` (`application-no-db-schema`), `src/db/client.ts`,
+  `src/modules/multi-agent/types.ts` (the port header that states the real rule).
+
 - **2026-08-23** — **`git status --short` reports a newly generated file as `??`, never `A`, so a
   Done-condition written against an `A` line cannot pass on an implementer's tree** — `A` needs a
   `git add`, and an implementer is forbidden to stage. The same shape defeats
@@ -873,6 +896,28 @@ An error string, its real cause, and the fix.
 
 <!-- append below -->
 
+- **2026-08-25** — **Adding a REQUIRED method to a port that a module's `Store` interface extends
+  breaks every hand-built fake of that `Store`, and `tsc --noEmit -p tsconfig.eslint.json` is the
+  only gate that sees it.** Measured adding `discard` to `MultiAgentRecorder`, which
+  `MultiAgentStore` extends: the main typecheck stayed `rc=0`, `eslint` stayed clean, `vitest` was
+  fully green — and the eslint-project typecheck went **16 → 20**, one error per fake, back to 16
+  once each gained `discard: unreachable('discard')`. So a port's blast radius is "the port ring
+  **plus every hand-built fake of anything that extends it**", which is not visible from the port
+  file. This is the 2026-08-10 entry's mechanism (no test file is typechecked) reaching a second
+  feature, and the practical rule is the same: after widening an injected interface, run that
+  project and diff the count. Evidence: `src/modules/multi-agent/types.ts`
+  (`MultiAgentRecorder.discard`), `test/multi-agent-read.test.ts` (`store`).
+
+- **2026-08-25** — **Fastify hands a request with NO body to the zod validator as `null`, not
+  `undefined`, so a top-level `.default({})` on a body schema never fires** and a route that used
+  to tolerate a body-less POST starts answering `422 validation_error` with
+  `"expected":"object","received":"null"`. Measured both cases on `POST /pulls/:id/review` before
+  choosing: no payload → the 422; `{}` → the handler's own named 400. This matters wherever a
+  tolerated empty body is load-bearing — here it was the difference between "behaves exactly as
+  today" and a broken existing route. The shape that works is
+  `z.preprocess((body) => body ?? {}, Schema)`. Evidence:
+  `src/modules/reviews/routes.ts` (the `POST /pulls/:id/review` body schema).
+
 - **2026-08-07** — **`Cannot read properties of undefined (reading 'skills')` on
   `trace.prompt_assembly`, CI-only, right after a run turns `done`.** The executor committed
   `agent_runs.status = 'done'` (`completeAgentRun`) *before* `saveRunTrace`, so anything that
@@ -1016,4 +1061,13 @@ Left unresolved, stated precisely enough for the next session to pick up.
 
 <!-- append below -->
 
-_No entries yet._
+- **2026-08-25** — **Nothing copies `src/prompts` → `dist/prompts`, so every prompt template is
+  absent from a compiled build.** `package.json`'s `build` is `tsc -p tsconfig.json` and nothing
+  else, while `src/platform/prompts.ts`'s own header states that a production build must copy that
+  directory. Six templates are affected — `brief.system.md`, `intent.classify.system.md`,
+  `onboarding.system.md`, both `conventions.*.system.md` and `multi-agent-notes.system.md` — and it
+  is invisible in development because `tsx` reads `src/`. Unresolved because the fix is a
+  build-script change that belongs to whoever owns deployment, and because no consumer in this repo
+  currently runs from `dist/`. Whoever picks this up: confirm first whether anything ships compiled
+  at all, since the answer decides between fixing the build and deleting the loader's promise.
+  Evidence: `package.json` (`build`), `src/platform/prompts.ts` (the header).

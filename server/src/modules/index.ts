@@ -16,6 +16,7 @@ import onboarding from './onboarding/routes.js';
 import brief from './brief/routes.js';
 import reviews from './reviews/routes.js';
 import repoIntel from './repo-intel/routes.js';
+import multiAgent from './multi-agent/routes.js';
 // `eval` is not a legal binding name in a module (ES modules are strict mode), so
 // the import is aliased and the REGISTRY KEY below carries the module's real name.
 import evalPipeline from './eval/routes.js';
@@ -53,5 +54,6 @@ export const modules: Record<string, FastifyPluginAsync> = {
   brief,
   reviews,
   repoIntel,
+  multiAgent,
   eval: evalPipeline,
 };

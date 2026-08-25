@@ -51,6 +51,10 @@ import { EvalRunner } from '../modules/eval/runner.js';
 import { EvalService } from '../modules/eval/service.js';
 import type { Evals } from '../modules/eval/types.js';
 import { parseUnifiedDiff } from '../adapters/git/diff-parser.js';
+import { MultiAgentRepository } from '../modules/multi-agent/repository.js';
+import { MultiAgentService } from '../modules/multi-agent/service.js';
+import { MultiAgentNotesService, type MultiAgentSynthesis } from '../modules/multi-agent/notes.js';
+import type { MultiAgentRecorder, MultiAgentReview } from '../modules/multi-agent/types.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
@@ -96,6 +100,28 @@ export interface ContainerOverrides {
    * exercised with no Postgres, no provider and no batch actually running.
    */
   eval?: Evals;
+  /**
+   * Multi-Agent Review (L07) — tests inject a fake read service so the route can
+   * be exercised with no Postgres. Injecting the REAL service over a fake store
+   * is the other half of the same seam, and is how the route tests prove the
+   * read makes no model call.
+   */
+  multiAgent?: MultiAgentReview;
+  /**
+   * The multi-run record writer the REVIEWS module consumes when it fans a pull
+   * request out. Its own field, and not part of `multiAgent`, because the two
+   * are different directions: one is a read the transport calls, the other is a
+   * write a sibling module makes, and a test of the create path fakes only the
+   * second.
+   */
+  multiAgentRecorder?: MultiAgentRecorder;
+  /**
+   * The one model call the feature makes, triggered from the executor's
+   * completion. Its own field for the same reason as the recorder above: it is a
+   * third direction — a background write nothing on the read path may reach —
+   * and a test of the create path fakes it to count calls.
+   */
+  multiAgentNotes?: MultiAgentSynthesis;
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
@@ -130,6 +156,9 @@ export class Container {
   private _onboarding?: OnboardingTours;
   private _brief?: PrBriefs;
   private _eval?: Evals;
+  private _multiAgentStore?: MultiAgentRepository;
+  private _multiAgent?: MultiAgentReview;
+  private _multiAgentNotes?: MultiAgentSynthesis;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -383,6 +412,79 @@ export class Container {
         skills: this.skills,
       }),
     }));
+  }
+
+  /**
+   * Multi-Agent Review (L07) — one pull request fanned out to several agents,
+   * read back as columns plus the locations they did not all agree on.
+   *
+   * The one place that names this module's concrete classes, as it is for
+   * `projectContext`, `onboarding`, `brief` and `eval`: the service declares ONE
+   * port (`{ store }`) and knows nothing about Drizzle, about `src/adapters/**`
+   * or about a sibling module, so the composition root is what binds it.
+   *
+   * Read the port list as the feature's own claim: there is no LLM in it. AC-23
+   * requires the read to make no model call, and that is expressed here as the
+   * absence of a provider rather than as a rule somebody has to keep — the
+   * service could not make one if it tried. The synthesis that DOES spend a call
+   * runs off the executor's completion and writes to storage, which this read
+   * merely reads back.
+   *
+   * Exposed as the `MultiAgentReview` INTERFACE so `ContainerOverrides.multiAgent`
+   * can carry a fake with no database behind it.
+   */
+  get multiAgent(): MultiAgentReview {
+    if (this.overrides.multiAgent) return this.overrides.multiAgent;
+    return (this._multiAgent ??= new MultiAgentService({ store: this.multiAgentStore }));
+  }
+
+  /**
+   * The multi-run parent record, as the REVIEWS module writes it.
+   *
+   * This is the cross-module edge, and it runs in exactly ONE direction: the
+   * reviews module declares the call signature it needs and this getter
+   * satisfies it structurally, so that module imports nothing from
+   * `modules/multi-agent/` and this module imports nothing from
+   * `modules/reviews/`. A second edge in the other direction would close a cycle
+   * through this file — the arrangement `featureModel` and `fileRole` already
+   * use, and the one that took the gate from 24 warnings back to 22.
+   *
+   * Bound to the same repository INSTANCE the read service holds: two would be
+   * two connection users over one table for no reason, and a fake injected into
+   * one of them would leave the other real.
+   */
+  get multiAgentRecorder(): MultiAgentRecorder {
+    return this.overrides.multiAgentRecorder ?? this.multiAgentStore;
+  }
+
+  /**
+   * The one model call the Multi-Agent feature makes: the stance sentences and
+   * the group labels, produced together after every run of a fan-out is
+   * terminal.
+   *
+   * A THIRD binding rather than a method on `multiAgent`, and the separation is
+   * the criterion: the read service has no provider in its port list, which is
+   * how "a read makes no model call" (AC-23) is expressed — as a call it has no
+   * way to make. Folding this task into it would have replaced that property
+   * with a rule somebody has to keep. The reviews module triggers it through
+   * this getter's INTERFACE, so it imports nothing from `modules/multi-agent/`,
+   * exactly as it does for the recorder above.
+   *
+   * Bound to the same repository instance as the read, so the columns the
+   * synthesis groups are the columns the read will render.
+   */
+  get multiAgentNotes(): MultiAgentSynthesis {
+    if (this.overrides.multiAgentNotes) return this.overrides.multiAgentNotes;
+    return (this._multiAgentNotes ??= new MultiAgentNotesService({
+      store: this.multiAgentStore,
+      featureModel: this.featureModel,
+      llm: (id) => this.llm(id),
+    }));
+  }
+
+  /** The one `multi_agent_runs` repository instance, shared by all three getters. */
+  private get multiAgentStore(): MultiAgentRepository {
+    return (this._multiAgentStore ??= new MultiAgentRepository(this.db));
   }
 
   /**

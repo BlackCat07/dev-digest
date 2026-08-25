@@ -1,4 +1,4 @@
-# Spec: Multi-Agent Review | Spec ID: SPEC-05 | Status: approved
+# Spec: Multi-Agent Review | Spec ID: SPEC-05 | Status: implemented
 Supersedes: —
 
 A reviewer can choose a set of agents, fan one pull request out to all of them in one action
@@ -960,7 +960,7 @@ appear in exactly two files, the two copies of the contract that declares them.
 | Type | What it gives us |
 |---|---|
 | `MultiAgentRun` | the whole read: id, pull request, `ran_at`, agent count, total duration, total cost, columns, groups |
-| `AgentColumn` | one agent's column — run id, agent id and name, provider, model, status, verdict, score, summary, duration, cost, findings |
+| `AgentColumn` | one agent's column — run id, agent id and name, provider, model, status, verdict, score, summary, duration, cost, findings. **As shipped it also carries `error`** — see Changed, below |
 | `Conflict` | one location group: file, line, title, stances. Its single `line` is kept — AC-103 defines it as the group's lowest `start_line`, which is what the design renders. Its `title` needs no change either, but **what fills it does**: the synthesised label when the multi-run has one (AC-101), and the highest-severity finding's title otherwise (AC-31). A reader of the type cannot tell those apart, which is why both criteria exist. Its doc-comment already states this feature's entry condition — "a file:line that at least one agent flagged and at least one other agent (that also reviewed) did NOT" — and AC-29 now matches it rather than being stricter than it |
 | `ConflictTake` | one agent's stance: agent id, persona, verdict or `ignored`, note. Unchanged; an unavailable note is the empty string |
 | `Severity` | the three severities a stance can carry beside `ignored` |
@@ -975,6 +975,7 @@ appear in exactly two files, the two copies of the contract that declares them.
 |---|---|---|
 | `AgentColumn.status` | `cancelled`, beside `done`, `failed` and `running` | `agent_runs` writes four status values, and `POST /runs/:id/cancel` produces the fourth. Without it a cancelled column has to be reported as failed, which is untrue (AC-19) |
 | `AgentColumnFinding` | `end_line`, `rationale`, `confidence`, a nullish `suggestion`, and the accepted/dismissed timestamps | the tabs-mode detail renders all of them (AC-72, AC-73, AC-75). This is settled in favour of one read: the alternative — a second read of the pull request's reviews joined client-side — brings the per-agent re-run double-count trap (`client/INSIGHTS.md`, 2026-08-11) for no gain |
+| `AgentColumn.error` | `error: z.string().nullable()` — the run's own failure reason, `null` on a run that did not fail | AC-68 needs "that outcome **and the reason the run recorded**". The repository already selected `agent_runs.error` into its row and `toColumn` dropped it, because the contract had nowhere to put it — the fallback, `column.summary`, is the *review's* summary and is `null` for a run that failed before writing one. Added in fix round 1 (`FIX-1`), after implementation found the gap; this row was "used unchanged" until then |
 
 **New symbols, in both copies:**
 
@@ -1308,6 +1309,138 @@ reopen each:
 | 15 | The Configure-run pull-request step lists open pull requests only; the PR-page picker is unfiltered | AC-53, EC-21, EC-31 | a reviewer who routinely fans out over merged pull requests from the Configure screen |
 | 16 | Finding rows carry the category tag in both modes, from the field the contract already has | AC-63, AC-104 | nothing foreseen; the field is persisted and was simply unread |
 
+## Data
+
+**server**
+
+| Endpoint | Contract | Rows |
+|---|---|---|
+| `POST /pulls/:id/review` | body `ReviewRunRequest` (extends `RunRequest` with optional `agentIds`) | unchanged when `agentIds` is absent (AC-11); when present, one `agent_runs` row per listed agent plus one `multi_agent_runs` parent row |
+| `POST /pulls/:id/multi-agent-run` | body `MultiAgentRunRequest` (`agentIds`, non-empty, `.min(1)`) | same rows as above, dedicated route (AC-7) |
+| `GET /pulls/:id/multi-agent` | response `MultiAgentRun` | no write — columns are read from `agent_runs` (joined once for the agent, once for that run's newest `reviews` row — `reviews.run_id` has no unique constraint, so a naive single join can multiply one run into two columns) and from `findings`; groups are computed on read by `grouping.ts`; notes and group labels are read from `multi_agent_runs.notes` (jsonb) |
+| `GET /agents/estimates` | response `AgentRunEstimate[]` | no write — `agent_runs`, windowed `ROW_NUMBER() OVER (PARTITION BY agent_id ORDER BY ran_at DESC, id DESC)` capped at 10 per agent, `status = 'done'` only |
+
+Schema: `agent_runs.multi_agent_run_id` (uuid, nullable, `ON DELETE SET NULL`) and
+`multi_agent_runs.notes` (jsonb, nullable) — migration
+`server/src/db/migrations/0022_mature_ego.sql`, with `agent_runs_multi_agent_run_idx` and
+`multi_agent_runs_pr_ran_idx (pr_id, ran_at DESC)`. `notes` is stored untyped (no Drizzle
+`$type<>`) and parsed on read in `multi-agent/repository.ts`, not cast.
+
+**client**
+
+`client/src/lib/hooks/multi-agent.ts` — `useAgentEstimates` (`GET /agents/estimates`),
+`useMultiAgentRun` (`GET /pulls/:id/multi-agent`, polling every 2000 ms while any column is
+non-terminal), `useStartMultiRun` (`POST /pulls/:id/multi-agent-run`, invalidates the multi-run,
+`pr-active-runs` and `pr-runs` queries).
+
+## States
+
+- **No multi-run yet for this pull request.** `GET /pulls/:id/multi-agent` answers
+  `404 not_found`; the results route renders the no-run empty state with an action that starts
+  one (AC-83).
+- **Any other read error.** The results route renders the app's full-screen error state.
+- **Workspace has no agents.** Both the picker and the Configure-run screen render the no-agents
+  empty state with a link to the agents screen (AC-84); the Configure-run screen additionally
+  renders `page.noAgents.*` once a pull request is selected but before any agent exists.
+- **Repository has no open pull request.** The Configure-run screen's pull-request step renders
+  `runs.configure.noOpenPulls` instead of an empty select (AC-105, EC-31; added in fix round 1,
+  `FIX-3`, after the initial implementation shipped the step with no copy for this case).
+- **An agent has never run on the selected pull request.** Its Configure-run card renders with no
+  verdict line, not an empty one (AC-55). `runs.configure.neverRun` is a written, unused key kept
+  for this case rather than deleted, because nothing in the shipped screen reads it — the card's
+  absent-verdict state renders nothing at all rather than that placeholder.
+- **A column is running, done, failed or cancelled.** A non-terminal column reads "running" in
+  text (AC-67). A failed or cancelled column shows its outcome and, since fix round 1 (`FIX-1`),
+  the run's own recorded reason (`AgentColumn.error`) in place of a score (AC-68); the outcome
+  word itself is printed once, by the status badge, not repeated in the reason line.
+- **A column produced no findings.** Renders an explicit "no findings" statement and a footer
+  count of 0, not an empty body (AC-69).
+- **The disagreement block has no groups.** Renders its own empty state rather than being
+  omitted (AC-82) — every run failing (EC-5) is one way to reach it.
+- **A group's title before and after the note-synthesis call lands.** Every read taken while the
+  fan-out is in flight, and every read after a synthesis failure, renders the deterministic
+  fallback title (AC-31); once the one structured call succeeds, the synthesised label takes over
+  on the next read (AC-101) — the swap is the intended arrival of the label, not a defect (EC-32).
+- **The note-synthesis call fails, times out or returns something unparseable.** Every group
+  still renders, every stance is present, every note is empty and every title is the AC-31
+  fallback; no run and no multi-run is failed by it (AC-38).
+- **The multi-run create path fails partway through the fan-out.** Not atomic by design (see
+  `## Implementation`): the caller gets the failure, the `multi_agent_runs` parent row does not
+  survive it, and any `agent_runs` row already created keeps running and becomes an ordinary
+  single-agent run rather than a member of a vanished multi-run (fix round 2, `FIX-7`).
+- **The pull request is merged or closed.** The PR-page picker's trigger stays dimmed as before;
+  the words describing why live only in `PrDetailHeader`'s existing stale-PR banner, not in the
+  picker itself, because `AgentPicker` reads only the `runs` namespace and the old sentence was a
+  `prReview` string (AC-87; recorded as accepted, ledger `F-4`).
+- **A finding action (`Turn into eval case`) is refused.** A named refusal renders the server's
+  own sentence (AC-76). An unnamed one (a `500`, a dropped connection) rendered nothing until fix
+  round 1 (`FIX-4`); it now renders `runs.detail.actionFailed`.
+- **A decision (`Accept`/`Dismiss`) taken on this screen.** Held locally by `AgentTabsPane`
+  (`decidedHere`), because `useFindingAction` invalidates only the pull-request page's own query
+  key and `useMultiAgentRun` has usually already stopped polling by the time the mutation
+  resolves.
+- **Cost display, two screens, two precisions.** The Configure-run screen's per-agent estimate
+  and aggregate use a 2-decimal-place helper (`$0.06`, `$0.20`, matching the spec's own worked
+  examples); the results view's per-column cost uses `lib/format.ts`'s adaptive `formatCost`
+  (`$0.060`). Both are real, both ship; no criterion pins the results view's exact string.
+
+## Implementation
+
+**server**
+
+- `server/src/modules/multi-agent/routes.ts`, `service.ts`, `repository.ts`, `types.ts`,
+  `helpers.ts` — the parent record, the read service (`GET /pulls/:id/multi-agent`), and the
+  `MultiAgentRecorder` / `AgentEstimateStore` ports.
+- `server/src/modules/multi-agent/grouping.ts`, `constants.ts` — the pure location-grouping rule
+  (AC-25–AC-33, AC-100), re-derived here rather than imported from `reviewer-core`'s eval scorer.
+- `server/src/modules/multi-agent/notes.ts`, `prompt.ts`, `schemas.ts` — the one structured
+  stance-note-and-group-label synthesis call (AC-35–AC-40, AC-101, AC-102), its own
+  `FEATURE_MODELS` entry (`multi_agent_notes`) and its injection-guard-carrying prompt template.
+- `server/src/modules/reviews/service.ts` (`createMultiAgentRun`, `MultiRunRecorder`) — the
+  create path. **Not transactional, by design**: the parent row commits, then one `agent_runs`
+  row per agent is created; `runReview` fires `void executeRuns(...)` in the same call, so a
+  `db.transaction` would have that background work read `agent_runs` on a different pooled
+  connection against uncommitted rows. What shipped instead is a compensating discard — on
+  failure the parent row is deleted (`MultiAgentRecorder.discard`), and because
+  `agent_runs.multi_agent_run_id` is `ON DELETE SET NULL`, any run already created survives as an
+  ordinary single-agent run (fix round 2, `FIX-7`).
+- `server/src/modules/reviews/run-executor.ts`, `constants.ts` (`MAX_CONCURRENT_AGENT_RUNS = 4`)
+  — the sequential per-agent loop replaced by a bounded worker pool; reaches the existing
+  `all: true` path too (AC-12, AC-89–AC-92).
+- `server/src/modules/reviews/routes.ts` — `POST /pulls/:id/review` (`agentIds` selector) and
+  `POST /pulls/:id/multi-agent-run`.
+- `server/src/modules/agents/routes.ts`, `service.ts`, `repository.ts` — `GET /agents/estimates`.
+- `server/src/db/schema/runs.ts`, `server/src/db/migrations/0022_mature_ego.sql` — the schema and
+  its migration.
+- `server/src/platform/container.ts`, `server/src/modules/index.ts` — DI binding and static
+  registration of the `multi-agent` module.
+- `server/src/vendor/shared/contracts/observability.ts`, `platform.ts`, `review-api.ts`, mirrored
+  byte-for-byte into `client/src/vendor/shared/contracts/` — the contracts listed under
+  `## Contracts`, above.
+
+**client**
+
+- `client/src/lib/hooks/multi-agent.ts` — the three data hooks (`## Data`, above).
+- `client/src/app/repos/[repoId]/pulls/[number]/_components/AgentPicker/` — the PR-page picker,
+  replacing the deleted `RunReviewDropdown/`.
+- `client/src/app/repos/[repoId]/multi-agent/page.tsx`,
+  `_components/ConfigureRunView/` — the Configure-run screen (AC-52–AC-59, AC-105).
+- `client/src/app/repos/[repoId]/multi-agent/[number]/page.tsx`,
+  `_components/MultiAgentResultsView/` and its children `AgentColumns/`, `AgentTabsPane/`
+  (`_components/FindingDetail/`), `DisagreementBlock/`, `FindingCategoryTag/`, `ModeToggle/`,
+  `RunStatusBadge/` — the results view, both modes, the disagreement block and the finding
+  detail's three actions.
+- `client/src/components/run-trace-drawer/` — the trace drawer, relocated out of the
+  pull-request route subtree (C-3, AC-99) so `pulls/[number]` and `multi-agent/[number]` share
+  one implementation; `PrDetailView.tsx` and `PrDetailHeader.tsx` updated to the new import path
+  and to mount `AgentPicker`.
+- `client/src/vendor/ui/nav.ts` — the `WORKSPACE` sidebar entry (`g m`), placed at the end of the
+  group rather than beside Pull Requests, to keep an unrelated onboarding-order test green.
+- `client/messages/en/runs.json` — both screens' copy, including the fix-round additions
+  `configure.noOpenPulls` and `detail.actionFailed`.
+- `client/src/lib/format.ts` (`formatDurationSeconds`) — promoted from two near-identical
+  per-screen copies once a second consumer existed (fix round 1, `FIX-5`).
+
 ## History
 
 The spec's dated origin. `docs/specs-convention.md` puts `## History` below the divider with
@@ -1334,8 +1467,20 @@ when the feature lands.
   line rule moved to AC-103 so a group's line and its title can be verified apart. Three edge
   cases were restated (EC-8, EC-9, EC-10), six extended (EC-5, EC-14, EC-15, EC-16, EC-20,
   EC-21) and two added (EC-31, EC-32). No contract gains a field.
-</content>
-</invoke>
 
 - 2026-08-25 — `draft` → `approved`. The 105 acceptance criteria were agreed by the
   author of the request, on the record, as the gate before implementation began.
+
+- **2026-08-25** — `approved` → `implemented`. Sixteen tasks landed the module, the schema
+  change, the bounded-concurrency executor, the two client screens and the relocated trace
+  drawer; two fix rounds closed six findings from verification (`AC-68`'s missing failure reason,
+  the create path's partial-write exposure, the missing `AC-105` copy, a silent finding-action
+  refusal, a duplicated cost formatter, and two stale `RunReviewDropdown` doc-comments) and
+  escalated one pre-existing, out-of-scope defect (`server/package.json`'s `build` script does
+  not copy `src/prompts` to `dist/prompts`, so the new `multi-agent-notes` prompt template would
+  be absent from a production build, same as the other five). No acceptance criterion was
+  amended; the one correction to the spec's upper half is the `## Contracts` row for
+  `AgentColumn`, which said "used unchanged" and no longer does — `AgentColumn.error` was added
+  in fix round 1 to carry the failure reason `AC-68` already required. Full detail:
+  `.claude/.plans/multi-agent-review/{plan.md,run.md,fix-1.md,fix-2.md}` and the sixteen reports
+  under `.claude/.plans/multi-agent-review/reports/`.

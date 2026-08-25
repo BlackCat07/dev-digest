@@ -132,6 +132,28 @@ valuable one — the code does not record what was tried and abandoned.
 
 <!-- append below -->
 
+- **2026-08-25** — **A `<footer>` or `<header>` inside a `<div role="group">` becomes a
+  PAGE-LEVEL `contentinfo` / `banner` landmark, once per group — the ARIA role does not scope it,
+  only sectioning content does.** Four agent columns each carrying a footer produced four
+  page-level landmarks before the wrapper was changed to `<section role="group">`. Nothing sees
+  this: not `tsc`, not `eslint`, not the suite, and not a visual check either, since it changes
+  only what a screen reader's landmark list contains. The rule is that `<footer>`/`<header>` scope
+  to the nearest `<article>`, `<aside>`, `<nav>` or `<section>`, and to the document otherwise —
+  a `<div>` with a role is not sectioning content. Evidence:
+  `src/app/repos/[repoId]/multi-agent/[number]/_components/MultiAgentResultsView/_components/AgentColumns/AgentColumns.tsx`.
+
+- **2026-08-25** — **Relocating a colocated unit out of `app/**` breaks more than its `import`
+  statements: a `vi.mock()` specifier written relative to the ROUTE's depth resolves silently to
+  nothing at the new location, the real hook loads instead of the fake, and the failure surfaces as
+  `No QueryClient set` rather than as a module-resolution error.** Measured moving the run-trace
+  drawer to `src/components/run-trace-drawer/`: the component's own imports were the easy half, and
+  five of the file's five tests died on two
+  `vi.mock("../../../../../../../lib/hooks/{trace,reviews}")` lines that read as unrelated. Both
+  styles exist in this tree — `@/lib/hooks/*` in `ContextView.test.tsx`, deep-relative in the four
+  `pulls/[number]` tests — and **only the alias form survives a move**. Worth preferring the alias
+  in any new test, since the cost is paid by whoever relocates the unit years later. Evidence:
+  `src/components/run-trace-drawer/RunTraceDrawer.test.tsx` (the two re-rooted `vi.mock` lines).
+
 - **2026-08-23** — **A `curl` of a client route proves nothing about a rendered control, and
   grepping its HTML for a label is a false green.** `/repos/<id>/pulls/<n>` returns ~98 KB carrying
   the shell **and the entire `prReview` message catalogue inside the RSC flight payload**, so a
@@ -340,6 +362,25 @@ Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
 
+- **2026-08-25** — **The sidebar's ORDER invariant is asserted in
+  `src/app/repos/[repoId]/onboarding/_components/OnboardingView/OnboardingView.test.tsx`, not
+  anywhere near the nav.** It pins that Pull Requests → Onboarding Tour → Project Context are
+  *consecutive* (`expect(onboarding).toBe(pulls + 1)`), so inserting a `WORKSPACE` entry anywhere
+  between them fails a test in an unrelated feature's folder. The obvious place to look is
+  `src/components/app-shell/helpers.test.ts`, and it is the wrong one — that file only covers
+  `activeKeyFor` and never reads `NAV`. Adding a `WORKSPACE` entry at the END of the group avoids it
+  entirely. Evidence: `OnboardingView.test.tsx` (the AC-31 case), `src/vendor/ui/nav.ts` (`NAV`).
+
+- **2026-08-25** — **`useFindingAction` invalidates only `["reviews", prId]`, so a finding
+  accepted or dismissed from any screen outside `pulls/[number]` re-renders as undecided.** The
+  multi-agent results view is the first such screen and it makes the gap worse in a way worth
+  knowing: `useMultiAgentRun` polls only while a column is non-terminal, so by the time a reader
+  starts deciding, that query has already stopped — the decision would not arrive on a later read
+  either. Any screen outside `pulls/[number]` that acts on a finding must hold the outcome in local
+  state; widening the hook's invalidation set is the real fix and belongs to whoever owns
+  `src/lib/hooks/reviews.ts`. Evidence: `src/lib/hooks/reviews.ts` (`useFindingAction.onSuccess`),
+  `.../MultiAgentResultsView/_components/AgentTabsPane/AgentTabsPane.tsx` (`decidedHere`).
+
 - **2026-08-20** — **`vendor/ui`'s "extend via a new file, don't restyle a primitive" rule
   has a third path it doesn't name: most primitives take a `style` prop, so trimming one
   for a single surface needs no `vendor/ui` edit and no fork.** `Badge` spreads
@@ -485,6 +526,27 @@ Conventions and architectural decisions, each with the reason behind it.
 Dependency and tooling quirks.
 
 <!-- append below -->
+
+- **2026-08-25** — **`@testing-library/dom` only detects JEST's fake timers — it checks
+  `globalThis.jest` — so under `vi.useFakeTimers()` a `waitFor` / `findBy*` sits on a clock nobody
+  advances and times out.** The library's own timer-aware path never engages, so the failure reads
+  as "the element never appeared" when the truth is "time never passed". What works is an explicit
+  `act` + `advanceTimersByTimeAsync` flush instead of an async query. Read with the 2026-08-19
+  entry on `refetchInterval` committing one render late: that one says the call count is the honest
+  signal, this one says the async queries cannot be used to observe it at all. Evidence:
+  `src/app/repos/[repoId]/multi-agent/[number]/_components/MultiAgentResultsView/MultiAgentResultsView.test.tsx`
+  (the polling block), `src/lib/hooks/multi-agent.test.tsx`.
+
+- **2026-08-25** — **`noUncheckedIndexedAccess` is on in this package, so
+  `screen.getAllByRole(...)[0]` is `HTMLElement | undefined` and fails `tsc --noEmit` — but NOT
+  `vitest`, which transpiles without typechecking.** A test file that indexes a query result is
+  therefore **green under the test gate and red under the typecheck gate**, and the two are usually
+  run in that order. Measured as seven `TS2345`s in one new test file whose `vitest` run was fully
+  green; fixed with a local `at(elements, index)` assertion helper rather than by weakening the
+  compiler option. Note this is the client-side mirror of the server's 2026-08-10 entry, with the
+  gates swapped: there no gate typechecks `test/` at all, here one does and the suite does not.
+  Evidence:
+  `src/app/repos/[repoId]/multi-agent/[number]/_components/MultiAgentResultsView/_components/DisagreementBlock/DisagreementBlock.test.tsx`.
 
 - **2026-08-23** — **jsdom implements no `EventSource`, and `src/test/setup.ts` does not shim it**
   (it shims `ResizeObserver` and `scrollIntoView`). A test that mounts a component reaching a hook

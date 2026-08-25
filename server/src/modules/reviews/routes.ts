@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { RunRequest } from '@devdigest/shared';
-import type { RunEvent } from '@devdigest/shared';
+import { z } from 'zod';
+import { MultiAgentRunRequest, ReviewRunRequest } from '@devdigest/shared';
+import type { MultiAgentRun, RunEvent } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -9,7 +10,8 @@ import { ReviewService } from './service.js';
 
 /**
  * reviews module.
- *   POST   /pulls/:id/review  {agentId} | {all:true}  → run review(s); returns runs
+ *   POST   /pulls/:id/review  {agentId} | {all:true} | {agentIds} → run review(s)
+ *   POST   /pulls/:id/multi-agent-run  {agentIds}      → fan out, as ONE multi-run
  *   GET    /runs/:id/events                            → SSE stream of RunEvent (replay-first)
  *   GET    /runs/:id/trace                             → the single-document RunTrace
  *   GET    /pulls/:id/reviews                          → persisted reviews + findings for a PR
@@ -23,16 +25,37 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
 
   // ---- Run a review (manual trigger) -------------------------------
   // Tight per-route limit: each call can fan out to expensive LLM runs.
-  // Body stays a tolerant manual parse (both fields optional; empty body is OK).
+  //
+  // The body is now the CONTRACT schema rather than a manual parse inside the
+  // handler, so a body of the wrong shape is a `422` from the validator before
+  // anything runs (`DDG-SEC-003`). The `preprocess` keeps the one tolerance the
+  // manual parse had (`RunRequest.parse(req.body ?? {})`): all three selectors
+  // are optional, and a request with NO body still reaches the handler, where
+  // "you named nothing" is a refusal with a NAME rather than a validator's
+  // anonymous complaint. It is `?? {}` and not `.default({})` because Fastify
+  // hands an absent body to the validator as `null`, and a zod default only
+  // fires on `undefined` — measured, not assumed.
+  //
+  // What the schema deliberately does NOT do is reject an empty `agentIds` or
+  // the `agentIds`+`all` pair. Both are refused by name in the service (AC-3,
+  // AC-6), and `ReviewRunRequest` carries no `.min(1)` for exactly that reason —
+  // see its own comment in `contracts/review-api.ts`.
   app.post(
     '/pulls/:id/review',
-    { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    {
+      schema: {
+        params: IdParams,
+        body: z.preprocess((body) => body ?? {}, ReviewRunRequest),
+      },
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
     async (req) => {
     const { workspaceId } = await getContext(container, req);
-    const body = RunRequest.parse(req.body ?? {});
+    const body = req.body;
     const targets = await service.resolveTargets(workspaceId, {
       ...(body.agentId !== undefined ? { agentId: body.agentId } : {}),
       ...(body.all !== undefined ? { all: body.all } : {}),
+      ...(body.agentIds !== undefined ? { agentIds: body.agentIds } : {}),
     });
     const { runs, reviews } = await service.runReview(
       workspaceId,
@@ -42,6 +65,33 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     );
     return { pr_id: req.params.id, runs, reviews };
   });
+
+  // ---- Fan a PR out to an explicit set of agents, as ONE multi-agent run ----
+  //
+  // Its own route rather than a mode of the one above, because it answers a
+  // different question: `/review` returns the runs it started, this returns the
+  // MULTI-RUN — the record the results screen then polls at
+  // `GET /pulls/:id/multi-agent`. The list is non-empty by contract here
+  // (`MultiAgentRunRequest` carries the `.min(1)` that `ReviewRunRequest`
+  // deliberately does not), so an empty list is the validator's `422` and not a
+  // named refusal — which is the whole difference between the two bodies.
+  //
+  // The same 10/minute limit `/review` carries: one call fans out to as many as
+  // eight model runs, and the response is immediate, so a client has no reason
+  // to burst. Every refusal — the cap, the unknown agent, the fan-out already in
+  // flight — is the service's (`DDG-ARCH-001`); this handler validates, resolves
+  // the workspace and returns.
+  app.post(
+    '/pulls/:id/multi-agent-run',
+    {
+      schema: { params: IdParams, body: MultiAgentRunRequest },
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (req): Promise<MultiAgentRun> => {
+      const { workspaceId } = await getContext(container, req);
+      return service.createMultiAgentRun(workspaceId, req.params.id, req.body.agentIds, req.log);
+    },
+  );
 
   // ---- SSE: live run events (replay buffer first, then live; ends on done) -
   // No rate limit: SSE is one long-lived connection, not burst traffic.

@@ -60,4 +60,17 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     defaultProvider: "openrouter",
     defaultModel: "deepseek/deepseek-v4-flash",
   },
+  // One structured call per multi-agent review, after the whole fan-out has
+  // finished — it phrases one sentence per agent per contended location and one
+  // short label per group, over facts already computed, so a flash-class model
+  // is the right default. It also has to be an OpenRouter default —
+  // `SettingsModels` writes `provider: "openrouter"` for every pick, so an
+  // OpenAI default is one this screen could never restore once changed.
+  {
+    id: "multi_agent_notes",
+    label: "Multi-Agent · Stance Notes",
+    description: "Phrases each agent’s stance where agents disagree, and labels the location.",
+    defaultProvider: "openrouter",
+    defaultModel: "deepseek/deepseek-v4-flash",
+  },
 ];

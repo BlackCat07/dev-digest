@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Finding, Verdict } from './findings.js';
 import { Intent, SmartDiff } from './brief.js';
+import { RunRequest } from './platform.js';
 
 /**
  * A2 — Review-Core API surface contracts. These extend the core
@@ -36,6 +37,26 @@ export const ReviewRecord = z.object({
   findings: z.array(FindingRecord),
 });
 export type ReviewRecord = z.infer<typeof ReviewRecord>;
+
+/**
+ * Body of `POST /pulls/:id/review`.
+ *
+ * An EXTENSION of `RunRequest` rather than an edit to it: `RunRequest` keeps its
+ * two optional selectors and every existing consumer, and the multi-agent
+ * selector arrives as a third, also optional, so a body carrying neither
+ * `agentIds` nor anything else behaves exactly as it does today.
+ *
+ * `agentIds` deliberately carries NO `.min(1)`. An empty list is a request the
+ * route refuses by name (`invalid_run_request`, 400), and `agentIds` together
+ * with `all` is refused the same way rather than one silently winning — neither
+ * is expressible as a shape, so neither belongs in the schema. Contrast
+ * `MultiAgentRunRequest` (contracts/observability.ts), where the list IS
+ * non-empty by contract.
+ */
+export const ReviewRunRequest = RunRequest.extend({
+  agentIds: z.array(z.string()).optional(),
+});
+export type ReviewRunRequest = z.infer<typeof ReviewRunRequest>;
 
 /**
  * Response of `POST /pulls/:id/review`. Each requested agent produces a run that

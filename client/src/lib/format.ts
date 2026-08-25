@@ -100,6 +100,35 @@ export function formatDateTime(iso: string | null | undefined): string {
   );
 }
 
+/**
+ * A duration in milliseconds as a seconds figure with its unit — `8200` → `"8.2s"`.
+ *
+ * Promoted here from two private `helpers.ts` files (`DDG-UI-002`): the agent
+ * picker on the pull-request page and the Configure-run screen both render
+ * `AgentRunEstimate.mean_duration_ms`, in two different route subtrees, and were
+ * applying the identical arithmetic to it.
+ *
+ * **`null`, never `"0.0s"`, when there is no figure.** `AgentRunEstimate` reports
+ * `mean_duration_ms: null` with `sample_size: 0` for an agent that has never
+ * completed a run, and that is not the same statement as "this agent runs
+ * instantly". Both callers turn the null into a dash — the picker from
+ * `runs.picker.noEstimate`, the Configure screen from
+ * `runs.configure.estimateUnavailable` — so the absence stays visible instead of
+ * being rounded into a number.
+ *
+ * `null` rather than the dash itself, unlike {@link formatCost}: both callers
+ * have their own sentence for an absent estimate and neither is a bare `—`, so
+ * returning the character here would be a user-visible string this module has no
+ * business owning.
+ *
+ * One decimal, and the unit is part of the return value — the same shape as
+ * {@link formatTokenTotal}'s `" tok"` and {@link formatAge}'s `"h"`.
+ */
+export function formatDurationSeconds(ms: number | null | undefined): string | null {
+  if (ms == null || !Number.isFinite(ms)) return null;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 /** Token in→out flow, thousands-scaled (e.g. "8.2K→1.3K", "12K→1.5K"). */
 export function formatTokenFlow(
   tokensIn: number | null | undefined,

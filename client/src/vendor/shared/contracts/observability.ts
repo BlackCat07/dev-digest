@@ -7,8 +7,10 @@ import { Severity } from './findings.js';
  * These are NEW contracts (A5 owns this file; the barrel re-exports it). They
  * sit alongside A2's `review-api.ts`:
  *   - MultiAgentRun        the response of POST /pulls/:id/multi-agent-run
+ *   - MultiAgentRunRequest its request body
  *   - AgentColumn          one agent's column in the multi-agent view
  *   - Conflict / ConflictTake  where agents disagree on the same file:line
+ *   - AgentRunEstimate     what one agent's next run is expected to take/cost
  *   - AgentStats           per-agent quality aggregates (GET /agents/:id/stats)
  *   - CuratorResult        the cross-session memory curator outcome
  *
@@ -19,7 +21,18 @@ import { Severity } from './findings.js';
 // Multi-Agent Review
 // ---------------------------------------------------------------------------
 
-/** A finding as surfaced in a multi-agent column (subset of FindingRecord). */
+/**
+ * A finding as surfaced in a multi-agent column (subset of FindingRecord).
+ *
+ * It carries everything the tabs-mode detail panel renders — the rationale, the
+ * confidence, the optional suggested fix and the accept/dismiss state — so the
+ * multi-agent view is served by ONE read. The alternative (a second read of the
+ * pull request's reviews, joined client-side) reintroduces the per-agent re-run
+ * double-count trap recorded in `client/INSIGHTS.md`, 2026-08-11.
+ *
+ * `accepted_at` / `dismissed_at` are `nullable` rather than `nullish` to match
+ * `FindingRecord`: the field is always present, and `null` means "not acted on".
+ */
 export const AgentColumnFinding = z.object({
   id: z.string(),
   severity: Severity,
@@ -27,7 +40,13 @@ export const AgentColumnFinding = z.object({
   title: z.string(),
   file: z.string(),
   start_line: z.number().int(),
+  end_line: z.number().int(),
+  rationale: z.string(), // markdown
+  suggestion: z.string().nullish(), // markdown; absent when the agent proposed no fix
+  confidence: z.number().min(0).max(1),
   kind: z.string().nullish(),
+  accepted_at: z.string().nullable(),
+  dismissed_at: z.string().nullable(),
 });
 export type AgentColumnFinding = z.infer<typeof AgentColumnFinding>;
 
@@ -38,7 +57,25 @@ export const AgentColumn = z.object({
   agent_name: z.string(),
   provider: z.string().nullable(),
   model: z.string().nullable(),
-  status: z.enum(['done', 'failed', 'running']),
+  /**
+   * The run's OWN status, straight from `agent_runs.status`. `cancelled` is one
+   * of the four values that column writes (`POST /runs/:id/cancel` produces it),
+   * and it is distinct from `failed`: reporting a cancelled run as failed is
+   * untrue.
+   */
+  status: z.enum(['done', 'failed', 'running', 'cancelled']),
+  /**
+   * The reason the RUN itself recorded — `agent_runs.error` — and `null` on a
+   * run that did not fail.
+   *
+   * Distinct from `summary`, which is the `reviews` row's summary and is `null`
+   * for a run that failed before it wrote one. AC-68 asks for the outcome AND
+   * the reason the run recorded, so without this field a failed column can only
+   * show the status word: the reason exists in the database and stops at the
+   * mapper. A cancelled run puts its cancellation note here too, which is the
+   * same column and the same rendering.
+   */
+  error: z.string().nullable(),
   verdict: z.string().nullable(),
   score: z.number().int().nullable(),
   summary: z.string().nullable(),
@@ -84,6 +121,42 @@ export const MultiAgentRun = z.object({
   conflicts: z.array(Conflict),
 });
 export type MultiAgentRun = z.infer<typeof MultiAgentRun>;
+
+/**
+ * Body of POST /pulls/:id/multi-agent-run — the dedicated create route.
+ *
+ * The list is non-empty HERE, where an empty list is simply not a request this
+ * route accepts. `ReviewRunRequest` (contracts/review-api.ts) deliberately does
+ * NOT carry the same `.min(1)`: on `POST /pulls/:id/review` an empty `agentIds`
+ * has its own named refusal, and a schema rejection would pre-empt it.
+ */
+export const MultiAgentRunRequest = z.object({
+  agentIds: z.array(z.string()).min(1),
+});
+export type MultiAgentRunRequest = z.infer<typeof MultiAgentRunRequest>;
+
+// ---------------------------------------------------------------------------
+// Per-agent run estimates (what a fan-out is about to cost, before committing)
+// ---------------------------------------------------------------------------
+
+/**
+ * One agent's mean run duration and cost, over a bounded window of that agent's
+ * most recent completed runs.
+ *
+ * `null` and `0` are NEVER interchangeable here. `mean_duration_ms: null` with
+ * `sample_size: 0` means "this agent has never completed a run", which the UI
+ * renders as a dash — not as `0 ms`. `mean_cost_usd: null` means no sampled run
+ * recorded a cost (an unpriced model), which is not the same as a run that
+ * genuinely cost nothing.
+ */
+export const AgentRunEstimate = z.object({
+  agent_id: z.string(),
+  mean_duration_ms: z.number().nullable(),
+  mean_cost_usd: z.number().nullable(),
+  /** How many runs both means were computed from. 0 ⇒ both means are null. */
+  sample_size: z.number().int(),
+});
+export type AgentRunEstimate = z.infer<typeof AgentRunEstimate>;
 
 // ---------------------------------------------------------------------------
 // Per-agent Stats (GET /agents/:id/stats)
