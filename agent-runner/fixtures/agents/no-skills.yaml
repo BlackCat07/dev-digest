@@ -1,0 +1,9 @@
+# `skills:` with no value parses to null, which `.default([])` does NOT catch —
+# the shared schema normalises it, and this fixture is the evidence it still does.
+name: bare-reviewer
+provider: openrouter
+model: deepseek/deepseek-v4-flash
+system_prompt: |
+  Review the diff.
+skills:
+ci_fail_on: warning

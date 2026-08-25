@@ -42,6 +42,10 @@
  *                         EvalRunAllResult (L06; new symbols only — knowledge's
  *                         EvalCase/EvalOwnerKind and eval-ci's EvalRunRecord /
  *                         EvalTrendPoint / EvalDashboard are untouched)
+ *  - contracts/ci-runtime CI_RESULT_ARTIFACT_NAME / CI_RESULT_FILE_NAME and the
+ *                         exported paths + PR title the generator writes and the
+ *                         runner reads back, plus CiExportPreview (L06; new
+ *                         symbols only — eval-ci's CiExport is untouched)
  *  - contracts/platform   Settings, ConnTestResult, Repo, PrMeta/PrDetail, SpecFile, …
  *  - adapters             adapter interfaces + ModelInfo
  *
@@ -65,6 +69,7 @@ export * from './contracts/trace.js';
 export * from './contracts/platform.js';
 export * from './contracts/why.js';
 export * from './contracts/eval-ci.js';
+export * from './contracts/ci-runtime.js';
 export * from './contracts/eval-batch.js';
 export * from './contracts/observability.js';
 export * from './contracts/productionize.js';

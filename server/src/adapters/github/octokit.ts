@@ -10,6 +10,8 @@ import type {
   PrReviewComment,
   OpenPrPayload,
   CommitFilesPayload,
+  CiWorkflowRunRef,
+  ListWorkflowRunsOptions,
   IssueMeta,
 } from '@devdigest/shared';
 import { withRetry, withTimeout } from '../../platform/resilience.js';
@@ -342,6 +344,79 @@ export class OctokitGitHubClient implements GitHubClient {
           });
           const pr = res.data[0];
           return pr ? { url: pr.html_url } : null;
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  async listWorkflowRuns(
+    repo: RepoRef,
+    opts: ListWorkflowRunsOptions,
+  ): Promise<CiWorkflowRunRef[]> {
+    // The Actions API keys on the workflow's file NAME (or its numeric id); the
+    // caller holds `CI_WORKFLOW_PATH`, so accept either and take the last segment.
+    const workflowId = opts.workflowFile.split('/').pop() ?? opts.workflowFile;
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const res = await this.octokit.rest.actions.listWorkflowRuns({
+            owner: repo.owner,
+            repo: repo.name,
+            workflow_id: workflowId,
+            per_page: Math.min(Math.max(opts.limit ?? 20, 1), 100),
+            ...(opts.headSha ? { head_sha: opts.headSha } : {}),
+          });
+          return res.data.workflow_runs.map((r) => ({
+            id: r.id,
+            prNumber: r.pull_requests?.[0]?.number ?? null,
+            headSha: r.head_sha,
+            status: r.status ?? 'unknown',
+            conclusion: r.conclusion ?? null,
+            htmlUrl: r.html_url,
+            runStartedAt: r.run_started_at ?? null,
+            updatedAt: r.updated_at ?? null,
+          }));
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  async downloadRunArtifact(
+    repo: RepoRef,
+    runId: number,
+    artifactName: string,
+  ): Promise<Uint8Array | null> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const list = await this.octokit.rest.actions.listWorkflowRunArtifacts({
+            owner: repo.owner,
+            repo: repo.name,
+            run_id: runId,
+            per_page: 100,
+          });
+          // An expired artifact is gone from storage even though it is still
+          // listed; treating it as absent is what makes that an ordinary
+          // "no result" outcome instead of a download that 410s.
+          const artifact = list.data.artifacts.find((a) => a.name === artifactName && !a.expired);
+          if (!artifact) return null;
+
+          const res = await this.octokit.rest.actions.downloadArtifact({
+            owner: repo.owner,
+            repo: repo.name,
+            artifact_id: artifact.id,
+            archive_format: 'zip',
+          });
+          // Octokit follows the redirect and hands back the zip body untyped.
+          // Narrow it rather than cast it — a boundary parses, it never asserts.
+          const body: unknown = res.data;
+          if (body instanceof ArrayBuffer) return new Uint8Array(body);
+          if (ArrayBuffer.isView(body)) {
+            return new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+          }
+          return null;
         })(),
         TIMEOUT,
       ),

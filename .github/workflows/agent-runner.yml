@@ -1,0 +1,63 @@
+# agent-runner suite — the CI runner that carries the reviewer-core engine into
+# somebody else's repository. Hermetic units (GitHub and the LLM are both mocked).
+# Uses npm (package-lock.json), like reviewer-core.
+#
+# reviewer-core/** and server/src/vendor/shared/** are in the path filter because
+# this package consumes both as TypeScript source through tsconfig path aliases:
+# a change to either compiles into the runner without touching a file here.
+#
+# The last two steps are the only check a committed build artefact can be given.
+# dist/runner.mjs is committed because the export copies it into a repository
+# that will never run a build; a bundle that has drifted from its source would
+# otherwise be invisible until it misbehaved in a stranger's CI.
+name: agent-runner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'agent-runner/**'
+      - 'reviewer-core/**'
+      - 'server/src/vendor/shared/**'
+      - '.github/workflows/agent-runner.yml'
+  pull_request:
+    paths:
+      - 'agent-runner/**'
+      - 'reviewer-core/**'
+      - 'server/src/vendor/shared/**'
+      - '.github/workflows/agent-runner.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-runner-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent-runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: agent-runner/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - name: rebuild the committed bundle
+        run: npm run build
+
+      - name: the committed bundle matches its source
+        run: git diff --exit-code -- dist/

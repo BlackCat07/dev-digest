@@ -140,6 +140,43 @@ export interface CommitFilesPayload {
   files: CommitFile[];
 }
 
+/**
+ * One GitHub Actions workflow run, reduced to what the CI read-back needs.
+ *
+ * Repository, pull-request number and head SHA are taken from HERE and never
+ * from a value carried inside the uploaded artifact: the artifact is written by
+ * a runner in a repository DevDigest does not control, and a run has to be
+ * stored under the pull request it actually ran on.
+ */
+export interface CiWorkflowRunRef {
+  /** GitHub's workflow-run id — a 64-bit integer, not a uuid. */
+  id: number;
+  /** Pull request the run was triggered by, or null when the run names none. */
+  prNumber: number | null;
+  headSha: string;
+  /** Lifecycle state, e.g. "completed" / "in_progress" — GitHub's vocabulary, kept open. */
+  status: string;
+  /** e.g. "success" / "failure" / "cancelled"; null while the run is unfinished. */
+  conclusion: string | null;
+  /** URL of the Actions run, which is what the CI Runs list links to. */
+  htmlUrl: string;
+  runStartedAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface ListWorkflowRunsOptions {
+  /**
+   * Workflow FILE NAME, e.g. "devdigest-review.yml". A full
+   * `.github/workflows/...` path is accepted too and reduced to its last
+   * segment, because the caller holds the path constant, not the name.
+   */
+  workflowFile: string;
+  /** Only runs on this head commit. */
+  headSha?: string;
+  /** Most recent runs to return (default 20, GitHub caps a page at 100). */
+  limit?: number;
+}
+
 export interface GitHubClient {
   listPullRequests(repo: RepoRef): Promise<PrMeta[]>;
   getPullRequest(repo: RepoRef, n: number): Promise<PrDetail>;
@@ -161,6 +198,23 @@ export interface GitHubClient {
   commitFiles(repo: RepoRef, payload: CommitFilesPayload): Promise<{ branch: string }>;
   /** The open PR whose head is `branch`, if any (so re-publish reuses it). */
   findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string } | null>;
+  /**
+   * Workflow runs for one workflow file, newest first — the read-back's entry
+   * point, since a CI run is discovered by polling Actions rather than by
+   * anyone posting to us.
+   */
+  listWorkflowRuns(repo: RepoRef, opts: ListWorkflowRunsOptions): Promise<CiWorkflowRunRef[]>;
+  /**
+   * Raw zip bytes of the named artifact on a run, or `null` when the run has no
+   * such artifact — expired, or a cancelled run that uploaded nothing. `null`
+   * rather than a throw, because "no artifact" is an ordinary outcome that gets
+   * recorded with a named reason, not an exception.
+   */
+  downloadRunArtifact(
+    repo: RepoRef,
+    runId: number,
+    artifactName: string,
+  ): Promise<Uint8Array | null>;
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;

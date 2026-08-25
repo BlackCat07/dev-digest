@@ -7,6 +7,7 @@
     "autoRefresh": "auto-refresh on",
     "refresh": "Refresh",
     "refreshing": "Refreshing…",
+    "loadFailed": "Could not load CI runs.",
     "filters": {
       "last7Days": "Last 7 days",
       "allAgents": "All agents",
@@ -26,7 +27,11 @@
       "succeeded": "Succeeded",
       "noFindings": "No findings",
       "failed": "Failed",
-      "running": "Running"
+      "running": "Running",
+      "artifactMissing": "Artifact missing",
+      "artifactUnreadable": "Artifact unreadable",
+      "resultFileMissing": "Result file missing",
+      "resultUnparseable": "Result unreadable"
     }
   },
   "exportWizard": {
@@ -60,7 +65,10 @@
     "filesToCreate": "FILES TO CREATE",
     "generating": "Generating…",
     "editable": "editable",
+    "readOnly": "read-only",
+    "previewFailed": "Could not generate the file set.",
     "triggerLabel": "Trigger",
+    "triggerHint": "The pull_request event types the review runs on.",
     "postResultsLabel": "Post results as",
     "postAs": {
       "githubReview": "GitHub review",
@@ -68,11 +76,14 @@
       "none": "None (exit code only)"
     },
     "blockMergeTitle": "Block merge on findings",
-    "blockMergeDesc": "Requires a GitHub App — not available with PAT in local mode",
+    "blockMergeDesc": "DevDigest only makes the check exist and fail. To block a merge, make the DevDigest check required in the repository's branch protection rule or ruleset.",
     "installCardTitle": "Open a PR with these files",
     "installCardBody": "DevDigest opens a PR in {repo} titled “Add DevDigest CI review” with the {count} generated files.",
     "ownerRepo": "owner/repo",
-    "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs."
+    "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs.",
+    "installedTitle": "Pull request opened",
+    "installFailed": "The pull request could not be opened.",
+    "viewPr": "View pull request"
   },
   "ciTab": {
     "heading": "Continuous Integration",
@@ -81,8 +92,17 @@
     "publish": "Publish to CI",
     "update": "Update CI",
     "noRepo": "Connect a repository first",
+    "noRepoBody": "DevDigest needs a connected repository before it can open a pull request that installs this agent.",
     "empty": "Not deployed to CI yet. Use “Publish to CI” to open a PR that adds the workflow + agent config.",
-    "installed": "installed {date}"
+    "installed": "installed {date}",
+    "reposLabel": "REPOSITORIES",
+    "activeIn": "Active in {count, plural, one {# repository} other {# repositories}}",
+    "addRepo": "Add a repository",
+    "neverRun": "Never run",
+    "ranAgo": "{age} ago",
+    "loadFailed": "Could not load this agent's CI installations.",
+    "gateLabel": "CI GATE",
+    "gateBody": "The exported workflow requests changes and exits non-zero on findings at this severity or above. Change it on the Config tab."
   },
   "publishDialog": {
     "title": "Publish to CI",
