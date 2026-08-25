@@ -86,6 +86,43 @@ valuable one — the code does not record what was tried and abandoned.
 
 <!-- append below -->
 
+- **2026-08-25** — **A whole-file `grep` Done-condition flags the doc-comment that documents
+  the very absence the gate enforces — so the better the code is commented, the redder the
+  gate — and it happened THREE times in one plan.** Extends 2026-08-19 in this section, which
+  prescribes scoping a gate to import statements; this is the inverted shape that entry does not
+  cover, and it now reaches the client too. Measured on the Export-to-CI plan: `grep -arn
+  "EventSource" src/lib/hooks/ci.ts` hit a comment stating the hook deliberately opens none;
+  `grep -arnE "…Suspense…" src/app/ci-runs` hit a header comment stating why there is no
+  boundary; and AC-45's `reviewer-core` purity grep was **red on a clean base** on
+  `llm/structured.ts:2` (`openai/helpers/zod`, a schema helper that makes no call, present
+  since `b86cdee`). Two implementers independently refused to reword the prose and cited
+  2026-08-19 back at the plan, which is the correct response and is why nothing was bent.
+  Three rules follow. Scope the pattern to code (`new EventSource\|EventSource(`,
+  `^\s*import .*Suspense`), never to a bare name. A gate over a *package you do not own*
+  needs its exceptions measured on the base commit first, or it is red on arrival and stops
+  being read (`../reviewer-core/INSIGHTS.md`, 2026-08-23). And carve out a **named pair**
+  rather than a directory — `llm/(openrouter|structured)\.ts`, not `llm/`, or a real provider
+  call in a future file there passes unnoticed. Evidence:
+  `../.claude/.plans/export-to-ci/plan.md` (the three corrected Done-conditions),
+  `../reviewer-core/src/llm/structured.ts:2`, `../client/src/app/ci-runs/page.tsx:7`.
+
+- **2026-08-25** — **An acceptance criterion can demand more distinct outcomes than its
+  input is capable of producing, and only a written test finds it.** SPEC-05's AC-24 requires
+  four *distinct* named reasons across four unreadable-artifact cases — but an expired artifact
+  and a cancelled run that uploaded nothing both arrive at the decoder as the **identical
+  `null` bytes**, so any function of those bytes can produce at most three. The first run of
+  `test/ci-ingest.test.ts` failed on exactly that (3 distinct where 4 were asserted), which is
+  the only reason it was caught; every gate was green and a reviewer reading the code would
+  have agreed with it. The fix keeps the decoder honest — `modules/ci/artifact.ts` stays a pure
+  function of bytes with the four byte-derived reasons — and adds
+  `reasonForMissingArtifact(reason, conclusion)` above it, refining `artifact_missing` to
+  `run_cancelled` from the **workflow run's own conclusion**, the one source that can tell them
+  apart. Generalises: when a criterion says "each with its own distinct reason", ask which
+  *input* carries the distinction before implementing it, and assert the reasons are
+  **pairwise different** rather than merely present — an assertion that each case yields *a*
+  reason passes with one catch-all. Evidence: `src/modules/ci/artifact.ts`
+  (`readResultArtifact`, `reasonForMissingArtifact`), `test/ci-ingest.test.ts`.
+
 - **2026-08-20** — **A test suite that checks WRAPPING MECHANICS is not evidence of an
   injection defence, and the gap is measurable: 9 of 10 passed with the defence deleted.**
   Measured on the PR Brief prompt — with the `## SECURITY` section removed from
@@ -650,6 +687,16 @@ Conventions and architectural decisions, each with the reason behind it.
 Dependency and tooling quirks.
 
 <!-- append below -->
+
+- **2026-08-25** — **`yaml.stringify(obj, { nullStr: '' })` is the only formulation that
+  writes a valueless YAML key (`skills:`) which reads back as `null`.** The default `nullStr`
+  emits the literal string `null`, and a `.default([])` on the Zod contract does **not** catch
+  either shape — which is why `AgentManifest.skills` is declared `.nullish().transform(v => v
+  ?? [])` rather than `.default([])`. This matters wherever a generated manifest must round-trip
+  through a hand-editable file: the studio writes it and the CI runner parses it with the same
+  schema, so a key that serialises one way and parses another splits the two ends silently.
+  Evidence: `src/modules/ci/manifest.ts`, `test/ci-generate.test.ts` (the AC-4 case),
+  `src/vendor/shared/contracts/eval-ci.ts` (`AgentManifest.skills`).
 
 - **2026-08-23** — **`git status --short` reports a newly generated file as `??`, never `A`, so a
   Done-condition written against an `A` line cannot pass on an implementer's tree** — `A` needs a
