@@ -1,4 +1,4 @@
-# Spec: Export to CI | Spec ID: SPEC-05 | Status: approved
+# Spec: Export to CI | Spec ID: SPEC-05 | Status: implemented
 Supersedes: —
 
 A reviewer can take an agent they tuned in the studio and put it to work on a real
@@ -916,6 +916,212 @@ Each already has its default written into the criteria above. None is blocking.
   registry is already taken by a nav entry. *Default:* the CI Runs entry ships with no `g`
   shortcut.
 
+## Data
+
+**Endpoints** (`server/src/modules/ci/routes.ts`), each opening with `getContext` — the
+workspace lookup is the authorization check, and no route accepts a caller it has to
+identify further:
+
+| Method & path | Serves | Returns |
+|---|---|---|
+| `POST /agents/:id/export-ci/preview` | AC-1, AC-2 | `CiExportPreview` — writes nothing to GitHub |
+| `POST /agents/:id/export-ci` | AC-15 … AC-19 | `CiExport` — commits the bundle, opens or reuses the PR |
+| `GET /agents/:id/ci-installations` | AC-48 | `CiInstallation[]` for that agent, each with a derived `last_run_status`/`last_run_at` |
+| `GET /ci-runs?limit=` | AC-27, AC-28 | `CiRun[]`, newest first, `limit` default 50 capped at 200 |
+| `POST /ci-runs/refresh?limit=` | AC-22 … AC-26 | reads new workflow runs via the GitHub Actions API, then returns the same shape as `GET /ci-runs` |
+
+Both export routes share one body schema, `CiExportBody` (`server/src/modules/ci/schemas.ts`)
+— `CiExportInput.extend({ repo: <owner/name regex> })` — and are told apart by the
+contract's own `action` field (`"files"` for preview, `"open_pr"` for install); the client
+sends every `CiExportInput` field on both calls, never a partial body.
+
+**Contract types** (`server/src/vendor/shared/`, mirrored byte-for-byte in
+`client/src/vendor/shared/`). `contracts/ci-runtime.ts` is new — 8 runtime constants
+(`CI_RESULT_ARTIFACT_NAME`, `CI_RESULT_FILE_NAME`, `CI_EXPORT_BRANCH`, `CI_EXPORT_PR_TITLE`,
+`CI_WORKFLOW_PATH`, `CI_RUNNER_PATH`, `CI_AGENTS_DIR`, `CI_SKILLS_DIR`) plus
+`CiExportPreview`. Two symbols ship beyond the names this file's `## Contracts` table
+lists above the divider — both were recommendations in the plan before the code existed,
+both land inside the recorded "extend with new symbols and optional fields" agreement, and
+neither reshapes an existing one:
+
+- **`CiExportPreview`** — `{ files: CiFile[] }`. A preview cannot return `CiExport`, whose
+  `installation` field is required and non-nullable, and a preview installs nothing.
+- **`CiRun.reason`** — `z.string().nullable()`. Carries AC-24's reason on a run whose
+  result could not be read; `null` on a run whose result was read. It is free text in both
+  the schema and the contract, which is what lets it also carry the fifth reason below.
+
+Of the fields the `## Contracts` table *did* name: `CiInstallation.last_run_status` ships
+as `z.string().nullable()`, not the `CiRunStatus` enum the table says — AC-24's reasons
+are not `CiRunStatus` members, so an installation whose latest run carried one would fail
+the parse against the enum. It now matches `CiRun.status`, which is already a loose string
+for the identical reason. `.last_run_at` ships nullable as agreed. `GitHubClient` gained
+`listWorkflowRuns` and `downloadRunArtifact` as agreed, on the port and on both
+implementations (`server/src/adapters/github/octokit.ts`, `server/src/adapters/mocks.ts`).
+
+**A fifth run reason, not in AC-24's four.** AC-24 asks for four distinct reasons across
+four cases, but an expired artifact and a cancelled run that uploaded nothing both arrive
+at the decoder as identical `null` bytes — a pure function of the downloaded artifact
+cannot tell them apart. `server/src/modules/ci/artifact.ts`'s `readResultArtifact` stays
+exactly the spec's four byte-derived reasons (`artifact_missing`, `artifact_unreadable`,
+`result_file_missing`, `result_unparseable`); a separate function,
+`reasonForMissingArtifact(reason, conclusion)`, refines `artifact_missing` to a fifth
+reason, `run_cancelled`, from the workflow run's own `conclusion` — the only source that
+actually knows the difference. AC-24's four cases each still land on a distinct reason;
+the fourth distinction just comes from the run, not the artifact.
+
+**Rows** (`server/src/db/schema/ci.ts`, migration `0022_petite_kylun.sql`):
+
+- `ci_installations` — no new column. `ci_installations_agent_repo_uq`, a unique index on
+  `(agent_id, repo)`, is the `ON CONFLICT` target the export's upsert relies on for AC-17.
+- `ci_runs` — gained `workflow_run_id` (bigint, not null — GitHub's own id, and the
+  idempotency key together with `ci_installation_id`), `head_sha`, `repo`, `agent`,
+  `blockers`, `duration_s`, `reason`, `agent_run_id` (FK → `agent_runs`, `ON DELETE SET
+  NULL`). `repo` and `agent` are denormalised deliberately: `ci_installation_id` is itself
+  `ON DELETE SET NULL` and `ci_installations.agent_id` cascades from `agents`, so a
+  deleted agent or installation would otherwise take a run's provenance with it.
+  `ci_runs_installation_run_uq` on `(ci_installation_id, workflow_run_id)` is AC-26's
+  idempotency; `ci_runs_ran_at_idx` on `(ran_at DESC, id DESC)` is AC-27's total order.
+- `CiInstallation.last_run_status`/`.last_run_at` are read, never stored, exactly as the
+  `## Contracts` table calls for: `server/src/modules/ci/repository.ts`'s
+  `listInstallationsForAgent`/`listInstallationsForWorkspace` join a
+  `DISTINCT ON (ci_installation_id) … ORDER BY ci_installation_id, ran_at DESC, id DESC`
+  subquery over `ci_runs`.
+
+## States
+
+**The CI tab** (`CiTab.tsx`) — four, told apart rather than collapsed into one:
+
+- no connected repository → the connect-a-repository copy, no export entry point (AC-47).
+- installations loading → a skeleton.
+- installations failed to load → the inline failure copy (`ciTab.loadFailed`), tab chrome
+  still renders.
+- installations loaded, none → the not-deployed empty state (`ciTab.empty`).
+- installations loaded, one or more → one row each, no edit or delete control (N13); a row
+  whose installation has **never run** reads `ciTab.neverRun` rather than a blank cell —
+  the ordinary state immediately after an export, not an error (AC-48).
+
+**The export wizard** — one state per step, plus the two that cross steps:
+
+- Target: Continue disabled until `repo` matches `owner/name` (AC-53).
+- Preview: generating (`exportWizard.generating`, Continue disabled, AC-55) → success
+  (the fixed-order, read-only file list, AC-54) → failure inline
+  (`exportWizard.previewFailed`) with the entered repository kept (AC-56).
+- Configure: triggers and post-as pre-filled from the contract's own defaults (AC-57).
+- Install: idle → succeeded (a link to the opened-or-reused PR, `exportWizard.viewPr`,
+  AC-60) → failed inline (`exportWizard.installFailed`) with every entered value kept
+  (AC-61).
+
+**CI Runs** (`/ci-runs`) — three request states plus one cell-level fan-out:
+
+- in flight → skeleton rows shaped like the table.
+- no runs → the empty state.
+- request failed → the inline failure beside the table, sidebar and breadcrumb still
+  live (AC-63).
+- **a populated row's status cell** — `ciStatusCell(run.reason ?? run.status)`
+  (`client/src/lib/ci.ts`) — is one of: a known `CiRunStatus` word (`succeeded`,
+  `no_findings`, `failed`; `running` is a defined enum member no CI run reaches today,
+  because the runner writes its result only once, at the end of a synchronous job); one of
+  the five reasons above, each with its own word; a raw, untranslated string for a value
+  the catalogue has no word for (an older runner, a reason added after this build); or, for
+  a run with neither `status` nor `reason`, an em-dash and no dot — there is no colour to
+  be alone with, so AC-64 is not weakened by the gap.
+
+**The agent-runner**, on every terminating path (`agent-runner/src/main.ts`): `succeeded`
+(findings, some or none surviving grounding), `no_findings` (zero grounded findings —
+distinct from a run that never produced a result at all, EC-23), or `failed` (a missing
+environment variable, an unparseable manifest, or an uncaught error) — the last two still
+write a `CiResultArtifact` naming what happened (AC-36). A manifest naming a skill that
+resolves to no file does not change which of the three states the run reaches; it adds
+that slug to `missing_skills` and the run continues (AC-30).
+
+## Implementation
+
+**server** (`server/src/modules/ci/`) — `routes.ts` (transport only), `service.ts`
+(target refusal, trigger intersection, reuse-or-open, the throttle), `generate.ts` +
+`manifest.ts` + `workflow.ts` (the bundle), `artifact.ts` (the four-plus-one reasons),
+`repository.ts` (the `DISTINCT ON` latest-run join, the one-transaction `recordRun`),
+`schemas.ts`, `types.ts`, `constants.ts`, `helpers.ts`. Wired in
+`server/src/modules/index.ts` and `server/src/platform/container.ts` (`container.ci`);
+the committed runner bundle is read by `server/src/platform/ci-runner.ts`, the one ring
+allowed a `node:fs` import, and handed to the module as an injected `() => Promise<string>`
+so `modules/ci/` itself imports no `node:` specifier. Two new `GitHubClient` methods in
+`server/src/adapters/github/octokit.ts` and their test double in
+`server/src/adapters/mocks.ts`. Schema: `server/src/db/schema/ci.ts`; migration:
+`server/src/db/migrations/0022_petite_kylun.sql`.
+
+**contracts** — `server/src/vendor/shared/contracts/ci-runtime.ts` and
+`eval-ci.ts` (the additions above), mirrored in `client/src/vendor/shared/`.
+
+**agent-runner** (new package, root `agent-runner/`) — `src/main.ts` (env check before
+argument parsing, before any model call — AC-39), `src/manifest.ts` (loads and validates
+against `AgentManifest`), `src/diff.ts` (excludes `.devdigest/` and the generated
+workflow — AC-32), `src/github.ts` (`FetchRunnerGitHub`, over global `fetch`, no clone),
+`src/llm.ts` (imports `OpenRouterProvider` from the `reviewer-core` barrel — the runner
+and the studio share the provider, not just the engine), `src/review-pr.ts`
+(`reviewAndPost`, calls `gateTriggered`/`countBlockers` from `@devdigest/reviewer-core` for
+the exit code — never the model's self-reported verdict, AC-34), `src/redact.ts` (strips
+secret values from stdout, stderr, the result file and the posted review — AC-40). Built
+to a committed `dist/runner.mjs` via `build.mjs` (esbuild, with a `createRequire` banner
+so `openai`'s CJS internals bundle to ESM). `reviewer-core` itself carries **0 changed
+lines** for this feature — AC-42 … AC-45 are satisfied by code that already shipped
+(`gateTriggered`, `countBlockers`, `groundFindings`, `assemblePrompt` + `INJECTION_GUARD`).
+
+**The generated workflow** (`server/src/modules/ci/workflow.ts`, a template string, not
+`yaml.stringify` — the security case has to be legible in the file a human reviews) emits
+**three** `uses:` steps, not two: `actions/checkout@v4`, `actions/setup-node@v4`
+(`node-version: 20`) and `actions/upload-artifact@v4`. `setup-node` is load-bearing — the
+review step runs `node` directly rather than invoking a node20 action, so without it the
+Node version is whatever `ubuntu-latest` ships that month. The review step itself is
+`run: node .devdigest/runner.mjs review --agent <slug> --post-as <mode>`, with
+`OPENROUTER_API_KEY`, `GITHUB_TOKEN` and `GITHUB_REPOSITORY` in that step's `env:` —
+`GITHUB_TOKEN` is not automatically an environment variable inside a job step and has to
+be mapped from `${{ secrets.GITHUB_TOKEN }}` explicitly.
+
+**Three couplings between the generated workflow and the runner are load-bearing and
+unguarded by any test** — the `--post-as` flag name, its three values, and the three
+`env:` variable names above. `CI_RESULT_ARTIFACT_NAME` is the model for how a coupling
+like this is supposed to be handled — a shared constant both sides import — and these
+three did not get the same treatment: nothing in either package's suite checks the
+generator's output against the runner's parser, so `post_as: none` posting a review anyway
+would be a green build on both sides (finding F8 in `.claude/.plans/export-to-ci/run.md`).
+
+**client** — `client/src/lib/ci.ts` (repo-pattern validation, the target-card list, status
+display, the file-order rank — no user-visible string, every label a key into `ci.json`),
+`client/src/lib/hooks/ci.ts` (`useAgentCiInstallations`, `useCiRuns`, `useCiPreview`,
+`useExportToCi`, `useRefreshCiRuns`), the CI tab and export wizard under
+`client/src/app/agents/[id]/_components/AgentEditor/_components/CiTab/`, the CI Runs
+screen under `client/src/app/ci-runs/` (`page.tsx`, no `<Suspense>` — the route is dynamic
+already), one entry in `client/src/vendor/ui/nav.ts` (`key: "ci-runs"`, no `g` shortcut —
+OQ-11). `ciStatusCell` lives in `lib/ci.ts` rather than the CI tab, promoted there on the
+CI Runs table's becoming its second consumer. The vendored `ExportWizardSteps` could not
+satisfy AC-65 — it hard-codes `var(--text-muted)` on every not-yet-reached step label and
+exposes no prop, and `vendor/ui` is not to be given one — so the wizard draws its own
+six-line step rail locally instead (`ExportWizard.tsx`); `vendor/ui` carries 0 changed
+lines for this feature. AC-66 was computed, not eyeballed: `#ededed` on `#1c1c1c` =
+14.56:1; `#18181b` on `#ffffff` = 17.72:1, both schemes far above the 4.5:1 floor.
+
+**Tests.** `server/test/ci-export.test.ts`, `ci-generate.test.ts`, `ci-ingest.test.ts`,
+`ci-routes.test.ts` (hermetic) and `ci-runs-order.it.test.ts` (Postgres, 8 tests) —
+`agent-runner/test/` (6 files, 53 tests) —
+`client/src/app/agents/[id]/_components/AgentEditor/_components/CiTab/CiTab.test.tsx`,
+`client/src/lib/hooks/ci.test.tsx`,
+`client/src/app/ci-runs/_components/CiRunsView/CiRunsView.test.tsx`.
+
+**What is verified, as of `11e71b3` plus this uncommitted diff.** All 54 plan requirements
+covering the 66 acceptance criteria; 903 server tests (base 844), 468 client (base 455),
+53 agent-runner, 58 reviewer-core; `depcruise` 0 errors / 22 warnings / 260 modules against
+a 245 baseline; the boundary review, 0 findings at every severity. `ci-runs-order.it.test.ts`
+ran against a real Postgres (8 tests), proving — at the database, not against a fake — the
+total order under an `UPDATE` to a tied row (AC-27), the `(agent_id, repo)` uniqueness
+(AC-17), and the run/`agent_runs` idempotency (AC-25, AC-26); the same run also proved
+migration `0022_petite_kylun.sql` **applies** cleanly to a fresh database.
+
+**What is not verified.** No browser was driven against the CI tab, the wizard or
+`/ci-runs` (`DDG-UI-001`). The migration has not been applied to any developer database —
+distinct from "applies cleanly", which the `.it.test.ts` run above did prove. No real
+export → merge → CI run loop has been exercised against a live GitHub repository. The
+feature's happy path across GitHub is therefore unproven end to end.
+
 ## History
 
 2026-08-25 — spec written.
@@ -951,3 +1157,26 @@ defers installation history, workflow versioning and any diff-against-installed 
 records that update and re-export are one code path. `ciTab.installed` is orphaned by this
 change, noted in Inputs (provenance) so the next grep of it lands somewhere. Count still 66;
 no traceability row changed.
+2026-08-25 — **implemented.** All 66 acceptance criteria built across `server` (a new `ci`
+module, two `GitHubClient` methods, the `ci_*` schema plus migration
+`0022_petite_kylun.sql`), a new root package `agent-runner/`, and `client` (the CI tab,
+the four-step export wizard, `/ci-runs`); `reviewer-core` shipped 0 changed lines, since
+G3's "same engine" is satisfied by both callers consuming code that already shipped
+(AC-42 … AC-45). `Status` moves `approved → implemented`; `## Data`, `## States` and
+`## Implementation` added below. No acceptance criterion was edited — four places where
+the code met a criterion by a route the prose does not spell out are recorded in
+`## Data`/`## Implementation` rather than here: AC-24's fourth reason (`run_cancelled`)
+comes from the workflow run's own `conclusion`, not from the artifact bytes, because an
+expired artifact and a cancelled run with nothing uploaded are byte-identical;
+`CiInstallation.last_run_status` ships as a loose string rather than the `CiRunStatus`
+enum the `## Contracts` table names, for the same reason `CiRun.status` already is one;
+`CiExportPreview` and `CiRun.reason` ship as two contract symbols beyond that table's
+list, both inside its own "extend with new symbols" agreement; and the generated
+workflow's third `uses:` step, `actions/setup-node@v4`, is load-bearing for the Node
+version the review step runs under. Verified at the database via
+`ci-runs-order.it.test.ts` (8 tests, run once by the orchestrator with Docker): AC-17,
+AC-25, AC-26, AC-27. **Not verified:** no browser was driven against the CI tab, the
+wizard or `/ci-runs` (`DDG-UI-001`); the migration has not been applied to any developer
+database; no export → merge → CI run loop has been exercised against a live GitHub
+repository. See `.claude/.plans/export-to-ci/run.md` and
+`.claude/.plans/export-to-ci/reports/implementation-summary.md` for the full run record.
