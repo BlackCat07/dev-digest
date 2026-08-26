@@ -7,15 +7,19 @@ import {
   BatchIdParams,
   CaseIdParams,
   CreateEvalCaseBody,
+  DraftEvalCaseBody,
   EvalCompareQuery,
   EvalPeriodQuery,
   SaveEvalCaseBody,
   StartEvalBatchPayload,
+  TrialRunEvalCaseBody,
 } from './schemas.js';
 
 /**
  * L06 — eval module.
- *   POST   /eval/cases                       → turn a decided finding into a case
+ *   POST   /eval/cases/drafts                → derive a case from a finding, store nothing
+ *   POST   /eval/cases                       → file a derived (and edited) case
+ *   POST   /eval/agents/:agentId/trial-runs  → run one unsaved draft, record nothing
  *   GET    /eval/agents/:agentId/cases       → that agent's whole set
  *   PUT    /eval/cases/:caseId               → save a hand-edited case
  *   DELETE /eval/cases/:caseId               → drop a case (batch history is kept)
@@ -61,12 +65,52 @@ export default async function evalRoutes(appBase: FastifyInstance) {
 
   // ---- cases --------------------------------------------------------------
 
+  /**
+   * The draft behind `Turn into eval case`.
+   *
+   * A POST that writes nothing, and `200` rather than `201` says so: there is no
+   * resource created and no `Location` to point at. It is a POST at all because
+   * the finding id is the input to a derivation, and because every refusal this
+   * feature answers with is applied here — the reader learns that a finding
+   * cannot become a case BEFORE a modal opens on it, not after they have edited
+   * one.
+   */
+  app.post('/eval/cases/drafts', { schema: { body: DraftEvalCaseBody } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.draftCaseFromFinding(workspaceId, req.body.finding_id);
+  });
+
   app.post('/eval/cases', { schema: { body: CreateEvalCaseBody } }, async (req, reply) => {
     const { workspaceId } = await getContext(container, req);
-    const created = await service.createCaseFromFinding(workspaceId, req.body.finding_id);
+    const created = await service.createCaseFromFinding(workspaceId, req.body);
     reply.code(201);
     return created;
   });
+
+  /**
+   * One trial run of an unsaved draft.
+   *
+   * Synchronous, unlike a batch, and the difference is one case against many: it
+   * is bounded by a single `CASE_DEADLINE_MS`, and there is no row its answer
+   * could be recovered from afterwards, so returning it is the only way the
+   * caller gets it. Nothing is persisted and nothing is published — pressing
+   * `Run case` four times must not move the agent's dashboard four times.
+   *
+   * The limit is looser than a batch's because the work is smaller by the size
+   * of the set: this is one model request, and the whole point of the control is
+   * that a reader presses it repeatedly to see whether a finding reproduces.
+   */
+  app.post(
+    '/eval/agents/:agentId/trial-runs',
+    {
+      schema: { params: AgentIdParams, body: TrialRunEvalCaseBody },
+      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.trialRunCase(workspaceId, req.params.agentId, req.body);
+    },
+  );
 
   app.get(
     '/eval/agents/:agentId/cases',

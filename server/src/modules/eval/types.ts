@@ -51,6 +51,8 @@ import type {
   EvalBatch,
   EvalBatchCaseResult,
   EvalBatchStatus,
+  EvalCaseCreate,
+  EvalCaseDraft,
   EvalCaseOutcome,
   EvalCaseSave,
   EvalComparison,
@@ -59,6 +61,8 @@ import type {
   EvalOwnerKind,
   EvalPeriod,
   EvalRunAllResult,
+  EvalTrialRunRequest,
+  EvalTrialRunResult,
   EvalWorkspaceDashboard,
   EvalDashboardRow,
   UnifiedDiff,
@@ -91,6 +95,16 @@ export type DiffParser = (raw: string) => UnifiedDiff;
 export interface EvalSourceFinding {
   id: string;
   reviewId: string;
+  /**
+   * The finding's own title, used to seed a draft's expected-output skeleton and
+   * to state what the draft asserts in words.
+   *
+   * Read, never scored: `scoreEvalBatch` compares files and line ranges, so this
+   * string is documentation of the case for the human reading it. It is on this
+   * port rather than fetched separately because `findingContext` already returns
+   * the whole row — asking for it costs nothing and a second read would.
+   */
+  title: string;
   file: string;
   startLine: number;
   endLine: number;
@@ -553,7 +567,21 @@ export interface EvalStore {
  * Fastify's route-not-found and never with someone else's data.
  */
 export interface Evals {
-  createCaseFromFinding(workspaceId: string, findingId: string): Promise<EvalAgentCase>;
+  /**
+   * Derive what a case WOULD be, and store nothing.
+   *
+   * Every refusal `createCaseFromFinding` answers with is applied here too, so a
+   * finding that cannot become a case says why before a modal opens rather than
+   * after a human has edited one.
+   */
+  draftCaseFromFinding(workspaceId: string, findingId: string): Promise<EvalCaseDraft>;
+  createCaseFromFinding(workspaceId: string, body: EvalCaseCreate): Promise<EvalAgentCase>;
+  /** Run one unsaved draft against the agent's current config. Writes nothing. */
+  trialRunCase(
+    workspaceId: string,
+    agentId: string,
+    body: EvalTrialRunRequest,
+  ): Promise<EvalTrialRunResult>;
   listCases(workspaceId: string, agentId: string): Promise<EvalAgentCase[]>;
   saveCase(workspaceId: string, caseId: string, body: EvalCaseSave): Promise<EvalAgentCase>;
   deleteCase(workspaceId: string, caseId: string): Promise<void>;

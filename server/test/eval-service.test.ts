@@ -96,10 +96,14 @@ function recordingRunner(): EvalBatchRunner & { started: EvalBatchRunInput[] } {
     start(input) {
       started.push(input);
     },
+    runTrial: unreachable('runner.runTrial'),
   };
 }
 
-const NEVER_RUNS: EvalBatchRunner = { start: unreachable('runner.start') };
+const NEVER_RUNS: EvalBatchRunner = {
+  start: unreachable('runner.start'),
+  runTrial: unreachable('runner.runTrial'),
+};
 
 function agentFacts(over: Partial<EvalAgentFacts> = {}): EvalAgentFacts {
   return {
@@ -123,6 +127,7 @@ function sourceFinding(over: Partial<EvalSourceFinding> = {}): EvalSourceFinding
   return {
     id: 'finding-1',
     reviewId: 'review-1',
+    title: 'Untrusted input reaches an outbound request',
     file: 'src/adapters/webhooks.ts',
     startLine: 8,
     endLine: 2,
@@ -218,7 +223,13 @@ function service(over: {
   return new EvalService({
     store: store(over.store ?? {}),
     findings: over.findings ?? findings({}),
-    agents: agents(over.agents ?? {}),
+    /* The agent source defaults to ONE working read rather than to all-unreachable:
+       deriving a case now resolves the agent the case would land on, because
+       `reviews.agent_id` carries no foreign key and an id pointing at a deleted
+       agent must not become a case nobody can list or run. `list` and
+       `getVersion` stay unreachable, so a path that reaches either still names
+       itself. */
+    agents: agents(over.agents ?? { getById: async () => agentFacts() }),
     parseDiff: parseUnifiedDiff,
     runner: over.runner ?? NEVER_RUNS,
     now: () => NOW,
@@ -235,6 +246,179 @@ async function refusalOf(work: Promise<unknown>): Promise<EvalRefusal> {
     throw err;
   }
 }
+
+/* ─── the draft behind `Turn into eval case` ──────────────────────────────── */
+
+/* Pressing the button must not add anything to an agent's eval set. It derives a
+   proposal a human reads, edits and runs; `Save` is what writes. Every store
+   method except the three reads the derivation makes is `unreachable`, so a
+   draft that filed a row fails with the name of the call it made rather than
+   passing because the returned shape looked right. */
+describe('draftCaseFromFinding', () => {
+  const readsOnly = {
+    findCaseBySourceFinding: async () => undefined,
+    countCases: async () => 3,
+    listCaseAnchors: async () => [],
+  };
+
+  it('derives the whole case and writes NOTHING', async () => {
+    const svc = service({ findings: derivationSource(), store: readsOnly });
+
+    const draft = await svc.draftCaseFromFinding(WS, 'finding-1');
+
+    expect(draft.agent_id).toBe(AGENT);
+    expect(draft.agent_name).toBe('General Reviewer');
+    // Anchors arrive inverted from the table (8→2) and are normalised, exactly
+    // as the saved case's are — the draft is what the save will re-derive.
+    expect(draft.expectation).toBe('must_find');
+    expect(draft.expected_anchors).toEqual([
+      { file: 'src/adapters/webhooks.ts', low_line: 2, high_line: 8 },
+    ]);
+    expect(draft.name).toBe('src/adapters/webhooks.ts:2-8');
+    expect(draft.input_diff).toContain('+++ b/src/adapters/webhooks.ts');
+    expect(draft.input_files).toEqual([{ path: 'src/adapters/webhooks.ts' }]);
+    // No id anywhere: an id would be the one field a client could mistake for
+    // "this already exists".
+    expect(draft).not.toHaveProperty('id');
+  });
+
+  it('seeds a finding-shaped expected output, and an empty one for a negative case', async () => {
+    const positive = await service({
+      findings: derivationSource(),
+      store: readsOnly,
+    }).draftCaseFromFinding(WS, 'finding-1');
+
+    expect(positive.expected_output).toEqual([
+      {
+        severity: 'critical',
+        category: 'security',
+        title: 'Untrusted input reaches an outbound request',
+        file: 'src/adapters/webhooks.ts',
+        start_line: 2,
+        end_line: 8,
+      },
+    ]);
+    expect(positive.source).toMatchObject({ finding_id: 'finding-1', decision: 'accepted' });
+
+    // A dismissed finding asserts the ABSENCE of a finding, and the empty list
+    // IS that assertion — a skeleton here would state the opposite.
+    const negative = await service({
+      findings: derivationSource(sourceFinding({ acceptedAt: null, dismissedAt: DECIDED_AT })),
+      store: readsOnly,
+    }).draftCaseFromFinding(WS, 'finding-1');
+
+    expect(negative.expectation).toBe('must_not_flag');
+    expect(negative.expected_output).toEqual([]);
+    expect(negative.source.decision).toBe('dismissed');
+  });
+
+  it('refuses an undecided finding before a modal can open on it', async () => {
+    // The same refusal the save answers with, applied at the same point: a modal
+    // that opened on a finding the save would reject wastes a human's editing.
+    const svc = service({
+      findings: derivationSource(sourceFinding({ acceptedAt: null, dismissedAt: null })),
+      store: {},
+    });
+    const err = await refusalOf(svc.draftCaseFromFinding(WS, 'finding-1'));
+    expect(err.reason).toBe('finding_has_no_decision');
+  });
+
+  it('refuses a finding whose agent has since been deleted', async () => {
+    // `reviews.agent_id` carries no foreign key, so the id can outlive the row.
+    // A case filed under one would be invisible in every list and unrunnable.
+    const svc = service({
+      findings: derivationSource(),
+      store: readsOnly,
+      agents: { getById: async () => undefined },
+    });
+    await expect(svc.draftCaseFromFinding(WS, 'finding-1')).rejects.toMatchObject({
+      code: 'not_found',
+    });
+  });
+});
+
+/* ─── running a draft without saving it ───────────────────────────────────── */
+
+describe('trialRunCase', () => {
+  const DRAFT = {
+    name: 'src/a.ts:2-8',
+    input_diff: `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n${PATCH}`,
+    expectation: 'must_find' as const,
+    expected_anchors: [{ file: 'src/a.ts', low_line: 2, high_line: 8 }],
+  };
+
+  const PASSED = {
+    outcome: 'passed' as const,
+    not_run_reason: null,
+    expected_count: 1,
+    actual_count: 1,
+    kept_count: 1,
+    dropped_count: 0,
+    duration_ms: 1840,
+    cost_usd: 0.02,
+    actual_output: { findings: [] },
+  };
+
+  function trialRunner(): EvalBatchRunner & { seen: unknown[] } {
+    const seen: unknown[] = [];
+    return {
+      // A trial must never open a batch — `start` is the only way it could.
+      start: unreachable('runner.start'),
+      seen,
+      runTrial: async (input) => {
+        seen.push(input);
+        return PASSED;
+      },
+    };
+  }
+
+  it('runs against the agent’s CURRENT config and stores nothing', async () => {
+    const runner = trialRunner();
+    // Every store method throws: a trial that recorded a case, a batch or a run
+    // fails by the name of the call it made.
+    const svc = service({ store: {}, agents: { getById: async () => agentFacts() }, runner });
+
+    const result = await svc.trialRunCase(WS, AGENT, DRAFT);
+
+    expect(result).toEqual(PASSED);
+    expect(runner.seen).toEqual([
+      {
+        agentId: AGENT,
+        systemPrompt: 'You review pull requests.',
+        model: 'gpt-5-mini',
+        provider: 'openai',
+        evalCase: { id: 'trial', ...DRAFT },
+      },
+    ]);
+  });
+
+  it('is scoped by workspace like every other read', async () => {
+    const svc = service({
+      store: {},
+      agents: { getById: async () => undefined },
+      runner: { start: unreachable('runner.start'), runTrial: unreachable('runner.runTrial') },
+    });
+    await expect(svc.trialRunCase(WS, AGENT, DRAFT)).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  it('refuses a forbidden anchor naming a file the draft diff does not contain', async () => {
+    // Borrowed from `saveCase` on purpose: a trial that ran green on a case the
+    // save would refuse is worse than no trial at all.
+    const svc = service({
+      store: {},
+      agents: { getById: async () => agentFacts() },
+      runner: { start: unreachable('runner.start'), runTrial: unreachable('runner.runTrial') },
+    });
+    const err = await refusalOf(
+      svc.trialRunCase(WS, AGENT, {
+        ...DRAFT,
+        expectation: 'must_not_flag',
+        expected_anchors: [{ file: 'src/elsewhere.ts', low_line: 1, high_line: 1 }],
+      }),
+    );
+    expect(err.reason).toBe('anchor_not_in_diff');
+  });
+});
 
 /* ─── creating a case from a decided finding ───────────────────────────────── */
 
@@ -254,7 +438,7 @@ describe('createCaseFromFinding', () => {
       },
     });
 
-    await svc.createCaseFromFinding(WS, 'finding-1');
+    await svc.createCaseFromFinding(WS, { finding_id: 'finding-1' });
 
     expect(inserted?.expectation).toBe('must_find');
     expect(inserted?.ownerKind).toBe('agent');
@@ -280,6 +464,62 @@ describe('createCaseFromFinding', () => {
     expect(inserted?.inputDiff.startsWith('diff --git a/src/adapters/webhooks.ts')).toBe(true);
   });
 
+  it('takes the reader’s edited name, diff and expected output — and re-derives the expectation', async () => {
+    let inserted: EvalCaseInsert | undefined;
+    const svc = service({
+      findings: derivationSource(),
+      store: {
+        findCaseBySourceFinding: async () => undefined,
+        countCases: async () => 0,
+        listCaseAnchors: async () => [],
+        insertCase: async (values) => {
+          inserted = values;
+          return evalCase();
+        },
+      },
+    });
+
+    await svc.createCaseFromFinding(WS, {
+      finding_id: 'finding-1',
+      name: '  stripe-key-leak  ',
+      input_diff: 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n+edited',
+      expected_output: [{ severity: 'CRITICAL', title: 'reworded by hand' }],
+    });
+
+    expect(inserted?.name).toBe('stripe-key-leak');
+    expect(inserted?.inputDiff).toContain('+edited');
+    expect(inserted?.expectedOutput).toEqual([{ severity: 'CRITICAL', title: 'reworded by hand' }]);
+    // The two fields a client may NOT send still come from the finding's own
+    // decision: an editable expectation could file a case contradicting the
+    // human decision it claims to come from.
+    expect(inserted?.expectation).toBe('must_find');
+    expect(inserted?.expectedAnchors).toEqual([
+      { file: 'src/adapters/webhooks.ts', low_line: 2, high_line: 8 },
+    ]);
+  });
+
+  it('re-applies the byte budget to an EDITED diff', async () => {
+    // The server's own fragment was measured during the derivation; a bound that
+    // only held there is not a bound once a text area is in the path.
+    const svc = service({
+      findings: derivationSource(),
+      store: {
+        findCaseBySourceFinding: async () => undefined,
+        countCases: async () => 0,
+        listCaseAnchors: async () => [],
+        insertCase: unreachable('insertCase'),
+      },
+    });
+
+    const err = await refusalOf(
+      svc.createCaseFromFinding(WS, {
+        finding_id: 'finding-1',
+        input_diff: 'x'.repeat(DIFF_MAX_BYTES + 1),
+      }),
+    );
+    expect(err.reason).toBe('diff_too_large');
+  });
+
   it('derives must_not_flag from a dismissed finding', async () => {
     let inserted: EvalCaseInsert | undefined;
     const svc = service({
@@ -295,7 +535,7 @@ describe('createCaseFromFinding', () => {
       },
     });
 
-    await svc.createCaseFromFinding(WS, 'finding-1');
+    await svc.createCaseFromFinding(WS, { finding_id: 'finding-1' });
     expect(inserted?.expectation).toBe('must_not_flag');
   });
 
@@ -307,7 +547,7 @@ describe('createCaseFromFinding', () => {
       store: {},
     });
 
-    const err = await refusalOf(svc.createCaseFromFinding(WS, 'finding-1'));
+    const err = await refusalOf(svc.createCaseFromFinding(WS, { finding_id: 'finding-1' }));
     expect(err.reason).toBe('review_has_no_agent');
     expect(err.code).toBe('review_has_no_agent');
     expect(err.statusCode).toBe(422);
@@ -321,7 +561,7 @@ describe('createCaseFromFinding', () => {
       store: {},
     });
 
-    const err = await refusalOf(svc.createCaseFromFinding(WS, 'finding-1'));
+    const err = await refusalOf(svc.createCaseFromFinding(WS, { finding_id: 'finding-1' }));
     expect(err.reason).toBe('finding_has_no_decision');
     expect(err.statusCode).toBe(422);
   });
@@ -334,7 +574,7 @@ describe('createCaseFromFinding', () => {
       },
     });
 
-    const err = await refusalOf(svc.createCaseFromFinding(WS, 'finding-1'));
+    const err = await refusalOf(svc.createCaseFromFinding(WS, { finding_id: 'finding-1' }));
     expect(err.reason).toBe('duplicate_source_finding');
     expect(err.statusCode).toBe(409);
     expect(err.details).toEqual({ case_id: 'case-7', case_name: 'src/a.ts:2-8' });
@@ -349,7 +589,7 @@ describe('createCaseFromFinding', () => {
       },
     });
 
-    const err = await refusalOf(svc.createCaseFromFinding(WS, 'finding-1'));
+    const err = await refusalOf(svc.createCaseFromFinding(WS, { finding_id: 'finding-1' }));
     expect(err.reason).toBe('case_limit_reached');
     expect(err.statusCode).toBe(422);
   });
@@ -373,7 +613,7 @@ describe('createCaseFromFinding', () => {
       },
     });
 
-    const err = await refusalOf(overlapping.createCaseFromFinding(WS, 'finding-1'));
+    const err = await refusalOf(overlapping.createCaseFromFinding(WS, { finding_id: 'finding-1' }));
     expect(err.reason).toBe('conflicting_anchor');
     expect(err.statusCode).toBe(422);
     expect(err.message).toContain('do not flag the logger');
@@ -405,7 +645,7 @@ describe('createCaseFromFinding', () => {
           },
         ],
       },
-    }).createCaseFromFinding(WS, 'finding-1');
+    }).createCaseFromFinding(WS, { finding_id: 'finding-1' });
 
     // The SAME expectation overlapping is redundant, not contradictory.
     await service({
@@ -421,7 +661,7 @@ describe('createCaseFromFinding', () => {
           },
         ],
       },
-    }).createCaseFromFinding(WS, 'finding-1');
+    }).createCaseFromFinding(WS, { finding_id: 'finding-1' });
 
     expect(inserts).toHaveLength(2);
   });
@@ -436,7 +676,7 @@ describe('createCaseFromFinding', () => {
       },
     });
 
-    const err = await refusalOf(svc.createCaseFromFinding(WS, 'finding-1'));
+    const err = await refusalOf(svc.createCaseFromFinding(WS, { finding_id: 'finding-1' }));
     expect(err.reason).toBe('diff_too_large');
     expect(err.statusCode).toBe(422);
   });
@@ -451,7 +691,7 @@ describe('createCaseFromFinding', () => {
       },
     });
 
-    const err = await refusalOf(svc.createCaseFromFinding(WS, 'finding-1'));
+    const err = await refusalOf(svc.createCaseFromFinding(WS, { finding_id: 'finding-1' }));
     expect(err.reason).toBe('anchor_not_in_diff');
   });
 
@@ -467,7 +707,7 @@ describe('createCaseFromFinding', () => {
       store: {},
     });
 
-    await expect(svc.createCaseFromFinding(WS, 'finding-1')).rejects.toMatchObject({
+    await expect(svc.createCaseFromFinding(WS, { finding_id: 'finding-1' })).rejects.toMatchObject({
       code: 'not_found',
       statusCode: 404,
     });

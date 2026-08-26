@@ -22,6 +22,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { EvalAgentCase, EvalBatch, EvalCaseSave } from "@devdigest/shared";
+import type { EvalCaseDraft } from "@devdigest/shared";
 import {
   useAgentEvalBatches,
   useAgentEvalCases,
@@ -29,11 +30,13 @@ import {
   useCreateEvalCase,
   useDeleteEvalCase,
   useEvalBatch,
+  useEvalCaseDraft,
   useEvalComparison,
   useEvalDashboard,
   useRunAllEvalBatches,
   useSaveEvalCase,
   useStartEvalBatch,
+  useTrialRunEvalCase,
 } from "./eval";
 
 const CASE: EvalAgentCase = {
@@ -53,6 +56,29 @@ const CASE: EvalAgentCase = {
   source_category: "perf",
   edited: false,
   last_execution: null,
+};
+
+/** A derived case: everything a stored one holds, and no id, because no row. */
+const DRAFT: EvalCaseDraft = {
+  agent_id: "agent-1",
+  agent_name: "Security Reviewer",
+  name: "src/a.ts:72-75",
+  input_diff: CASE.input_diff,
+  input_files: [{ path: "src/a.ts" }],
+  input_meta: { repo: "acme/api", pr_number: 7, pr_title: "Stripe", review_id: "r1" },
+  expectation: "must_find",
+  expected_anchors: [{ file: "src/a.ts", low_line: 72, high_line: 75 }],
+  expected_output: [{ severity: "WARNING", title: "rate limiter drops the tenant key" }],
+  source: {
+    finding_id: "finding-1",
+    title: "rate limiter drops the tenant key",
+    file: "src/a.ts",
+    low_line: 72,
+    high_line: 75,
+    severity: "WARNING",
+    category: "perf",
+    decision: "accepted",
+  },
 };
 
 const RUNNING_BATCH: EvalBatch = {
@@ -147,7 +173,7 @@ describe("useCreateEvalCase", () => {
     await flush();
     expect(result.current.cases.data).toEqual([]);
 
-    act(() => result.current.create.mutate("finding-1"));
+    act(() => result.current.create.mutate({ finding_id: "finding-1" }));
     await flush();
 
     const post = byMethod("POST")[0];
@@ -171,6 +197,114 @@ describe("useCreateEvalCase", () => {
     // know which agent produced the finding.
     await flush();
     expect(result.current.cases.data).toEqual([CASE]);
+  });
+
+  it("sends the three edited fields VERBATIM, and never an expectation", async () => {
+    // The draft modal's `Save`. A hook that dropped one of these would still see
+    // a 201 and a refreshed set, over a case that never took the edit
+    // (`client/INSIGHTS.md`, 2026-08-11) — which is why this asserts the
+    // outgoing body rather than the response.
+    fetchMock.mockResolvedValue(jsonOk(CASE));
+    const { result } = renderHook(() => useCreateEvalCase(), { wrapper });
+
+    act(() =>
+      result.current.mutate({
+        finding_id: "finding-1",
+        name: "stripe-key-leak",
+        input_diff: "--- a/x\n+++ b/x\n@@ -1 +1 @@\n+bad",
+        expected_output: [{ severity: "CRITICAL" }],
+      }),
+    );
+    await flush();
+
+    const body = JSON.parse(String(byMethod("POST")[0]![1]!.body));
+    expect(body).toEqual({
+      finding_id: "finding-1",
+      name: "stripe-key-leak",
+      input_diff: "--- a/x\n+++ b/x\n@@ -1 +1 @@\n+bad",
+      expected_output: [{ severity: "CRITICAL" }],
+    });
+    expect(Object.keys(body)).not.toContain("expectation");
+    expect(Object.keys(body)).not.toContain("expected_anchors");
+  });
+});
+
+/* The two requests that write NOTHING.
+
+   Both are asserted on the URL they reach and on the caches they leave alone,
+   because "nothing was stored" is not visible in a response body: a draft that
+   quietly filed a row and a trial run that quietly opened a batch would both
+   answer with exactly the shape these tests receive. What distinguishes them is
+   the endpoint and the absence of an invalidation. */
+describe("useEvalCaseDraft", () => {
+  it("POSTs the finding id to the DRAFT endpoint and invalidates nothing", async () => {
+    let set: EvalAgentCase[] = [CASE];
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (init?.method === "POST") return Promise.resolve(jsonOk(DRAFT));
+      return Promise.resolve(jsonOk(set));
+    });
+
+    const { result } = renderHook(
+      () => ({ cases: useAgentEvalCases("agent-1"), draft: useEvalCaseDraft() }),
+      { wrapper },
+    );
+    await flush();
+
+    act(() => result.current.draft.mutate("finding-1"));
+    await flush();
+
+    const post = byMethod("POST")[0]!;
+    expect(post[0]).toContain("/eval/cases/drafts");
+    expect(JSON.parse(String(post[1]!.body))).toEqual({ finding_id: "finding-1" });
+    expect(result.current.draft.data).toEqual(DRAFT);
+
+    // No set changed, so nothing is refetched: the eval-set read happened once,
+    // at mount. A refetch here would be the tell that the hook believes it wrote
+    // something.
+    set = [];
+    await flush();
+    expect(result.current.cases.data).toEqual([CASE]);
+  });
+});
+
+describe("useTrialRunEvalCase", () => {
+  it("POSTs the draft to the agent's trial-run endpoint, agent id in the PATH", async () => {
+    const RESULT = {
+      outcome: "passed",
+      not_run_reason: null,
+      expected_count: 1,
+      actual_count: 1,
+      kept_count: 1,
+      dropped_count: 0,
+      duration_ms: 1840,
+      cost_usd: 0.02,
+      actual_output: { findings: [] },
+    };
+    fetchMock.mockResolvedValue(jsonOk(RESULT));
+    const { result } = renderHook(() => useTrialRunEvalCase(), { wrapper });
+
+    act(() =>
+      result.current.mutate({
+        agentId: "agent-1",
+        name: "src/config.ts:11-11",
+        input_diff: "--- a/x\n+++ b/x\n@@ -1 +1 @@\n+bad",
+        expectation: "must_find",
+        expected_anchors: [{ file: "src/config.ts", low_line: 11, high_line: 11 }],
+      }),
+    );
+    await flush();
+
+    const post = byMethod("POST")[0]!;
+    expect(post[0]).toContain("/eval/agents/agent-1/trial-runs");
+    // `agentId` addresses the route and must NOT also travel in the body, where
+    // it would be a second, silently ignored source of the same fact.
+    expect(JSON.parse(String(post[1]!.body))).toEqual({
+      name: "src/config.ts:11-11",
+      input_diff: "--- a/x\n+++ b/x\n@@ -1 +1 @@\n+bad",
+      expectation: "must_find",
+      expected_anchors: [{ file: "src/config.ts", low_line: 11, high_line: 11 }],
+    });
+    expect(result.current.data).toEqual(RESULT);
   });
 });
 

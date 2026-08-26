@@ -15,7 +15,7 @@
     "replyToAuthorDisabled": "Reply to author — not available yet",
     "turnIntoEvalCase": "Turn into eval case",
     "turnIntoEvalCaseDisabled": "Turn into eval case — accept or dismiss this finding first",
-    "turnIntoEvalCaseAdding": "Adding to the eval set…",
+    "turnIntoEvalCaseOpening": "Opening eval case…",
     "turnIntoEvalCaseAdded": "Added to the eval set",
     "evalRefusal": {
       "review_has_no_agent": "This finding’s review ran without an agent, so there is no eval set to add it to.",

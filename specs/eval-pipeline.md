@@ -429,14 +429,63 @@ otherwise assume is included.
   `Verify: test` — *observable: on an undecided finding the control is present, is
   `aria-disabled`, and its accessible name names the precondition — the mock draws the action
   on an undecided finding, and the expectation type is not derivable there.*
-- **AC-52** — WHEN the user activates `Turn into eval case`, the client **shall** create the
-  case in one request, with no intermediate form.
-  `Verify: test` — *observable: one outgoing request per activation, carrying the finding id
-  and no expectation type — the server derives it (AC-1, AC-2).*
-- **AC-53** — IF the creation is refused, THEN the client **shall** render the refusal's reason
-  inline on that finding card without disabling the card's other actions.
+- **AC-52** — WHEN the user activates `Turn into eval case`, the client **shall** derive the
+  case in one request that stores nothing, and open an editor over the derived case; it
+  **shall not** add anything to the agent's eval set.
+  `Verify: test` — *observable: one outgoing request per activation, to the draft endpoint,
+  carrying the finding id and no expectation type — the server derives it (AC-1, AC-2) — and
+  no request reaches the case-creation endpoint until the editor is saved.*
+  *Amended 2026-08-25. It previously read "create the case in one request, with no
+  intermediate form"; see AC-101 … AC-108 and the History entry for why that was wrong.*
+- **AC-53** — IF the derivation is refused, THEN the client **shall** render the refusal's reason
+  inline on that finding card without disabling the card's other actions, and **shall not** open
+  the editor.
   `Verify: test` — *observable: a `conflicting_anchor` refusal renders its message on the card
-  while `Accept` and `Dismiss` stay operable.*
+  while `Accept` and `Dismiss` stay operable, and no dialog is rendered.*
+
+**The eval-case draft editor** *(added 2026-08-25)*
+
+- **AC-101** — WHEN a draft is derived, the server **shall** compute every field a stored case
+  would carry — name, input diff, input files, input metadata, expectation, expected anchors
+  and a seeded expected output — apply every refusal creation applies, and write no row.
+  `Verify: test` — *observable: a fake store whose every write method throws by name answers a
+  draft request successfully, and the response carries no `id`.*
+- **AC-102** — the seeded expected output **shall** be a finding-shaped skeleton carrying the
+  source finding's severity, category, title, file and line for a `must_find` draft, and an
+  empty list for a `must_not_flag` one.
+  `Verify: test` — *observable: a draft from an accepted finding reads back one object with
+  those five fields; a draft from a dismissed finding reads back `[]`.*
+- **AC-103** — the editor **shall** state, before any run, what the case asserts, the agent
+  whose set it would join, and that it has not been run.
+  `Verify: test` — *observable: the modal renders the assertion sentence naming the finding's
+  title and `file:line`, the agent's name, and a not-run-yet notice.*
+- **AC-104** — WHEN the user activates `Run case`, the system **shall** execute the draft once
+  against the agent's current prompt, model and linked skills, and **shall** record no batch,
+  no run row and no dashboard movement.
+  `Verify: test` — *observable: a runner fake whose store and event bus throw by name returns a
+  scored outcome; and in the client, N activations produce N trial-run requests and zero
+  requests to the case, batch or dashboard endpoints.*
+- **AC-105** — the editor **shall** state, for every run, its outcome, the expected and actual
+  counts, the duration and the cost, and **shall** tally the runs so far, counting a `not_run`
+  as a run and not as a pass.
+  `Verify: test` — *observable: two runs with different outcomes render the latest outcome and
+  a tally reading `2 runs · 1 passed`.*
+- **AC-106** — WHEN the user activates `Save`, the client **shall** file the case with the
+  finding id and the fields it edited, and **shall not** send an expectation or an anchor.
+  `Verify: test` — *observable: the outgoing body's key set is `finding_id`, `name`,
+  `input_diff`, `expected_output` and nothing else.*
+- **AC-107** — WHILE the expected-output text is not valid JSON, the editor **shall** hold
+  `Save` unavailable with the reason in its accessible name, and **shall** leave `Run case`
+  available.
+  `Verify: test` — *observable: with invalid JSON, `Save` is `aria-disabled` and a press
+  performs no request, while `Run case` still runs — a run is scored on the expectation and
+  the anchors, which the text has no bearing on.*
+- **AC-108** — WHERE `Run on save` is on, the system **shall** start one recorded single-case
+  batch after the save succeeds; IF that batch is refused, THEN the editor **shall** state the
+  refusal and **shall not** discard the save.
+  `Verify: test` — *observable: with the toggle on, a save is followed by one batch request;
+  when that request is refused, the case-creation request still succeeded, `Save` is no longer
+  offered, and the refusal is on screen.*
 
 **The `Evals` tab**
 
@@ -1182,6 +1231,19 @@ with the engine, not a new requirement.
 | — | EC-37 | — | `accepted` — applying a migration is structurally outside a task's remit here, so it belongs in the plan's own steps rather than in a criterion |
 | — | EC-33 (truncation half) | — | `accepted` — a long name truncates in the row and carries its full value as a title |
 
+### Traceability — the draft editor *(added 2026-08-25)*
+
+| AC | Serves | Package | Verify |
+|---|---|---|---|
+| AC-101 | US-1, US-2 | server | test |
+| AC-102 | US-1, US-2 | server | test |
+| AC-103 | US-1, US-2 | client | test |
+| AC-104 | US-1, US-2 | server, client | test |
+| AC-105 | US-1, US-2 | client | test |
+| AC-106 | US-1, US-2 | client | test |
+| AC-107 | US-1, US-2 | client | test |
+| AC-108 | US-1, US-2 | client | test |
+
 ## Open questions — none, all eight resolved 2026-08-23
 
 Every question below was answered by the spec's owner before the spec was promoted. Each row
@@ -1332,3 +1394,18 @@ records the decision that now governs, so the criterion it touches has no open d
   `reviewer-core` export — it lives at `server/src/adapters/git/diff-parser.ts`, re-exported from
   `server/src/adapters/index.ts` — and `groundFindings` / `groundingSummary` reach the server
   through `server/src/platform/grounding.ts`, a six-line re-export shim.
+- **2026-08-25** — **`Turn into eval case` no longer files anything.** AC-52 required creating
+  the case in one request with no intermediate form; shipped, that meant one press of a button
+  on a finding card silently grew the dataset an agent's recall, precision and citation
+  accuracy are computed from — with no chance to check that the case even reproduces. The
+  press now derives a DRAFT (`POST /eval/cases/drafts`, which writes no row) and opens an
+  editor over it; `Run case` executes that draft against the agent's current config recording
+  nothing (`POST /eval/agents/:agentId/trial-runs`), so it can be pressed repeatedly to see
+  whether the finding reproduces; and `Save` is the only control that writes. AC-52 and AC-53
+  are amended above and AC-101 … AC-108 are added. `POST /eval/cases` now also accepts the
+  three fields the editor makes editable (`name`, `input_diff`, `expected_output`); the
+  expectation and the anchors stay server-derived, unchanged. New contract file
+  `contracts/eval-draft.ts` (`EvalCaseDraft`, `EvalDraftSource`, `EvalDraftDecision`,
+  `EvalCaseCreate`, `EvalTrialRunRequest`, `EvalTrialRunResult`) in both hand-synced copies —
+  extend-by-new-file, no shipped symbol reshaped. No schema change and no migration: a draft
+  and a trial run are both defined by what they do not persist.

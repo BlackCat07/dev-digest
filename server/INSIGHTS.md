@@ -357,6 +357,23 @@ Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
 
+- **2026-08-25** — **This module has one deliberately SYNCHRONOUS long-ish route, and the rule
+  that makes it different from every fire-and-forget one is worth stating: a route may await
+  the work when the work is one model call AND there is no row the answer could be read back
+  from.** `POST /eval/agents/:agentId/trial-runs` runs a single unsaved eval case and returns
+  its outcome inside the request, where `POST /eval/agents/:agentId/batches` answers `202` with
+  a `running` batch and `POST /pulls/:id/review` returns before its first finding exists
+  (2026-08-13, this file). The difference is not "how long" — it is that a batch and a review
+  both WRITE rows a client can poll, so returning early costs nothing, while a trial run
+  persists nothing by design (that absence is its whole point: pressing `Run case` four times
+  must not move the agent's recall four times) and an early return would throw the only copy of
+  the answer away. It is bounded by one `CASE_DEADLINE_MS` (120 s), not by `BATCH_DEADLINE_MS`
+  (15 min), which is what keeps it defensible. Before making a new eval route async "for
+  consistency", check which of those two it is. Evidence: `src/modules/eval/routes.ts`
+  (`/trial-runs`), `src/modules/eval/runner.ts` (`runTrial` vs `start`),
+  `src/modules/eval/constants.ts` (`CASE_DEADLINE_MS`).
+
+
 - **2026-08-24** — **Deleting every `reviews` and `agent_runs` row for a repo does NOT reset its
   pull requests to `needs_review` — the list status is DERIVED from
   `pull_requests.last_reviewed_sha`, which no delete touches.** `deriveReviewStatus` compares

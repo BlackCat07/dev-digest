@@ -32,17 +32,18 @@ import {
   TextInput,
 } from "@devdigest/ui";
 import type { EvalAgentCase, EvalBatchCaseResult } from "@devdigest/shared";
-import { EVAL_EXPECTATION_BADGE } from "@/lib/eval";
-import { formatCost } from "@/lib/format";
-import { useSaveEvalCase, useStartEvalBatch } from "@/lib/hooks/eval";
-import { DIFF_ROWS, EXPECTED_ROWS, INPUT_TABS, LAST_RUN_COLOR, MODAL_WIDTH } from "./constants";
 import {
+  EVAL_EXPECTATION_BADGE,
+  EVAL_OUTCOME_COLOR,
   formatDurationMs,
   lastRunLabelKey,
   parseExpected,
-  resolveLastRun,
   stringifyExpected,
-} from "./helpers";
+} from "@/lib/eval";
+import { formatCost } from "@/lib/format";
+import { useSaveEvalCase, useStartEvalBatch } from "@/lib/hooks/eval";
+import { DIFF_ROWS, EXPECTED_ROWS, INPUT_TABS, MODAL_WIDTH } from "./constants";
+import { resolveLastRun } from "./helpers";
 import { s } from "./styles";
 
 export function CaseEditorModal({
@@ -180,7 +181,7 @@ export function CaseEditorModal({
         {lastRun && (
           <div style={s.lastRun}>
             <span style={s.lastRunHeading}>{t("caseEditor.lastRunHeading")}</span>
-            <Badge color={LAST_RUN_COLOR[lastRun.outcome]} bg="var(--bg-hover)" style={s.labelBadge}>
+            <Badge color={EVAL_OUTCOME_COLOR[lastRun.outcome]} bg="var(--bg-hover)" style={s.labelBadge}>
               {t(lastRunLabelKey(lastRun.outcome))}
               {lastRun.reason ? ` — ${t(`notRunReason.${lastRun.reason}`)}` : ""}
             </Badge>

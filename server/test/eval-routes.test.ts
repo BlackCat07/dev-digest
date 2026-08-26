@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { AuthProvider } from '@devdigest/shared';
 import type { EvalAgentCase, EvalBatch, EvalPeriod } from '@devdigest/shared';
+import type { EvalCaseCreate, EvalCaseDraft, EvalTrialRunRequest } from '@devdigest/shared';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
 import { NotFoundError } from '../src/platform/errors.js';
@@ -28,6 +29,7 @@ import { runBus } from '../src/platform/sse.js';
 
 const WS = '11111111-1111-4111-8111-111111111111';
 const AGENT = '22222222-2222-4222-8222-222222222222';
+const FINDING = '33333333-3333-4333-8333-333333333333';
 
 const config = loadConfig({ ...process.env, NODE_ENV: 'test' });
 
@@ -44,7 +46,9 @@ function unreachable(name: string) {
 
 function evals(over: Partial<Evals>): Evals {
   return {
+    draftCaseFromFinding: unreachable('draftCaseFromFinding'),
     createCaseFromFinding: unreachable('createCaseFromFinding'),
+    trialRunCase: unreachable('trialRunCase'),
     listCases: unreachable('listCases'),
     saveCase: unreachable('saveCase'),
     deleteCase: unreachable('deleteCase'),
@@ -80,6 +84,29 @@ const aCase = (id: string): EvalAgentCase => ({
   source_category: null,
   edited: false,
   last_execution: null,
+});
+
+/** A derived draft — no id, because nothing was stored. */
+const aDraft = (): EvalCaseDraft => ({
+  agent_id: AGENT,
+  agent_name: 'General Reviewer',
+  name: 'src/config.ts:12-12',
+  input_diff: '--- a/src/config.ts\n+++ b/src/config.ts\n@@ -1 +1 @@\n+key',
+  input_files: [{ path: 'src/config.ts' }],
+  input_meta: { repo: 'acme/api', pr_number: 7, pr_title: 'Add Stripe', review_id: 'r1' },
+  expectation: 'must_find',
+  expected_anchors: [{ file: 'src/config.ts', low_line: 12, high_line: 12 }],
+  expected_output: [{ severity: 'CRITICAL', title: 'Hardcoded key' }],
+  source: {
+    finding_id: FINDING,
+    title: 'Hardcoded key',
+    file: 'src/config.ts',
+    low_line: 12,
+    high_line: 12,
+    severity: 'CRITICAL',
+    category: 'security',
+    decision: 'accepted',
+  },
 });
 
 const aBatch = (id: string): EvalBatch => ({
@@ -131,12 +158,12 @@ describe('eval routes', () => {
     await a.close();
   });
 
-  it('creates a case from a finding id alone and rejects a body carrying an expectation', async () => {
-    const seen: string[] = [];
+  it('creates a case from a finding plus the three editable fields, and rejects an expectation', async () => {
+    const seen: EvalCaseCreate[] = [];
     const a = await app({
-      createCaseFromFinding: async (workspaceId, findingId) => {
+      createCaseFromFinding: async (workspaceId, body) => {
         expect(workspaceId).toBe(WS);
-        seen.push(findingId);
+        seen.push(body);
         return aCase('case-1');
       },
     });
@@ -144,23 +171,95 @@ describe('eval routes', () => {
     const ok = await a.inject({
       method: 'POST',
       url: '/eval/cases',
-      payload: { finding_id: '33333333-3333-4333-8333-333333333333' },
+      payload: { finding_id: FINDING },
     });
     expect(ok.statusCode).toBe(201);
-    expect(seen).toEqual(['33333333-3333-4333-8333-333333333333']);
+    expect(seen).toEqual([{ finding_id: FINDING }]);
+
+    // The three fields the draft modal edits reach the service verbatim — a
+    // route that dropped one would answer 201 over a case that never took the
+    // edit (`client/INSIGHTS.md`, 2026-08-11).
+    const edited = await a.inject({
+      method: 'POST',
+      url: '/eval/cases',
+      payload: {
+        finding_id: FINDING,
+        name: 'stripe-key-leak',
+        input_diff: '--- a/x\n+++ b/x\n@@ -1 +1 @@\n+bad',
+        expected_output: [{ severity: 'CRITICAL' }],
+      },
+    });
+    expect(edited.statusCode).toBe(201);
+    expect(seen[1]).toEqual({
+      finding_id: FINDING,
+      name: 'stripe-key-leak',
+      input_diff: '--- a/x\n+++ b/x\n@@ -1 +1 @@\n+bad',
+      expected_output: [{ severity: 'CRITICAL' }],
+    });
 
     // AC-52: what the case asserts is derived from the finding's decision, so an
     // expectation in the body is refused rather than quietly ignored.
     const withExpectation = await a.inject({
       method: 'POST',
       url: '/eval/cases',
-      payload: {
-        finding_id: '33333333-3333-4333-8333-333333333333',
-        expectation: 'must_not_flag',
-      },
+      payload: { finding_id: FINDING, expectation: 'must_not_flag' },
     });
     expect(withExpectation.statusCode).toBe(422);
+    expect(seen).toHaveLength(2);
+    await a.close();
+  });
+
+  it('derives a draft with 200 and no id, and writes nothing', async () => {
+    // The whole point of the endpoint: `Turn into eval case` opens a modal, and
+    // every OTHER service method throwing is what proves no row was filed on the
+    // way there.
+    const a = await app({ draftCaseFromFinding: async () => aDraft() });
+    const res = await a.inject({
+      method: 'POST',
+      url: '/eval/cases/drafts',
+      payload: { finding_id: FINDING },
+    });
+    // 200, not 201: nothing was created, so there is nothing to point at.
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).not.toHaveProperty('id');
+    expect(res.json().agent_id).toBe(AGENT);
+    await a.close();
+  });
+
+  it('runs one trial against an agent and answers with the outcome', async () => {
+    const seen: EvalTrialRunRequest[] = [];
+    const a = await app({
+      trialRunCase: async (workspaceId, agentId, body) => {
+        expect(workspaceId).toBe(WS);
+        expect(agentId).toBe(AGENT);
+        seen.push(body);
+        return {
+          outcome: 'passed',
+          not_run_reason: null,
+          expected_count: 1,
+          actual_count: 1,
+          kept_count: 1,
+          dropped_count: 0,
+          duration_ms: 1840,
+          cost_usd: 0.02,
+          actual_output: { findings: [] },
+        };
+      },
+    });
+    const res = await a.inject({
+      method: 'POST',
+      url: `/eval/agents/${AGENT}/trial-runs`,
+      payload: {
+        name: 'stripe-key-leak',
+        input_diff: '--- a/x\n+++ b/x\n@@ -1 +1 @@\n+bad',
+        expectation: 'must_find',
+        expected_anchors: [{ file: 'x', low_line: 1, high_line: 1 }],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().outcome).toBe('passed');
     expect(seen).toHaveLength(1);
+    expect(seen[0]!.expectation).toBe('must_find');
     await a.close();
   });
 
