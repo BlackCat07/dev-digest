@@ -159,7 +159,9 @@ function PaneSummary({
 
   return (
     <div style={s.summary(accent)}>
-      <PaneScore column={column} />
+      <div style={s.scoreCell}>
+        <PaneScore column={column} />
+      </div>
 
       <div style={s.summaryText}>
         <div style={s.summaryHead}>

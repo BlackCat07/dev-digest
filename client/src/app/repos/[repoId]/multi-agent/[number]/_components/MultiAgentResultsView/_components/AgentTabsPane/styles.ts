@@ -23,7 +23,13 @@ import { RESULTS_INSET_TOP, RESULTS_INSET_X } from "../../styles";
 /** Content width the reference caps the pane at: 760px, so a rationale
     paragraph keeps a readable measure however wide the window gets. The tab
     strip above it is deliberately not capped — it is chrome, not prose. */
-const PANE_WIDTH = 760;
+/**
+ * The pane's reading width — deliberately the SAME number as the pull-request
+ * page's tab column (`PrDetailView/styles.ts` `s.tabColumn.maxWidth`), so a
+ * reader moving between `Agent runs` there and a tab here does not meet two
+ * different measures for what is the same kind of content.
+ */
+const PANE_WIDTH = 1080;
 
 export const s = {
   wrap: {
@@ -101,7 +107,11 @@ export const s = {
      the same band colour, which is what ties the block to its tab. */
   summary: (accent: string): CSSProperties => ({
     display: "flex",
-    alignItems: "center",
+    // Top, not centre: the third column is anchored to the card's top-right
+    // corner. Centred, it slid down the card as the run's summary grew — on a
+    // long one the trace control ended up floating beside the middle of a
+    // paragraph with nothing to line up against.
+    alignItems: "flex-start",
     gap: 16,
     padding: "14px 16px",
     border: "1px solid var(--border)",
@@ -110,6 +120,14 @@ export const s = {
     background: "var(--bg-elevated)",
     flexWrap: "wrap",
   }),
+  /* The score stays vertically centred against the text block — the top-aligned
+     card above is about the third column, and a ring pinned to the top edge
+     beside a two-line name reads as a mistake. */
+  scoreCell: {
+    alignSelf: "center",
+    display: "flex",
+    flexShrink: 0,
+  } satisfies CSSProperties,
   summaryText: {
     display: "flex",
     flexDirection: "column",
@@ -155,6 +173,7 @@ export const s = {
     gap: 2,
     marginLeft: "auto",
     textAlign: "right",
+    flexShrink: 0,
   } satisfies CSSProperties,
   /* A bare mono control, not a `Button`: the reference gives the trace
      affordance plain text at the drawer's own weight, with no chrome — the same
