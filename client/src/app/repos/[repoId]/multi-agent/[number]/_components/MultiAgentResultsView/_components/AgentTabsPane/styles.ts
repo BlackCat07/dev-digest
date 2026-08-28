@@ -48,7 +48,14 @@ export const s = {
     display: "flex",
     gap: 2,
     borderBottom: "1px solid var(--border)",
-    overflowX: "auto",
+    // WRAPS rather than scrolls. `overflowX: "auto"` put a scrollbar under the
+    // tabs even when they all fitted: this strip's own 28px right padding — the
+    // one that cancels the bleed below — counts toward `scrollWidth`, so the
+    // container was always a hair wider than its content and the bar was drawn
+    // for nobody. A fan-out is capped at 8 agents (AC-8), which wrap onto a
+    // second line on a narrow viewport and read fine; a scrollbar the reference
+    // never draws does not.
+    flexWrap: "wrap",
     margin: `${-RESULTS_INSET_TOP}px ${-RESULTS_INSET_X}px 0`,
     padding: `0 ${RESULTS_INSET_X}px`,
   } satisfies CSSProperties,
