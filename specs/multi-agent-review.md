@@ -768,6 +768,39 @@ half a downstream check cannot see (`server/INSIGHTS.md`, 2026-08-19).
   action stays disabled. This case did not exist while the step listed every pull request; AC-53
   creates it.*
 
+### AC-106 … AC-108 — a way back to a fan-out's results (client)
+
+Three criteria, appended rather than renumbered into the blocks above for the same reason
+`AC-100 … AC-105` gives. US-6 ("I reload the page mid-run, or come back later, and find the run
+where I left it") traces to ten criteria — AC-2, 15, 16, 17, 61, 65, 70, 83, 92, 93 — and every one
+of them is about the server *persisting* a multi-run or the client *restoring* it on a reload of
+the results route itself; not one of them makes the results route *reachable* in the first place.
+Before this pair, the only navigation into `/repos/:repoId/multi-agent/:number` was the agent
+picker's own `router.push` at the moment a fan-out started (AC-50); leaving the page left the
+results reachable only by typing the URL, even though the read still answered `200`. These three
+criteria are the way back, in both directions, and they are proposed here rather than agreed: an
+acceptance criterion is agreed by the author of the request (`## History`, `draft` → `approved`),
+and that step has not happened for this pair.
+
+- **AC-106** — WHEN `GET /pulls/:id/multi-agent` for the pull request the reviewer is viewing
+  answers successfully, the system **shall** render a `Multi-agent results` button in the
+  pull-request page's header, and activating it **shall** navigate to that pull request's
+  multi-agent results route.
+  `Verify: test` — *observable: mounting the pull-request page's header against a multi-run read
+  that resolves renders the button, and activating it navigates to
+  `/repos/:repoId/multi-agent/:number` for the pull request and number the header is on.*
+- **AC-107** — IF that same read answers `404` — the pull request has never been fanned out —
+  THEN the system **shall** render the header with no `Multi-agent results` button and **shall
+  not** render an error in its place, leaving the rest of the header exactly as it renders today.
+  `Verify: test` — *observable: mounting the header against a `404 not_found` renders neither the
+  button nor an error state; `View on GitHub` and the agent picker are unaffected. A `404` here is
+  the routine "never fanned out" answer, not a failure to surface.*
+- **AC-108** — the system **shall** render a `Configure run` button in the multi-agent results
+  view's header, and activating it **shall** navigate to that repository's Configure-run screen.
+  `Verify: test` — *observable: activating the button navigates to `/repos/:repoId/multi-agent`,
+  which makes the Configure-run ↔ results pair bidirectional: AC-50 already navigates
+  results-ward when a run starts, and this is the return.*
+
 ## Edge cases
 
 - **EC-1** — `agentIds` contains the same id twice. The system runs that agent once; a duplicate
@@ -874,14 +907,19 @@ half a downstream check cannot see (`server/INSIGHTS.md`, 2026-08-19).
   it arrives with AC-53 rather than with the screen.
 - **EC-32** — a group's title changes between two polls, because the note synthesis landed in
   between: the reader sees the fallback title first and the synthesised label afterwards. This is
-  the intended arrival of the label and not a defect. Nothing else about the group moves — a
-  group's identity is its file and its line (AC-103), not its title, so no group appears or
-  disappears on that read. Two groups **can** share a file and a line and be separated only by
-  their titles — that is exactly EC-9 — and for those two the label's arrival can swap their
-  order, because AC-32 sorts on the title the reader is shown. Sorting instead on the fallback
-  title would keep the order stable at the cost of a visible list that is not in the order of its
-  own visible titles, which is the worse of the two; the swap happens once, on the read that
-  changes the titles anyway.
+  the intended arrival of the label and not a defect. Nothing else about the group moves — its
+  file, its line (AC-103) and its stances are unchanged, so no group appears or disappears on
+  that read. **A group's identity is not its file and its line alone: two groups can share both
+  and be separated only by their titles — that is exactly EC-9 — so the label has to be matched
+  to the group it was synthesised for, keyed on the group's deterministic fallback title (AC-31)
+  as well as its location, or two such groups collapse onto one heading and the other's label goes
+  unused.** A record persisted before that discriminator existed is matched by location alone, and
+  only where exactly one group sits there — at a shared location it is dropped rather than risk
+  landing on the wrong group. Label arrival **can** swap two same-location groups' order, because
+  AC-32 sorts on the title the reader is shown; sorting instead on the fallback title would keep
+  the order stable at the cost of a visible list that is not in the order of its own visible
+  titles, which is the worse of the two, and the swap happens once, on the read that changes the
+  titles anyway.
 
 ## Cross-module interactions
 
@@ -993,8 +1031,12 @@ of DDL:
   generated migration. It is what AC-2 and AC-15 rest on, and it is the one migration this
   feature ships.
 - **The synthesised stance notes and the synthesised group labels must be stored with the
-  multi-run**, keyed so that a note can be matched to one (location, agent) pair and a label to
-  one location, on read (AC-37). They are stored together because one call produces both
+  multi-run**, keyed so that a note can be matched to one (group, agent) pair and a label to one
+  **group**, on read (AC-37) — a group being a location AND its deterministic fallback title,
+  because two groups can share a location and differ only in their titles (EC-9). This said
+  "one location" until 2026-08-28, and the implementation followed it: three groups sharing
+  `test/tasks.test.ts:70` all took the last label written and rendered one heading between
+  them. They are stored together because one call produces both
   (AC-35), and a read that found the notes but not the labels would make a second call.
 - **`multi_agent_runs` already exists** with a workspace, a pull request and a timestamp, and is
   written by nothing. It is the parent record; it is not dead schema to replace.
@@ -1272,6 +1314,9 @@ than a new requirement.
 | AC-103 | US-5, EC-12 | server | test |
 | AC-104 | US-4 | client | test |
 | AC-105 | US-1, EC-31 | client | test |
+| AC-106 | US-6 | client | test |
+| AC-107 | US-6 | client | test |
+| AC-108 | US-6 | client | test |
 | — | EC-1 | — | `accepted` — a duplicate id is deduplicated silently; refusing it would fail a request whose intent is unambiguous |
 | — | EC-2 | — | `accepted` — the null-agent fallback key is a repository-wide rule, not this feature's behaviour to re-verify |
 | — | EC-3 | — | covered by AC-14's mechanism; the pre-work failure path already fails every queued run |
@@ -1484,3 +1529,24 @@ when the feature lands.
   in fix round 1 to carry the failure reason `AC-68` already required. Full detail:
   `.claude/.plans/multi-agent-review/{plan.md,run.md,fix-1.md,fix-2.md}` and the sixteen reports
   under `.claude/.plans/multi-agent-review/reports/`.
+
+- **2026-08-28** — Post-implementation fixes from a first click-through. The results route had
+  no standing way back once left: `AgentPicker`'s `router.push` was the only navigation into it,
+  so `AC-106 … AC-108` (proposed, not yet agreed) pin the `Multi-agent results` button on the
+  pull-request page and the `Configure run` button on the results header that make the pair
+  bidirectional; `resultsRoute` moved to `client/src/lib/multi-agent-routes.ts` on its second
+  consumer. The Configure-run, Columns and Tabs screens were aligned to the six reference design
+  exports (density, the columns-mode head and footer, the tabs-mode summary card and pane width,
+  the tab strip wrapping instead of scrolling), with the two deliberate departures — the category
+  tag AC-63 requires in columns mode, and the fan-out described as bounded concurrency rather than
+  the export's worktrees copy — left as the export was wrong, not the spec. `EC-32` was corrected:
+  its claim that "a group's identity is its file and its line, not its title" was false against
+  `EC-9`, which the implementation had followed literally — `GroupLabel` and `StanceNote` keyed on
+  location alone collapsed same-location groups (three, on a real run) onto one repeated heading.
+  Both records now carry the group's deterministic fallback title (AC-31) as a discriminator; a
+  record persisted before that field is matched by location only where exactly one group sits
+  there. One finding reaches beyond this feature: `reviewer-core`'s `toJsonSchema` hoisted a
+  repeated shape into `$ref`, which Google AI Studio does not resolve, so every review by an agent
+  on a Gemini model failed in under a second at zero tokens while the same schema answered `200`
+  on DeepSeek — fixed by inlining every reference, the same trade `stripNumericRangeKeywords`
+  already makes for Anthropic.
