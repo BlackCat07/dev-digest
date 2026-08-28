@@ -78,14 +78,14 @@ export function DisagreementBlock({ groups }: { groups: readonly Conflict[] }) {
               sentences for it to be about. */}
           <p style={s.synthesised}>{t("conflicts.synthesisedNote")}</p>
           <div style={s.groups}>
-            {/* The index is a TIE-BREAKER, not the key. `groupKey` is
-                file:line:title, which the server can and does emit twice: it
-                keys a synthesised label by (file, line) alone, so every group
-                sharing a location is handed the same title and the content key
-                collides. Two panels with one key make React drop or duplicate
-                one of them — a wrong title is a bug, a vanished panel is a
-                worse one. Remove the suffix once the server tells groups at one
-                location apart. */}
+            {/* The index is a TIE-BREAKER, not the key. The server no longer
+                emits two groups with one title — it used to key a synthesised
+                label by (file, line) alone, so every group sharing a location
+                was handed the same heading and this content key collided. That
+                is fixed at the source, and the suffix stays anyway: uniqueness
+                among siblings is React's requirement, not the server's promise,
+                and the cost of a duplicate key here is a panel that silently
+                vanishes. */}
             {visible.map((group, i) => (
               <ConflictPanel key={`${groupKey(group)}#${i}`} group={group} />
             ))}

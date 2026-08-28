@@ -258,7 +258,7 @@ describe('multi-agent note synthesis', () => {
 
     // AC-36: a note for every agent of the multi-run, the silent one included.
     expect(h.saved).toHaveLength(1);
-    expect(h.saved[0]?.labels).toEqual([{ file: FILE, line: 28, label: LABEL }]);
+    expect(h.saved[0]?.labels).toEqual([{ file: FILE, line: 28, title: FALLBACK_TITLE, label: LABEL }]);
     expect(h.saved[0]?.notes.map((note) => note.agent_id)).toEqual(['agent-a', 'agent-b']);
     expect(h.saved[0]?.notes.every((note) => note.file === FILE && note.line === 28)).toBe(true);
   });
@@ -379,9 +379,9 @@ describe('a synthesis that produces nothing', () => {
     });
     await h.notes.synthesise(WS, MULTI_RUN);
 
-    expect(h.saved[0]?.labels).toEqual([{ file: FILE, line: 28, label: LABEL }]);
+    expect(h.saved[0]?.labels).toEqual([{ file: FILE, line: 28, title: FALLBACK_TITLE, label: LABEL }]);
     expect(h.saved[0]?.notes).toEqual([
-      { file: FILE, line: 28, agent_id: 'agent-a', note: 'kept' },
+      { file: FILE, line: 28, title: FALLBACK_TITLE, agent_id: 'agent-a', note: 'kept' },
     ]);
 
     // The group is otherwise untouched: the ghost note reaches nothing, and the

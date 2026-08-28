@@ -320,6 +320,105 @@ describe('multi-agent read', () => {
     ]);
   });
 
+  it('gives each of two groups at ONE file and line its own label and notes', async () => {
+    // The bug this exists for: a record used to be keyed by (file, line) alone,
+    // so where EC-9 puts two groups on one line the last label written won and
+    // BOTH groups rendered the same heading — while the other synthesised label
+    // sat unused in the blob. Two findings from one agent, at one location, with
+    // titles too dissimilar to merge (AC-26), is exactly that shape.
+    const notes: MultiAgentNotes = {
+      notes: [
+        {
+          file: 'lib/rate-limit.ts',
+          line: 28,
+          title: 'Magic number 3600',
+          agent_id: 'agent-a',
+          note: 'About the constant.',
+        },
+        {
+          file: 'lib/rate-limit.ts',
+          line: 28,
+          title: 'Retry-After header omitted',
+          agent_id: 'agent-a',
+          note: 'About the header.',
+        },
+      ],
+      labels: [
+        { file: 'lib/rate-limit.ts', line: 28, title: 'Magic number 3600', label: 'the window' },
+        {
+          file: 'lib/rate-limit.ts',
+          line: 28,
+          title: 'Retry-After header omitted',
+          label: 'the header',
+        },
+      ],
+    };
+
+    const svc = service({
+      runsOf: async () => [
+        run({ runId: 'a', agentId: 'agent-a', agentName: 'Security', reviewId: 'rev-a' }),
+        run({ runId: 'b', agentId: 'agent-b', agentName: 'Style', reviewId: 'rev-b' }),
+      ],
+      findingsOf: async () => [
+        finding({ id: 'f-1', reviewId: 'rev-a', severity: 'WARNING', title: 'Magic number 3600' }),
+        finding({
+          id: 'f-2',
+          reviewId: 'rev-a',
+          severity: 'WARNING',
+          title: 'Retry-After header omitted',
+        }),
+      ],
+      readNotes: async () => notes,
+    });
+
+    const payload = await svc.latest(WS, PR);
+    expect(payload.conflicts).toHaveLength(2);
+    // Each group takes ITS OWN label — not the same one twice, which is what a
+    // location-keyed lookup produced.
+    expect(new Set(payload.conflicts.map((c) => c.title))).toEqual(
+      new Set(['the window', 'the header']),
+    );
+    // And its own sentence, for the same reason.
+    const noteFor = (title: string) =>
+      payload.conflicts.find((c) => c.title === title)?.takes.find((t) => t.agent_id === 'agent-a')
+        ?.note;
+    expect(noteFor('the window')).toBe('About the constant.');
+    expect(noteFor('the header')).toBe('About the header.');
+  });
+
+  it('ignores a legacy record with no title where two groups share the location', async () => {
+    // A blob written before the discriminator existed carries only (file, line).
+    // Where one group sits there it is still used — the case above proves that,
+    // since its records carry no title either. Where TWO do, it could belong to
+    // either, and a heading on the wrong group is worse than no heading: both
+    // groups keep their deterministic fallback (AC-31).
+    const notes: MultiAgentNotes = {
+      notes: [],
+      labels: [{ file: 'lib/rate-limit.ts', line: 28, label: 'ambiguous' }],
+    };
+
+    const svc = service({
+      runsOf: async () => [
+        run({ runId: 'a', agentId: 'agent-a', agentName: 'Security', reviewId: 'rev-a' }),
+        run({ runId: 'b', agentId: 'agent-b', agentName: 'Style', reviewId: 'rev-b' }),
+      ],
+      findingsOf: async () => [
+        finding({ id: 'f-1', reviewId: 'rev-a', severity: 'WARNING', title: 'Magic number 3600' }),
+        finding({
+          id: 'f-2',
+          reviewId: 'rev-a',
+          severity: 'WARNING',
+          title: 'Retry-After header omitted',
+        }),
+      ],
+      readNotes: async () => notes,
+    });
+
+    const payload = await svc.latest(WS, PR);
+    expect(payload.conflicts).toHaveLength(2);
+    expect(payload.conflicts.map((c) => c.title)).not.toContain('ambiguous');
+  });
+
   it('keys a deleted agent’s column and its stances on the same prefixed run id', async () => {
     // EC-2. `agent_runs.agent_id` is ON DELETE SET NULL, so the run outlives its
     // agent. An unprefixed key would let a run id collide with an agent id, and

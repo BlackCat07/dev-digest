@@ -252,7 +252,7 @@ export function toStoredNotes(
     const label = answer.label.trim().slice(0, MAX_LABEL_CHARS);
     if (label.length > 0 && !seenLabel.has(location.id)) {
       seenLabel.add(location.id);
-      labels.push({ file: location.file, line: location.line, label });
+      labels.push({ file: location.file, line: location.line, title: location.title, label });
     }
 
     const agents = new Set(location.agents.map((agent) => agent.agent_id));
@@ -266,6 +266,7 @@ export function toStoredNotes(
       notes.push({
         file: location.file,
         line: location.line,
+        title: location.title,
         agent_id: entry.agent_id,
         note,
       });

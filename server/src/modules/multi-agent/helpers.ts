@@ -210,6 +210,13 @@ function locationKey(file: string, line: number): string {
  * are discarded by construction: the lookup runs from the group outward, so a
  * key nothing matches is simply never read.
  *
+ * **A record is matched to a GROUP, not to a location.** Two groups may share a
+ * file and a line and differ only in their titles (EC-9), so the key carries the
+ * group's deterministic fallback title as well; keyed by location alone, every
+ * group at one line took the last label written and rendered the same heading.
+ * Records written before that discriminator existed are matched by location, but
+ * only where exactly one group sits there.
+ *
  * `notes` being `null` is the STEADY state, not the exception — synthesis fires
  * only once every run of the set is terminal, so every poll taken during the
  * fan-out lands here with nothing to merge.
@@ -220,21 +227,58 @@ export function mergeSynthesis(
 ): Conflict[] {
   if (!synthesis) return [...conflicts];
 
+  // `\0` cannot occur in a path, a title or an agent id, so it joins key parts
+  // without any escaping. Written as an ESCAPE, never as a literal NUL byte in
+  // the source: a raw one makes the whole file `data` to `file(1)`, and then
+  // `grep` and `ripgrep` return NOTHING for it — not "binary file matches", but
+  // silence — which hides this module from anyone searching it.
+  const groupKey = (file: string, line: number, title: string): string =>
+    `${locationKey(file, line)}\0${title}`;
+
+  // How many groups share each bare location. A record written before
+  // `GroupLabel.title` existed carries no discriminator, and may only be trusted
+  // where that count is 1 — at a location two groups share it could belong to
+  // either, and a heading on the wrong group is worse than no heading.
+  const groupsAtLocation = new Map<string, number>();
+  for (const conflict of conflicts) {
+    const key = locationKey(conflict.file, conflict.line);
+    groupsAtLocation.set(key, (groupsAtLocation.get(key) ?? 0) + 1);
+  }
+
   const labels = new Map<string, string>();
-  for (const label of synthesis.labels) labels.set(locationKey(label.file, label.line), label.label);
+  const legacyLabels = new Map<string, string>();
+  for (const label of synthesis.labels) {
+    if (label.title === undefined) {
+      legacyLabels.set(locationKey(label.file, label.line), label.label);
+    } else {
+      labels.set(groupKey(label.file, label.line, label.title), label.label);
+    }
+  }
 
   const notes = new Map<string, string>();
+  const legacyNotes = new Map<string, string>();
   for (const note of synthesis.notes) {
-    notes.set(`${locationKey(note.file, note.line)} ${note.agent_id}`, note.note);
+    if (note.title === undefined) {
+      legacyNotes.set(`${locationKey(note.file, note.line)}\0${note.agent_id}`, note.note);
+    } else {
+      notes.set(`${groupKey(note.file, note.line, note.title)}\0${note.agent_id}`, note.note);
+    }
   }
 
   return conflicts.map((conflict) => {
-    const key = locationKey(conflict.file, conflict.line);
+    // `conflict.title` is still the DETERMINISTIC fallback here — the label that
+    // may replace it is applied below — which is exactly why it can be the key.
+    const key = groupKey(conflict.file, conflict.line, conflict.title);
+    const location = locationKey(conflict.file, conflict.line);
+    const alone = groupsAtLocation.get(location) === 1;
+
     const takes: ConflictTake[] = conflict.takes.map((take) => {
-      const note = notes.get(`${key} ${take.agent_id}`);
+      const note =
+        notes.get(`${key}\0${take.agent_id}`) ??
+        (alone ? legacyNotes.get(`${location}\0${take.agent_id}`) : undefined);
       return note === undefined ? take : { ...take, note };
     });
-    const label = labels.get(key);
+    const label = labels.get(key) ?? (alone ? legacyLabels.get(location) : undefined);
     return { ...conflict, ...(label === undefined ? {} : { title: label }), takes };
   });
 }

@@ -24,15 +24,40 @@ import { z } from 'zod';
 export const StanceNote = z.object({
   file: z.string(),
   line: z.number().int(),
+  /** {@link GroupLabel.title} — the same discriminator, for the same reason. */
+  title: z.string().optional(),
   agent_id: z.string(),
   note: z.string(),
 });
 export type StanceNote = z.infer<typeof StanceNote>;
 
-/** One synthesised group heading, keyed by the group's file and lowest line. */
+/**
+ * One synthesised group heading.
+ *
+ * **A file and a line do NOT identify a group**, which is what this record
+ * assumed until 2026-08-28. `EC-9` allows two groups to share both and be
+ * separated only by their titles — two agents flagging intersecting ranges with
+ * unrelated titles do not merge — and on a real run three groups shared
+ * `test/tasks.test.ts:70`. Keyed by location alone, the last label written won
+ * the lookup and all three groups rendered the SAME heading, while the other two
+ * synthesised labels sat unused in the blob. The read then also handed React
+ * three identical keys.
+ *
+ * `title` is the group's DETERMINISTIC fallback title (AC-31) — the one it shows
+ * before a label arrives. Both sides hold it: the writer takes it off the
+ * `MaterialLocation` it sent, the reader off the `Conflict` before the label
+ * replaces it. It is a content key, so if the grouping rule ever changes the
+ * match simply stops and the group keeps its fallback title — the same state as
+ * "not synthesised yet", which the read already handles (AC-38). A positional
+ * key would instead attach a label to the wrong group, silently.
+ *
+ * Optional because blobs written before this field existed must still parse;
+ * see `mergeSynthesis` for how those are matched without it.
+ */
 export const GroupLabel = z.object({
   file: z.string(),
   line: z.number().int(),
+  title: z.string().optional(),
   label: z.string(),
 });
 export type GroupLabel = z.infer<typeof GroupLabel>;
