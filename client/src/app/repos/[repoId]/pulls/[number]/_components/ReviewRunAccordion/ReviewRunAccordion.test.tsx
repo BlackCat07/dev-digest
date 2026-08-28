@@ -6,6 +6,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReviewRecord, RunSummary } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
 
@@ -91,12 +92,32 @@ const runSummary = (o: Partial<RunSummary> = {}): RunSummary => ({
   ...o,
 });
 
-function renderAccordion(run: RunSummary | null) {
-  return render(
-    <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
-      <ReviewRunAccordion review={review()} run={run} prId="pr-1" />
-    </NextIntlClientProvider>,
+/**
+ * The providers this accordion's subtree needs.
+ *
+ * The query client is not decoration: an open accordion mounts `FindingsPanel`,
+ * which owns the turn-into-an-eval-case mutation, and a React Query hook with no
+ * client throws `No QueryClient set` on RENDER — before any assertion here runs,
+ * and while `tsc --noEmit` stays perfectly clean. A fresh client per render keeps
+ * one test's cache out of the next one's. Mocking the hook instead would work and
+ * would also stop this file from ever noticing that the panel gained one.
+ *
+ * There is no shared helper for this in the package — `AgentCard.test.tsx` and
+ * `PRRow.test.tsx` each build their own — so this one is local, like theirs.
+ */
+function withProviders(ui: React.ReactElement) {
+  const qc = new QueryClient();
+  return (
+    <QueryClientProvider client={qc}>
+      <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
+        {ui}
+      </NextIntlClientProvider>
+    </QueryClientProvider>
   );
+}
+
+function renderAccordion(run: RunSummary | null) {
+  return render(withProviders(<ReviewRunAccordion review={review()} run={run} prId="pr-1" />));
 }
 
 describe("ReviewRunAccordion — collapsed header", () => {
@@ -152,15 +173,15 @@ describe("ReviewRunAccordion — collapsed header", () => {
 describe("ReviewRunAccordion — arriving at a targeted finding", () => {
   const renderTargeted = (targetFindingId: string | null, defaultOpen = false) =>
     render(
-      <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
+      withProviders(
         <ReviewRunAccordion
           review={review()}
           run={runSummary()}
           prId="pr-1"
           defaultOpen={defaultOpen}
           targetFindingId={targetFindingId}
-        />
-      </NextIntlClientProvider>,
+        />,
+      ),
     );
 
   it("opens itself when it holds the targeted finding, though it is not the first run", () => {

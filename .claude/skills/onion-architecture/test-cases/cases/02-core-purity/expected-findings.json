@@ -1,0 +1,76 @@
+{
+  "case": "02-core-purity",
+  "schema": 1,
+  "scoring": {
+    "planted": "deterministic \u2014 a planted entry counts as found when the report names `file` and at least one token from `match`",
+    "traps": "grader \u2014 deciding whether a report *complained* about a legitimate import needs judgement; `match` only locates the passage"
+  },
+  "planted": [
+    {
+      "id": "P1",
+      "rule": "OA-CORE-001",
+      "gate": "core-stays-pure",
+      "severity": "error (but node:fs is NOT matched by the rule regex)",
+      "file": "reviewer-core/src/review/severity.ts",
+      "lines": [
+        1,
+        42
+      ],
+      "summary": "readFile from node:fs/promises \u2014 filesystem I/O inside the pure core.",
+      "fix": "Pass the weight table in as a parameter; the server reads the file and injects it.",
+      "match": [
+        "node:fs",
+        "readFile"
+      ]
+    },
+    {
+      "id": "P2",
+      "rule": "OA-CORE-003",
+      "gate": null,
+      "severity": "\u2014 (no gate)",
+      "file": "reviewer-core/src/review/severity.ts",
+      "lines": [
+        38
+      ],
+      "summary": "process.env.DEVDIGEST_SEVERITY_WEIGHTS \u2014 environment access inside the pure core.",
+      "fix": "The caller resolves the config and passes the resulting weights in.",
+      "match": [
+        "process.env",
+        "DEVDIGEST_SEVERITY_WEIGHTS"
+      ]
+    },
+    {
+      "id": "P3",
+      "rule": "OA-CORE-002",
+      "gate": "core-stays-pure",
+      "severity": "error",
+      "file": "reviewer-core/src/review/severity.ts",
+      "lines": [
+        3,
+        63
+      ],
+      "summary": "Imports SEVERITY_RANK from ../../../server/src/modules/reviews/constants.js \u2014 the innermost ring depending on a feature module.",
+      "fix": "Define the rank in reviewer-core, or lift it into the port ring which both packages may read.",
+      "match": [
+        "server/src/modules",
+        "SEVERITY_RANK"
+      ]
+    }
+  ],
+  "traps": [
+    {
+      "id": "T1",
+      "rule": "OA-CORE-002",
+      "file": "reviewer-core/src/review/severity.ts",
+      "lines": [
+        2
+      ],
+      "why_legitimate": "import type { Finding } from '@devdigest/shared' \u2014 the port ring is the core's one permitted outward edge.",
+      "match": [
+        "@devdigest/shared",
+        "Finding"
+      ]
+    }
+  ],
+  "notes": "reviewer-core/CLAUDE.md states the purity contract verbatim ('no DB, no GitHub, no filesystem, no process.env'), so P1 and P2 are reachable from repo docs alone. Measured 2026-08-21: P3 did not discriminate either \u2014 the without_skill arm quoted the core-stays-pure rule straight out of .dependency-cruiser.cjs."
+}

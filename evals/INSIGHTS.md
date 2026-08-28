@@ -1,0 +1,235 @@
+# evals — engineering insights
+
+Append-only journal for `@devdigest/evals`. Seven fixed sections; newest entry at the bottom
+of its section.
+
+**Relationship to `README.md`:** this file is the inbox — one-off, file-grounded observations.
+`README.md` holds what has stabilised into a documented rule of the package. When the same
+insight costs a second mistake, promote a one-line version into `README.md` and leave the entry
+here as the record of how it was found.
+
+**Reading this file:** if every section below reads "no entries yet", that is the real state —
+report `0 entries` rather than treating it as a failed load.
+
+Note: an insight here is usually about the **Claude Agent SDK or the measurement**, not about
+DevDigest's product code. Say which, because the SDK facts apply to any future code in this repo
+that opens an agent session, not just to evals.
+
+## Rules
+
+- **Append only.** Never edit or delete an existing entry, never rewrite this file.
+  Superseded? Append a new bullet that says so and name the date it replaces.
+- **Never `Write` this file** — the `Write` tool replaces it wholesale and destroys every prior
+  entry. Append with an anchored `Edit` on the target section's `<!-- append below -->` marker.
+- **File-grounded.** Every entry names a real path, and a line or symbol where useful.
+- **Non-duplicate.** Re-read this file before recording; skip anything already here or already
+  stated in `README.md` / the root `CLAUDE.md`.
+- **Substantial.** Record what cost real time or would mislead the next reader. Not: code
+  structure that is plain from reading it, style nits, or facts true only inside one session.
+- Nothing substantial this session → write nothing. That is a valid outcome.
+
+## Entry format
+
+One bullet per insight, appended under the one section it belongs to:
+
+```
+- **YYYY-MM-DD** — <one to three sentences: what actually happens, and what to do
+  instead>. Evidence: `src/path/file.ts` (`functionName`).
+```
+
+A symbol name outlives a line number — use `:42` only when the line itself is the point.
+Superseding an earlier entry adds `Supersedes YYYY-MM-DD.`; the old bullet stays.
+
+**Session Notes** groups under a dated subheading instead:
+
+```
+### YYYY-MM-DD
+- <what the session decided or discovered, one line per point>
+```
+
+Replacing a section's `_No entries yet._` placeholder on first append is expected — it is not
+an entry.
+
+## What Works
+
+<!-- append below -->
+
+_No entries yet._
+
+## What Doesn't Work
+
+<!-- append below -->
+
+- **2026-08-24** — **Writing a case's practices from what the artifact *ought* to produce instead
+  of from the artifact's own contract. Two suites in this repo did it, and both were unpassable by
+  any model — neither a better model nor a lower `threshold` could rescue them.** `dependency-checker`
+  demanded a `'Scope'` section and a closing `'Summary'` section; `report-format.md` prescribes
+  exactly six — A·Method, B·Map, C·Inventory, D·Weight, E·Risks, F·Priorities — and defines neither,
+  so 2 of 6 practices scored 0 always, capping the case at 0.667 under a 0.7 threshold.
+  `architecture-reviewer` demanded rule identifiers (`reviewer-core-zero-io`,
+  `inward-only-dependencies`) that a repo-wide grep finds ONLY in the case file, plus a "PASS/FAIL
+  gate verdict" its own definition forbids ("You report… you never issue a merge verdict"). **Before
+  writing a practice, grep the artifact for the noun you are about to assert** — a section name, a
+  rule id, a verdict word. If it lives only in your case file, the case measures your expectation,
+  not the artifact. Evidence: `skills/dependency-checker/dependency-checker.cases.ts`,
+  `agents/architecture-reviewer/architecture-reviewer.cases.ts`.
+
+- **2026-08-24** — **`skillContent()` loaded `SKILL.md` + `references/*.md` only, and in this repo
+  exactly ONE skill (`zod`) uses `references/`. Every other skill keeps its supporting files at the
+  skill root, so nine skills were being measured with their instructions cut in half.**
+  `dependency-checker`'s injected payload was 11713 chars — SKILL.md alone. It contained a link to
+  `report-format.md` (where the six required sections live), none of the six section names, and not
+  the word "mermaid" anywhere, while the case asserted all of it. The content tier has **no tools**,
+  so the model cannot open a linked file: whatever is not injected does not exist. After including
+  root-level `*.md` the payload is 24677 chars and the case scores **6/6** where it had scored 0.5.
+  The same fix turned `onion-architecture`'s case 3 — commented "KNOWN FAILING, deliberately kept:
+  0/10 across both skill versions" — green, because the rule it needed was in `rules.md` all along.
+  That comment blamed the skill for what was a loader gap. Evidence: `src/artifacts/load.ts`
+  (`skillContent`). **Before concluding a case or an artifact is at fault, print what the eval
+  actually injects.** It is one call and it settles what three rounds of guessing could not.
+
+- **2026-08-24** — **Reading "blocking" vs "advisory" off the workflow file. It means nothing until
+  branch protection defines required status checks.** With none configured, GitHub left
+  `Merge pull request` enabled through three red jobs, so the `continue-on-error` design was
+  cosmetic. Configure required checks in Settings → Branches first, otherwise a carefully chosen
+  blocking tier enforces exactly as much as an advisory one.
+
+## Codebase Patterns
+
+<!-- append below -->
+
+_No entries yet._
+
+## Tool & Library Notes
+
+<!-- append below -->
+
+- **2026-08-23** — **In the Claude Agent SDK, `allowedTools` does not restrict anything and
+  `disallowedTools` does not hold under `permissionMode: "bypassPermissions"`. The only gate that
+  held is a `PreToolUse` hook returning `permissionDecision: "deny"`.** `allowedTools` is the
+  auto-approve list ("To restrict which tools are available, use the `tools` option instead" —
+  `node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts`), so a read-only-looking list never made a
+  session read-only. Adding `disallowedTools`, documented as removing a tool from the model's
+  context, was not enough either: a session still emitted `Edit`, and one `Edit` **succeeded** and
+  appended a fabricated entry to `server/INSIGHTS.md`. The SDK's own docs name the working layer —
+  "PreToolUse hook denies bypass canUseTool". Evidence: `src/runtime/run-claude.ts` (`runClaude`,
+  the three-layer comment), `src/config.ts` (`MUTATING_TOOLS`). This applies to **any** code in this
+  repo that opens an SDK session, not just evals.
+
+- **2026-08-24** — **GitHub Actions does not expose the `env` context inside a job-level `env`
+  block, so `EVAL_MODEL: ${{ env.EVAL_TOOLS_MODEL }}` resolves to the empty string — silently.**
+  A workflow-level `env` entry cannot be read by a job's own `env`; only `github`, `needs`,
+  `strategy`, `matrix`, `vars`, `secrets` and `inputs` are available there. The failure is
+  invisible in the YAML: `EVAL_MODEL=""` makes `src/config.ts` fall back to `claude-haiku-4-5`, an
+  Anthropic id OpenRouter cannot resolve, so the job dies on a model-not-found far from the cause.
+  Repeat the `${{ inputs.x || vars.y || 'default' }}` expression in each job instead of factoring
+  it out. Evidence: `.github/workflows/evals.yml` (the comment above the workflow-level `env`).
+
+- **2026-08-24** — **A vitest positional filter is a substring match on the file path, not a
+  directory. `vitest run agents/architecture-reviewer` also runs
+  `agents/architecture-reviewer-lite/`** — measured: 8 tests across 2 files instead of 4 across 1.
+  This matters wherever one artifact's name is a prefix of another's: the CI job for the strict
+  agent silently pulled in the lite control arm. Always end a per-artifact filter with a slash —
+  `agents/<name>/`. Evidence: `.github/workflows/evals.yml` (the `skills` and `agents` run steps).
+
+## Recurring Errors & Fixes
+
+<!-- append below -->
+
+- **2026-08-23** — **A model-backed test can fail in three ways that all read as "fine" unless the
+  runner is built to distinguish them: a wrong verdict, a session that ends dirty, and a case that
+  never reports at all.** For a tier with no judge and no grounding gate, `record()` was scoring
+  `!result.isError` — "the session ended cleanly" — so a trace case that made **zero tool calls**
+  was recorded as a pass while a correct negative that exhausted `maxTurns` was recorded as a
+  failure. Separately, `eval:repeat` used "records written" as its denominator, so a case killed by
+  vitest's 240s `testTimeout` (which runs no user code, so no `catch` fires) vanished from the
+  arithmetic and printed as `✓ 4/5`. Fixes: `RecordData.passed` carries the case's own verdict and
+  outranks the judge, `measure()` records a failure when the model call throws, and the per-run line
+  counts cases vitest collected. Evidence: `src/records/record.ts` (`record`), `src/dsl/case.ts`
+  (`measure`, `runWorkflowCases`), `src/repeat.ts`.
+
+## Session Notes
+
+<!-- append below -->
+
+### 2026-08-24
+
+- The harness evals now run on PR (`.github/workflows/evals.yml`). First real run, on the smoke
+  path: `detect` green in 20s, and **all three model-backed jobs did real work** — the LiteLLM
+  proxy came up in CI, the Agent SDK spoke through it, subagents dispatched, skills activated, the
+  judge returned structured verdicts. Every red was a genuine eval verdict, not plumbing.
+- Scores that run: `dependency-checker` 2/3, `architecture-reviewer` 1/4, workflow tier 5/6. Total
+  model time ~200s.
+- **`architecture-reviewer` cannot pass its own suite on any model.** Two of its four cases assert
+  the rule identifiers `reviewer-core-zero-io`, `reviewer-core-ground-findings-gate`,
+  `inward-only-dependencies`, `di-discipline` — and a repo-wide grep finds all four **only** in
+  `agents/architecture-reviewer/architecture-reviewer.cases.ts`. No agent definition, no skill, no
+  doc defines them, so no model can cite them. The same cases demand a "PASS/FAIL gate verdict"
+  while `.claude/agents/architecture-reviewer.md` says "You report… you never issue a merge
+  verdict" and uses CRITICAL / WARNING / SUGGESTION. Measured 1/4 on `google/gemini-2.5-flash` and
+  1/4 on `anthropic/claude-haiku-4.5`, so it is not model weakness. The CI job is advisory until
+  the suite is made honest — that fix changes what the eval means and is deliberate work.
+- **Per-token price is not the bill.** First CI run cost gemini-2.5-flash `$0.19` vs
+  deepseek-chat `$0.94` — deepseek 5x dearer despite the cheaper rate, because turn count and
+  output length dominate. `claude-haiku-4.5` cost `$3.48` for the same 1/4 on the agent tier, at
+  ~8x the wall-clock per session (44–96s vs 6–11s). Do not infer eval cost from a price table.
+- `deepseek/deepseek-chat` is what OpenRouter bills as **"DeepSeek V4 Flash 0423"** — same model,
+  two names. Useful when reconciling the dashboard against `EVAL_MODEL`.
+- **Deliberate scope decision, recorded because a future reader will otherwise read the config as
+  an oversight.** The CI gate was kept **cheap on purpose**: cheap OpenRouter models only, no
+  Anthropic tier, and `detect` (typecheck + `eval:quality`, no model, free) as the **only** blocking
+  job. Every model-backed tier is advisory. Two reasons, both stated by the repo owner: paying for a
+  strong model on every PR defeats the point of a cheap harness, and each CI round costs real money
+  and time, so the loop was closed with **local single-case runs** instead of repeated full CI runs.
+  What that buys: the gate proves the plumbing and surfaces the measurement, and a human reads the
+  verdict. What it costs: a genuine regression in a skill will show up red and not stop a merge.
+  Turn a tier blocking only when its suite is honest AND its model can pass it — and remember that
+  until branch protection names required status checks, "blocking" is decoration either way.
+- Some assertions were genuinely **relaxed** here and others were **corrected** — do not read the
+  diff as one uniform softening. Relaxed: the binary `grounding` gate on `dependency-checker`'s
+  first case was removed, and `onion-architecture`'s case 1 went 1.0 → 0.8 (measured 5/6, so 1.0
+  made any single miss fatal). Corrected, not relaxed: two `dependency-checker` practices were
+  realigned to `report-format.md`'s real sections and one of them became **stricter**. Refused:
+  `onion-architecture`'s case 4 was left at 1.0 and left RED, because its 0/3 is a true positive.
+- Local verification beats a CI round for cost AND for signal. One content-tier case runs in seconds
+  for cents with no proxy (`EVAL_BACKEND=openrouter` + a direct OpenRouter call), and
+  `results/outputs/<run>/<case>.md` holds the model's full answer — reading that file is what finally
+  identified the hallucination, after two wrong hypotheses built from summary scores alone.
+- Deepseek fails `dependency-checker`'s first case deterministically: that case grounds on a
+  ` ```mermaid ` block and deepseek answers in prose, so `grounded` is `0`, the judge is skipped
+  and the case is red before any judging happens. Evidence: `src/dsl/case.ts` (`measure`, the
+  `grounded !== undefined` branch).
+
+### 2026-08-23
+
+- Workflow tier ran for the first time in this repo. Its three original `trace` cases asserted
+  `server/docs/api-contracts.md`, `reviewer-core/docs/pipeline.md` and
+  `reviewer-core/insights/gotchas.md` — none of which exist here (they belong to the course
+  template's tree), so the tier had never produced a single record.
+- A `Read` assertion needs a task the **injected** guide cannot answer. Asking "what must you read
+  before answering" scored 0/2 with zero tool calls: root `CLAUDE.md` is in the session's context
+  via `settingSources:["project"]`, so the model answered correctly without opening a file. Asking
+  for content that lives only inside the target file is what makes the read happen.
+- Practical ceiling on a merged `trace`: about two independent reads per session. Four was 0/2 then
+  1/2 — the failing runs read the package `CLAUDE.md`, decided that was enough, and stopped at 8 of
+  14 allowed turns, so it was never a turn-budget problem.
+- A package `CLAUDE.md` **does** appear as an explicit `Read` in the trace (`client/CLAUDE.md`,
+  `server/CLAUDE.md`), so asserting one is viable — but the second-hop doc is the discriminating
+  signal.
+- Skill activation on `claude-haiku-4-5` is genuinely intermittent, ~1 in 2–4: both
+  `engineering-insights` and `onion-architecture` positives have each answered from context with
+  `skills: []` instead of invoking. The trace tier records this faithfully; it is a property of the
+  skill descriptions, not of the case.
+- The trace tier cannot see a lie. One session produced a fabricated verbatim quote attributed to
+  `client/CLAUDE.md` (a heading that file does not contain) and was caught only because a Read
+  happened to be missing. `kind: "trace"` now accepts optional `practices`, which disables the
+  early stop (an early-stopped session leaves ~27 output tokens — nothing to judge).
+
+## Open Questions
+
+<!-- append below -->
+
+- **2026-08-23** — Why did one `activation` session hang past vitest's 240s `testTimeout` in the
+  `workflow-final` run, when the same case takes 13–19s? No record exists for it by definition —
+  that is what the missing-case accounting in `src/repeat.ts` now surfaces, so the next occurrence
+  should at least be visible instead of silently shrinking the run.

@@ -1,0 +1,85 @@
+{
+  "case": "05-warn-drift",
+  "schema": 1,
+  "scoring": {
+    "planted": "deterministic \u2014 a planted entry counts as found when the report names `file` and at least one token from `match`",
+    "traps": "grader \u2014 deciding whether a report *complained* about a legitimate import needs judgement; `match` only locates the passage"
+  },
+  "planted": [
+    {
+      "id": "P1",
+      "rule": "OA-TRANS-001",
+      "gate": "routes-no-data-access",
+      "severity": "warn",
+      "file": "server/src/modules/digest/routes.ts",
+      "lines": [
+        3,
+        5,
+        "32-49"
+      ],
+      "summary": "Two Drizzle queries \u2014 an aggregate and a windowed list \u2014 run inline in the GET /digest/counts handler.",
+      "fix": "DigestRepository.countsSince(...) plus a service method; the module already has a repository.",
+      "match": [
+        "drizzle-orm",
+        "db/schema",
+        "leftJoin",
+        "countsSince"
+      ]
+    },
+    {
+      "id": "P2",
+      "rule": "OA-APP-003",
+      "gate": "application-no-db-schema, row-types-stay-in-persistence",
+      "severity": "warn",
+      "file": "server/src/modules/digest/service.ts",
+      "lines": [
+        3,
+        9
+      ],
+      "summary": "Imports db/schema only to export ReviewRow = typeof t.reviews.$inferSelect, making a Drizzle Row type the module's currency; repository.ts does a bare .select() returning full rows.",
+      "fix": "Declare the row shape in the repository, project the columns used, and map Row -> DTO in helpers.ts.",
+      "match": [
+        "$inferSelect",
+        "ReviewRow",
+        "db/schema"
+      ]
+    },
+    {
+      "id": "P3",
+      "rule": "OA-APP-004",
+      "gate": "no-circular",
+      "severity": "warn",
+      "file": "server/src/modules/digest/helpers.ts",
+      "lines": [
+        1,
+        "15-21"
+      ],
+      "summary": "summariseWindow takes the whole Container for one container.featureModel call; importing platform/container.ts drags in every module and puts the caller in a cycle with the DI root.",
+      "fix": "Narrow the parameter to a consumer-declared resolver interface, or pass the resolved model in. The container satisfies it structurally.",
+      "match": [
+        "Container",
+        "featureModel",
+        "narrow",
+        "cycle",
+        "resolver"
+      ]
+    }
+  ],
+  "traps": [
+    {
+      "id": "T1",
+      "rule": "OA-INFRA-001",
+      "file": "server/src/modules/digest/repository.ts",
+      "lines": [
+        1,
+        3
+      ],
+      "why_legitimate": "A repository may import drizzle-orm and db/schema.",
+      "match": [
+        "drizzle-orm",
+        "db/schema"
+      ]
+    }
+  ],
+  "notes": "Every planted violation is warn severity, so `depcruise --output-type err` exits 0 and the gate reports the tree green. The case prompt deliberately asserts 'I ran the architecture gate and it came back clean' \u2014 OA-GATE-001 is what makes that premise wrong. Credit a report that either names the warn/burn-down status or reports the problems without leaning on the exit code."
+}

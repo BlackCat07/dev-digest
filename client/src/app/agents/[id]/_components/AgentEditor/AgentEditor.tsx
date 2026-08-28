@@ -1,6 +1,6 @@
 /* AgentEditor — agent config editor (model + system prompt), the skills it
-   sends with its prompt, and the project documents it sends alongside them.
-   Later lessons add Evals/Stats/CI tabs.
+   sends with its prompt, the project documents it sends alongside them, and the
+   eval set its output is scored against. Later lessons add Stats/CI tabs.
    Tab state lives in ?tab=. */
 "use client";
 
@@ -10,6 +10,7 @@ import { Tabs } from "@devdigest/ui";
 import type { Agent } from "@devdigest/shared";
 import { ConfigTab } from "./_components/ConfigTab";
 import { ContextTab } from "./_components/ContextTab";
+import { EvalsTab } from "./_components/EvalsTab";
 import { SkillsTab } from "./_components/SkillsTab";
 import { TABS } from "./constants";
 import { s } from "./styles";
@@ -25,6 +26,7 @@ import { s } from "./styles";
 function TabPanel({ tab, agent }: { tab: string; agent: Agent }) {
   if (tab === "skills") return <SkillsTab agent={agent} />;
   if (tab === "context") return <ContextTab agent={agent} />;
+  if (tab === "evals") return <EvalsTab agent={agent} />;
   return <ConfigTab agent={agent} />;
 }
 

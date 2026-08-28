@@ -132,6 +132,16 @@ valuable one — the code does not record what was tried and abandoned.
 
 <!-- append below -->
 
+- **2026-08-23** — **A `curl` of a client route proves nothing about a rendered control, and
+  grepping its HTML for a label is a false green.** `/repos/<id>/pulls/<n>` returns ~98 KB carrying
+  the shell **and the entire `prReview` message catalogue inside the RSC flight payload**, so a
+  search for a button's label finds the catalogue string; `data-finding-id`, `>Accept<` and
+  `aria-disabled` are all absent, because the reviews list is client-fetched after hydration. Three
+  independent dispatches measured this on three different routes. A `200` proves the route exists
+  and nothing more — `DDG-UI-001` on any data-driven screen needs a real browser, and "the label is
+  in the HTML" is the tempting wrong evidence. Evidence:
+  `src/app/repos/[repoId]/pulls/[number]/_components/FindingsPanel/`, `src/app/eval/`.
+
 - **2026-08-20** — **A `@@` hunk header does not decide which line numbers exist — the body lines
   do — so a target-line fixture written from the header silently finds no anchor.** A patch whose
   header claims a long range but whose body carries one context line and one addition renders
@@ -475,6 +485,56 @@ Conventions and architectural decisions, each with the reason behind it.
 Dependency and tooling quirks.
 
 <!-- append below -->
+- **2026-08-25** — **`Button`'s `active` prop is honoured by `kind: "tertiary"` and by NOTHING
+  else**, so passing it to a `secondary`, `ghost`, `primary` or `danger` button is a silent
+  no-op. `Button.tsx`'s `kinds` record reads `active` only inside the `tertiary` entry; every
+  other kind hard-codes its background and colour, and the spread order means the prop never
+  reaches the DOM. Cost: `FindingCard`'s `Accept` (`secondary`) and `Dismiss` (`ghost`) both
+  passed `active={accepted}` / `active={dismissed}` and neither ever showed which one the
+  reader had pressed — the only remaining signals were a 12px chip and `opacity` on the card,
+  and the `dismissed` chip was `var(--text-muted)`, i.e. the same grey the dimming produces.
+  Nothing caught it: the props were passed, the types were satisfied, and 19 existing tests on
+  that card stayed green. The fix is `style` (which `Button` spreads LAST over its own
+  defaults) plus `aria-pressed`, not switching the kind to `tertiary` — that strips the
+  border and flattens a five-control row into plain text. **Assert the rendered
+  `element.style.background`, never that the prop was handed over**; mutation-verified by
+  restoring `active` here, which turns three tests red. Same family as the `SeverityBadge`
+  `compact` entry above: a prop on this design system that reads as cosmetic and is really
+  load-bearing, or vice versa. Evidence: `src/vendor/ui/primitives/Button.tsx` (`kinds`),
+  `src/app/repos/[repoId]/pulls/[number]/_components/FindingCard/styles.ts` (`chosenAction`,
+  `decisionTag`), `FindingCard.test.tsx` ("showing which decision was made").
+
+
+- **2026-08-25** — **A hyphenated JSX attribute (`aria-*`, `data-*`) is EXEMPT from
+  TypeScript's excess-property check, so passing one to a vendored primitive that does not
+  spread `...rest` compiles, lints, builds — and renders nothing.** Measured directly:
+  `<Textarea value="" onChange={…} aria-label="hi" data-nonsense="q" />` is accepted by
+  `tsc --noEmit` even though `Textarea`'s props type names five keys and its body forwards
+  none of them. This is not a quirk of that one component — **25 of the kit/primitive
+  components forward no rest props** (`Textarea`, `Toggle`, `Checkbox`, `Tabs`, `Modal`,
+  `FormField`, `SelectInput`, `SearchableSelect`, `Dropdown`, `Drawer`, `Badge`, `Chip`,
+  `Card`, `IconBtn`, `EmptyState`, `ErrorState`, `MonoLink`, `Markdown`, `ProgressBar`,
+  `Skeleton`, `Avatar`, `Kbd`, `CircularScore`, `ConfidenceNum`, `SectionLabel`), while
+  `Button` and `TextInput` DO spread and therefore really do carry `aria-disabled` /
+  `aria-label` — which is why the idiom works everywhere it is already used and fails
+  silently the first time it is tried on a sibling. Before relying on an `aria-*` on a
+  vendor component, `grep '\.\.\.rest' src/vendor/ui/<Kind>/<Name>.tsx`; where it is
+  absent, label the enclosing element instead (a `<section aria-label>`, a `<label>`), and
+  do not "fix" the primitive — `vendor/ui` is extend-by-new-file. A test querying
+  `getByLabelText` is the only thing that catches this. Evidence:
+  `src/vendor/ui/kit/Textarea.tsx`, `src/vendor/ui/primitives/Button.tsx` (`...rest`),
+  `src/app/repos/[repoId]/pulls/[number]/_components/EvalCaseDraftModal/EvalCaseDraftModal.tsx`
+  (the comment where the `aria-label` was removed).
+
+
+- **2026-08-23** — **jsdom implements no `EventSource`, and `src/test/setup.ts` does not shim it**
+  (it shims `ResizeObserver` and `scrollIntoView`). A test that mounts a component reaching a hook
+  which *constructs* one with a non-null id dies with a `ReferenceError` **inside the effect** and
+  takes the whole tree down, not just the assertion — so the failure reads as a broken component
+  rather than a missing global. Both construction sites return early on a null id, which is why no
+  existing test had hit it. Stub a `FakeEventSource` per file, or keep the id null. Evidence:
+  `src/lib/hooks/eval.ts` (`useEvalBatchEvents`), `src/lib/hooks/reviews.ts` (`useRunEvents`),
+  `src/test/setup.ts`.
 
 - **2026-08-19** — **`eslint` on a path under `src/vendor/` exits 0 while linting nothing, and
   a command listing it beside real files reads as a pass for both.** The config ignores
@@ -525,11 +585,40 @@ Dependency and tooling quirks.
   `src/app/agents/[id]/_components/AgentEditor/_components/ContextTab/ContextTab.test.tsx`
   ("attaches a document and moves it one position up without a pointer").
 
+- **2026-08-24** — **`SeverityBadge`'s `compact` prop does not merely tighten the badge — it
+  renders the icon ALONE, dropping the label (`{compact ? null : s.label}`), which turns the
+  one primitive whose own docstring promises "always icon + label (WCAG AA: never color
+  alone)" into exactly colour-and-glyph.** The name reads like density, the padding really
+  does drop from `3px 9px` to `2px 6px`, and neither the types nor the render warn — the
+  badge just appears with no word in it. It was caught only by a test asserting the label
+  text, with a comment claiming "both primitives carry their own label" sitting directly
+  above the `compact` that had removed one. Pass `compact` only where the severity is ALSO
+  spelled out in the same row by something else; where the chip is the only statement of
+  severity, omit it and scale the badge from a wrapper instead — it takes no `style`
+  (2026-08-20, Codebase Patterns). Evidence: `src/vendor/ui/primitives/Badge.tsx`
+  (`SeverityBadge`),
+  `src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/EvalsTab.tsx` (`CaseRow`).
+
 ## Recurring Errors & Fixes
 
 An error string, its real cause, and the fix.
 
 <!-- append below -->
+
+- **2026-08-25** — **`Cannot find module './7161.js'` with a `.next/server/webpack-runtime.js`
+  require stack means a production `next build` ran while `next dev` was running, and
+  `rm -rf .next` does NOT recover it.** The build replaces the dev server's chunk map
+  underneath it; the running process keeps its in-memory manifest, so every route answers
+  `500` — and after deleting `.next` it still does, because that manifest is gone rather than
+  stale. Only restarting `pnpm dev` fixes it. It reads exactly like "the change I just made
+  broke the app", and it is worth knowing because `next build` is the natural way to check
+  that a change survives the production compiler (it catches the `eslint` **error**-level
+  React rules that `pnpm test` and `tsc` do not). Either stop the dev server first, or accept
+  that verifying with a build costs a dev-server restart. Related: the 2026-08-20 entry above
+  on the two other cheap causes of a full-screen error that are not your code. Evidence:
+  `client/.next/server/webpack-runtime.js` (the require stack in the 500 body), `package.json`
+  (`dev`, `build`).
+
 
 - **2026-08-20** — **"Couldn't load this pull request" with the sidebar reading "No repo
   selected" is almost never the screen you just changed — it is the app talking to an API

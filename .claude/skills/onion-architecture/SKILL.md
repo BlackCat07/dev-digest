@@ -12,6 +12,10 @@ you add or review code under `server/` or `reviewer-core/`.
 
 For provenance and the full reading list, see [README.md](README.md).
 
+Every rule below carries a stable ID in [rules.md](rules.md) — cite it in a finding
+(`OA-TRANS-001`), because an ID is checkable where "bad layering" is not, and two findings
+sharing an ID are one root cause.
+
 ## The one rule
 
 **All imports point inward.** A file may depend on layers more central than itself; it may
@@ -83,6 +87,85 @@ Apply in order; the first match wins.
 Every boundary **parses**; it never casts. Request, response, jsonb read back from Postgres,
 LLM output, GitHub payload. An `as` on a boundary already shipped `$NaN` to the client — see
 `server/INSIGHTS.md` (2026-08-02).
+
+## Reviewing a module (before you approve its structure)
+
+Placing a change and judging one are different jobs, and the second has a failure mode the
+first does not: a diff full of concrete breakage — a missing table, an unregistered module,
+a type error — crowds out the structural question entirely. The findings feel productive,
+the review reads as thorough, and nobody asked whether the shape was right. Three passes,
+in this order, because each is cheap and the last one is the one that gets skipped.
+
+**1 — Direction.** Walk the imports against the layer table above. This is the part the
+gate also does, so it is the part you can be quickest about.
+
+**2 — What the gate cannot see** (`OA-REV-001`). A green `depcruise` run is evidence about
+the rules that exist, not about the diff. Check these by reading, because no rule fires:
+
+| Blind spot | Why the gate misses it | Where it showed up |
+|---|---|---|
+| A service importing an **adapter class** (`new OctokitGitHubClient(...)`) instead of an npm SDK | `modules-no-raw-sdk` matches `dependencyTypes: ['npm']`, so an intra-package edge to `src/adapters/**` is not a violation it can express | `OA-APP-001` |
+| `node:fs`, `node:crypto`, `process.env` in a feature module or in the core | the rule enumerates vendor SDKs; Node builtins are not in `RAW_SDKS` | `OA-CORE-001`, `OA-APP-002` |
+| Everything the diff breaks at `warn` severity | `--output-type err` exits 0 on warns, so a patch that adds five warn edges reports clean | `OA-GATE-001` |
+| A module that is never registered in `platform/`'s static `modules/index.ts` | registration is a missing line, and no rule is about absence | — |
+
+A diff whose only architectural evidence is "the gate passed" has not been reviewed.
+
+**3 — Whether each layer is earned** (`OA-REV-002`). This is the pass that gets dropped, so
+ask it explicitly rather than last. For every ring the diff introduces, name the thing that
+justifies it:
+
+- a **service** — a second consumer of a repository method, or a route past ~50 lines or two
+  tables (`OA-SIZE-001`). A repository is never the ring to question: `OA-INFRA-001` leaves a
+  query nowhere else to live, so a one-query module is `routes.ts` → `repository.ts`;
+- a **class** — behaviour that is genuinely stateful. Zod contracts plus pure functions are
+  the house shape, and an anemic model is not a defect here (`OA-SIZE-002`);
+- a **new folder** — a real dependency boundary, not the vocabulary of the pattern. A
+  `domain/` directory is a rename, not a layer (`OA-SIZE-003`).
+
+If nothing justifies a ring, say so. Recommending *less* structure is a normal review
+outcome, and the one a reviewer trained on clean-architecture prose will not reach for
+unprompted — the default pull is toward adding a port, not removing a layer.
+
+## Following the chain (the violations a single import line cannot show)
+
+Every rule above can be checked by looking at one import statement, which is why
+`dependency-cruiser` can check them. The three shapes below are legal on every individual
+edge and illegal in composition, so no rule fires and no grep finds them. They are the ones
+that survive review, and they need the file you imported to be opened, not just named.
+
+**`OA-DEEP-001` — an import is only as pure as what it imports.** The core's one permitted
+outward edge is the port ring, so `import type { X } from '@devdigest/shared'` reads as
+settled. But `ports-import-nothing` forbids the port ring from importing `^src/` — it says
+nothing about `node:fs`, `node:crypto` or a date library, because those are not `^src/` and
+not `zod`. A port-ring file that reads a config at module scope therefore makes every
+importer impure at load time, `reviewer-core` included, and both `core-stays-pure` and
+`ports-import-nothing` stay green. When you follow an edge into the port ring or into
+`_shared`, open that file and read *its* imports. One hop is usually enough; the leak is
+almost never two.
+
+**`OA-DEEP-002` — a port that cannot be faked is not a port.** The sanctioned way to avoid
+depending on a concrete class is for the consumer to declare the interface it needs and let
+the container satisfy it structurally. That works only while every type in the interface's
+signature is one a test can construct. A method returning `AgentRunRow` has moved the
+Drizzle schema into the contract: the shape is now whatever the table is, a fake has to
+build all of it, and the cast that appears in the fake is the tell. `db/rows.ts` invites
+this — its own header explains that cross-cutting consumers may reference a row shape from
+there — and that permission is about consumers, not about ports. Check each type in a port
+signature: it belongs to the port ring, or to the consuming module, or the port is the data
+layer wearing a different name.
+
+**`OA-INFRA-003`, transitively — who owns atomicity.** A service that awaits two repository
+calls in sequence has written a two-statement transaction with no transaction. Nothing in
+either file is misplaced, and the failure only appears when the second call throws and the
+first has already committed. If a repository opens its own `db.transaction`, the boundary is
+inside the ring that cannot see the use case, and a caller needing both writes to succeed
+together has no way to ask for it. Read the service's call sequence, then check where the
+transaction actually starts.
+
+For each of these, name the **chain** in the finding, not the endpoint: "`reliability.ts`
+imports the port ring, which reads the filesystem at line N" is checkable, where
+"`reliability.ts` is impure" sends the reader to the wrong file.
 
 ## Adding a new external dependency (the canonical move)
 
@@ -157,9 +240,15 @@ Current `warn` drift (real violations to burn down, then promote the rule):
 Palermo is explicit that onion "is not appropriate for small websites", and DevDigest grows
 one lesson at a time:
 
-- **A repository earns its place on the second consumer of a query, or when a route passes
-  ~50 lines or two tables.** `workspace/routes.ts` is 34 lines and one `select`; wrapping it
-  buys nothing. `pulls/routes.ts` (388 lines) passed both thresholds long ago.
+- **A repository is not the optional layer; the service is.** `OA-INFRA-001` makes
+  `repository.ts` the only legal home for a query, so even a one-`select` feature gets one:
+  there is nowhere else the query may legally live, and `OA-GATE-001` rules out parking it in
+  a route as "only a warn". What the threshold governs is the **service** — it earns its place
+  on the second consumer of a repository method, or when a route passes ~50 lines or two
+  tables. Below that, `routes.ts` → `repository.ts` plus `helpers.ts` is the whole module.
+  `pulls/routes.ts` (388 lines) passed both thresholds long ago. `workspace/routes.ts` is 34
+  lines and one `select` — and it sits on the `routes-no-data-access` burn-down list above, so
+  it is drift to fix by *adding* a repository, not a pattern to copy.
 - **No rich entity classes.** Zod contracts plus pure functions are the deliberate choice
   here; `reviewer-core` carries real domain logic without them. An "anemic model" is not a
   defect in this codebase.
@@ -172,6 +261,9 @@ one lesson at a time:
 
 - `SKILL.md` — the one rule, the layer table, the decision framework, the "add a dependency"
   recipe.
+- [rules.md](rules.md) — every rule with a stable `OA-*` ID, the gate that catches it and
+  its severity. `—` in the Gate column means no gate sees it, which is when a reviewer has
+  to carry the rule.
 - [layer-map.md](layer-map.md) — every ring mapped to real files, the tool→port→adapter table,
   and a "where does it go?" cheatsheet.
 - [enforcement.md](enforcement.md) — the `dependency-cruiser` config explained, the npm

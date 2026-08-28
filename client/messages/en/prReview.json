@@ -10,7 +10,25 @@
     "replyToAuthor": "Reply to author",
     "replyPlaceholder": "Reply to the author about this finding…",
     "sendReply": "Send reply",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "learnDisabled": "Learn — not available yet",
+    "replyToAuthorDisabled": "Reply to author — not available yet",
+    "turnIntoEvalCase": "Turn into eval case",
+    "turnIntoEvalCaseDisabled": "Turn into eval case — accept or dismiss this finding first",
+    "turnIntoEvalCaseOpening": "Opening eval case…",
+    "turnIntoEvalCaseAdded": "Added to the eval set",
+    "evalRefusal": {
+      "review_has_no_agent": "This finding’s review ran without an agent, so there is no eval set to add it to.",
+      "finding_has_no_decision": "Accept or dismiss this finding first.",
+      "duplicate_source_finding": "This finding is already an eval case.",
+      "conflicting_anchor": "Another eval case already asserts the opposite for these lines.",
+      "case_limit_reached": "This agent’s eval set is full — 50 cases is the limit.",
+      "diff_too_large": "This file’s diff is too large to store as an eval case — 64 KB is the limit.",
+      "anchor_not_in_diff": "That anchor names a file this case’s diff does not contain.",
+      "cross_agent_compare": "Two runs of different agents cannot be compared.",
+      "batch_already_running": "A batch is already running for this agent."
+    },
+    "evalRefusalUnknown": "Couldn’t turn this finding into an eval case."
   },
   "trifecta": {
     "lethal": "LETHAL TRIFECTA — ALL 3 PRESENT",

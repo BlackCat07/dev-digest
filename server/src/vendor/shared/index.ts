@@ -34,6 +34,14 @@
  *                         (L05; new symbols only — brief's PrBrief is untouched
  *                         and Risk / RiskSeverity are reused by import)
  *  - contracts/trace      RunTrace, RunEvent, RunLogLine (single-document trace)
+ *  - contracts/eval-batch EvalExpectation/Anchor, EvalCaseOutcome/NotRunReason,
+ *                         EvalRefusalReason, EvalAgentCase, EvalCaseSave,
+ *                         EvalBatch/Status/CaseResult, EvalMetrics,
+ *                         EvalComparison, EvalBatchTrendPoint, EvalPeriod,
+ *                         EvalDashboardRow, EvalWorkspaceDashboard,
+ *                         EvalRunAllResult (L06; new symbols only — knowledge's
+ *                         EvalCase/EvalOwnerKind and eval-ci's EvalRunRecord /
+ *                         EvalTrendPoint / EvalDashboard are untouched)
  *  - contracts/platform   Settings, ConnTestResult, Repo, PrMeta/PrDetail, SpecFile, …
  *  - adapters             adapter interfaces + ModelInfo
  *
@@ -57,6 +65,8 @@ export * from './contracts/trace.js';
 export * from './contracts/platform.js';
 export * from './contracts/why.js';
 export * from './contracts/eval-ci.js';
+export * from './contracts/eval-batch.js';
+export * from './contracts/eval-draft.js';
 export * from './contracts/observability.js';
 export * from './contracts/productionize.js';
 export * from './adapters.js';

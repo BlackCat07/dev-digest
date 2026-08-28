@@ -26,7 +26,7 @@ export const s = {
     borderLeftColor: sevColor,
     background: "var(--bg-elevated)",
     overflow: "hidden",
-    opacity: muted ? 0.6 : 1,
+    opacity: muted ? 0.72 : 1,
     transition: "opacity .2s, border-color .12s, box-shadow .12s",
     boxShadow: focused ? "0 0 0 1px " + sevColor : "none",
   }),
@@ -64,12 +64,51 @@ export const s = {
     borderRadius: 4,
     padding: "1px 6px",
   } satisfies CSSProperties,
-  acceptedTag: { fontSize: 12, fontWeight: 600, color: "var(--ok)" } satisfies CSSProperties,
-  dismissedTag: {
-    fontSize: 12,
+  /**
+   * The decision chip in the title row — the state, spelled out.
+   *
+   * A bordered chip rather than coloured text, and that is the fix rather than a
+   * restyle: the card carries `opacity` while it is decided, so bare `--ok` text
+   * dims into the same grey as everything around it and `--text-muted` text
+   * disappears outright. A border and a background survive the dimming, so the
+   * reader can still see WHICH of the two buttons they pressed.
+   *
+   * Green for accepted, neutral for dismissed — never `--crit`. Dismissing a
+   * finding is a normal, healthy decision about the agent's output, not an
+   * error, and it is the same reasoning `EVAL_EXPECTATION_BADGE` gives for
+   * drawing `must_not_flag` grey.
+   */
+  decisionTag: (accepted: boolean): CSSProperties => ({
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    color: accepted ? "var(--ok)" : "var(--text-secondary)",
+    background: accepted ? "var(--ok-bg)" : "var(--bg-hover)",
+    border: `1px solid ${accepted ? "var(--ok)" : "var(--border-strong)"}`,
+    borderRadius: 4,
+    padding: "1px 6px",
+  }),
+  /**
+   * The chosen action, on the control that was actually pressed.
+   *
+   * Passed as `Button`'s own `style`, which it spreads LAST over its defaults —
+   * the documented way to extend a vendored primitive without editing it, the
+   * same one `inertAction` below uses.
+   *
+   * It exists because `Button`'s `active` prop is honoured by **`kind:
+   * "tertiary"` only** (`vendor/ui/primitives/Button.tsx`, the `kinds` record):
+   * `Accept` is `secondary` and `Dismiss` is `ghost`, so `active` on either was
+   * silently doing nothing and neither button ever showed what the reader had
+   * pressed. Do not "fix" that by switching both to `tertiary` — that would
+   * strip the row's borders and flatten five controls into plain text.
+   */
+  chosenAction: (accepted: boolean): CSSProperties => ({
+    background: accepted ? "var(--ok-bg)" : "var(--bg-hover)",
+    color: accepted ? "var(--ok)" : "var(--text-primary)",
+    borderColor: accepted ? "var(--ok)" : "var(--text-muted)",
     fontWeight: 600,
-    color: "var(--text-muted)",
-  } satisfies CSSProperties,
+  }),
   metaRow: {
     display: "flex",
     alignItems: "center",
@@ -104,6 +143,34 @@ export const s = {
     gap: 8,
     marginTop: 14,
     flexWrap: "wrap",
+  } satisfies CSSProperties,
+  /**
+   * The look of an `aria-disabled` control.
+   *
+   * `Button` only dims itself for the native `disabled` attribute, and these
+   * controls deliberately do not carry it: an `aria-disabled` button stays
+   * focusable and announced, which is the whole reason `Turn into eval case` is
+   * RENDERED on an undecided finding rather than hidden — the control is what
+   * teaches the reader that the decision comes first. `Button` spreads `...style`
+   * last over its own defaults, so this wins with no change to the primitive.
+   */
+  inertAction: { opacity: 0.55, cursor: "not-allowed" } satisfies CSSProperties,
+  /**
+   * The eval-case refusal, inline on the card that produced it.
+   *
+   * Warning rather than critical, and deliberately BELOW the action row: the
+   * finding itself is unaffected — only the eval case was refused — so `Accept`
+   * and `Dismiss` stay operable right above this text.
+   */
+  evalRefusal: {
+    marginTop: 10,
+    padding: "8px 10px",
+    borderRadius: 6,
+    border: "1px solid var(--warn)",
+    background: "var(--warn-bg)",
+    color: "var(--warn)",
+    fontSize: 12.5,
+    lineHeight: 1.5,
   } satisfies CSSProperties,
   composer: {
     marginTop: 12,

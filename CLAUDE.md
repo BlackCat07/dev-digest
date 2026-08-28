@@ -6,7 +6,7 @@ adds one feature.
 ## Before answering
 
 Search the curated docs FIRST — they may already answer it — then read code. In each
-package (`client`, `server`, `reviewer-core`, `e2e`, `mcp-server`):
+package (`client`, `server`, `reviewer-core`, `e2e`, `mcp-server`, `evals`):
 
 - `INSIGHTS.md` — dated, file-grounded findings; always present
 - `docs/` — curated deep-dives; start at `docs/README.md`
@@ -25,6 +25,12 @@ and has no specs directory.
 
 **And one gap:** `mcp-server/` has `INSIGHTS.md`, `specs/` and `CLAUDE.md` like the rest,
 but **no `docs/`** — read `mcp-server/README.md` instead.
+
+**And one half-shaped package:** `evals/` is the harness that measures this repo's own skills,
+subagents and `CLAUDE.md` — not a product package. It has `INSIGHTS.md` (SDK quirks and
+measurement traps) and a long `README.md` that carries the rules, plus a thin `docs/` with one
+design note. It has **no `CLAUDE.md`** and **no `specs/`**: what it must do is the README, and
+what it measures is the case files in `evals/{skills,agents,workflow}/`.
 
 ## Session protocol (engineering-insights loop)
 

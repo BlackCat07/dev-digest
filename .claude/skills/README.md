@@ -12,6 +12,7 @@ Subagents are the neighbouring concept and live in [`../agents/`](../agents/READ
 | [run-plan](run-plan/SKILL.md) | Workflow | Executes an existing Implementation Plan — implementer waves → Done-conditions → verify ‖ boundaries → bounded fix loop → docs → verdict. Starts at the plan; `spec-creator` and `implementation-planner` are run by hand |
 | [pr-self-review](pr-self-review/SKILL.md) | Workflow | Reviews the open local diff before a PR is opened, routes each file to the skills that own it, blocks the merge on a CRITICAL |
 | [workflow-retro](workflow-retro/SKILL.md) | Meta | Post-mortem for a multi-agent run — what it cost, where the agents struggled, which context was read twice, and the named edits to make before the next run |
+| [dependency-checker](dependency-checker/SKILL.md) | Meta | Audits every package's external dependencies and the internal edges between the six packages — measured, diagrammed, weighed, and closed with a P0/P1/P2 action list |
 | [fastify-best-practices](fastify-best-practices/SKILL.md) | Backend | Fastify routes, plugins, JSON-schema validation, error handling |
 | [drizzle-orm-patterns](drizzle-orm-patterns/SKILL.md) | Backend | Drizzle schema, queries, relations, transactions, migrations |
 | [postgresql-table-design](postgresql-table-design/SKILL.md) | Backend | Postgres schema design, data types, indexing, constraints |
@@ -27,8 +28,8 @@ Subagents are the neighbouring concept and live in [`../agents/`](../agents/READ
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
 
 `engineering-insights`, `run-plan`, `workflow-retro`, `frontend-ui-architecture`,
-`onion-architecture`, `product-ui-language` and `pr-self-review` are authored in
-this repo. Vendored
+`onion-architecture`, `product-ui-language`, `dependency-checker` and `pr-self-review`
+are authored in this repo. Vendored
 skills are pulled from GitHub and pinned by hash in `../../skills-lock.json`;
 locally-authored ones have no upstream and do not belong in that lockfile.
 
@@ -42,6 +43,10 @@ have a lock entry (`postgresql-table-design`, `zod`, `typescript-expert`,
 pinned by `computedHash` over its `SKILL.md`: reshaping one drifts that hash, and
 the root `CLAUDE.md` lists the lockfile as never-hand-edit. Check the lockfile
 before editing a `SKILL.md`, not after.
+
+`dependency-checker` ships `scripts/scan.mjs` — Node stdlib only, read-only, and
+deliberately dependency-free: `jq` is absent on this machine and giving the scanner an
+npm dependency would mean editing a lockfile. It measures; the skill judges.
 
 `workflow-retro` ships one executable too — `scripts/collect.py`, stdlib-only,
 which reads the session and subagent transcripts and writes nothing. It is

@@ -1,0 +1,35 @@
+{
+  "id": "04-over-layering",
+  "skill": "onion-architecture",
+  "title": "More structure than the feature earns",
+  "prompt": "I've just finished a tags feature for the API \u2014 it's under {{FIXTURE}}/server/src/modules/tags/. I tried to follow our backend architecture properly this time: entity with its own invariants, repository behind it, service on top, DTO mapping in helpers. Review it before I open the PR \u2014 is the structure right for this codebase?",
+  "fixture": "fixture",
+  "expected": "expected.md",
+  "planted_violations": 3,
+  "assertions": [
+    {
+      "id": "D1_flags_over_layering",
+      "text": "Raises whether the SERVICE is earned for a feature this size \u2014 one table, one select, one update, a single consumer, a 26-line routes.ts. Credit either conclusion so long as the question is asked. Reporting the REPOSITORY as unearned is wrong under OA-INFRA-001 and does not count."
+    },
+    {
+      "id": "D2_flags_rich_entity",
+      "text": "Reports the TagEntity rich entity class as the wrong shape for this codebase and recommends a Zod contract plus pure functions instead."
+    },
+    {
+      "id": "D3_flags_domain_folder",
+      "text": "Reports the domain/ subfolder as pattern vocabulary that does not match this repo's flat module shape (routes/service/repository/helpers)."
+    },
+    {
+      "id": "D_does_not_approve_as_clean",
+      "text": "Does NOT conclude the module is correctly structured / needs no structural change. A verdict of 'clean layering, ship it' fails this fixture even if its dependency analysis is accurate."
+    },
+    {
+      "id": "D_no_false_positive_on_repository",
+      "text": "Does NOT report repository.ts importing drizzle-orm / db/schema as a violation \u2014 that is the one ring permitted to touch them."
+    },
+    {
+      "id": "D_names_threshold_or_precedent",
+      "text": "Names a concrete threshold or in-repo precedent (second consumer of a repository method / ~50 lines / two tables, or agents/ as the shape to copy) rather than only asserting the structure is too much."
+    }
+  ]
+}

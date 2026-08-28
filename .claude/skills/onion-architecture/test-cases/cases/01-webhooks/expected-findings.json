@@ -1,0 +1,109 @@
+{
+  "case": "01-webhooks",
+  "schema": 1,
+  "scoring": {
+    "planted": "deterministic \u2014 a planted entry counts as found when the report names `file` and at least one token from `match`",
+    "traps": "grader \u2014 deciding whether a report *complained* about a legitimate import needs judgement; `match` only locates the passage"
+  },
+  "planted": [
+    {
+      "id": "P1",
+      "rule": "OA-TRANS-001",
+      "gate": "routes-no-data-access",
+      "severity": "warn",
+      "file": "server/src/modules/webhooks/routes.ts",
+      "lines": [
+        3,
+        5,
+        "51-70"
+      ],
+      "summary": "Transport imports drizzle-orm and db/schema and runs a two-table select/innerJoin inside the GET /webhooks/:id/deliveries handler.",
+      "fix": "Move the query into WebhooksRepository.listDeliveries(workspaceId, id); the route calls the service.",
+      "match": [
+        "drizzle-orm",
+        "db/schema",
+        "innerJoin",
+        "listDeliveries"
+      ]
+    },
+    {
+      "id": "P2",
+      "rule": "OA-APP-001",
+      "gate": null,
+      "severity": "error-equivalent (no gate sees it)",
+      "file": "server/src/modules/webhooks/service.ts",
+      "lines": [
+        3,
+        "44-47"
+      ],
+      "summary": "The application ring imports the concrete adapter class OctokitGitHubClient and constructs it from a hand-fetched token.",
+      "fix": "await this.container.github() \u2014 the container owns construction, caching and the secret.",
+      "match": [
+        "OctokitGitHubClient",
+        "container.github",
+        "adapters/github"
+      ]
+    },
+    {
+      "id": "P3",
+      "rule": "OA-MOD-001",
+      "gate": "no-cross-module-internals",
+      "severity": "warn",
+      "file": "server/src/modules/webhooks/service.ts",
+      "lines": [
+        4,
+        42
+      ],
+      "summary": "Reaches into a sibling module internal, ../repos/helpers.js (normalizeRepoFullName).",
+      "fix": "Lift the helper to modules/_shared/, or reach the capability through container.*.",
+      "match": [
+        "repos/helpers",
+        "normalizeRepoFullName",
+        "_shared"
+      ]
+    }
+  ],
+  "traps": [
+    {
+      "id": "T1",
+      "rule": "OA-INFRA-001",
+      "file": "server/src/modules/webhooks/repository.ts",
+      "lines": [
+        1,
+        3
+      ],
+      "why_legitimate": "A repository is the one ring permitted to import drizzle-orm and db/schema.",
+      "match": [
+        "drizzle-orm",
+        "db/schema"
+      ]
+    },
+    {
+      "id": "T2",
+      "rule": "OA-TRANS-001",
+      "file": "server/src/modules/webhooks/routes.ts",
+      "lines": [
+        4
+      ],
+      "why_legitimate": "Importing @devdigest/shared contracts and declaring Zod route schemas is correct transport behaviour.",
+      "match": [
+        "@devdigest/shared",
+        "WebhookCreate"
+      ]
+    },
+    {
+      "id": "T3",
+      "rule": null,
+      "file": "server/src/modules/webhooks/service.ts",
+      "lines": [
+        5,
+        6
+      ],
+      "why_legitimate": "Own-module imports (./repository.js, ./constants.js) are always fine.",
+      "match": [
+        "./repository",
+        "./constants"
+      ]
+    }
+  ]
+}

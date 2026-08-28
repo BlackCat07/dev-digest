@@ -9,6 +9,7 @@ import type {
   FeatureModelId,
   LLMProvider,
   SmartDiffRole,
+  UnifiedDiff,
 } from '@devdigest/shared';
 import type { AppConfig } from './config.js';
 import type { Db } from '../db/client.js';
@@ -45,6 +46,11 @@ import { BriefService } from '../modules/brief/service.js';
 import { BriefRepository } from '../modules/brief/repository.js';
 import type { PrBriefs } from '../modules/brief/types.js';
 import { resolveFeatureModel } from '../modules/settings/feature-models.js';
+import { EvalRepository } from '../modules/eval/repository.js';
+import { EvalRunner } from '../modules/eval/runner.js';
+import { EvalService } from '../modules/eval/service.js';
+import type { Evals } from '../modules/eval/types.js';
+import { parseUnifiedDiff } from '../adapters/git/diff-parser.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
@@ -85,6 +91,11 @@ export interface ContainerOverrides {
    * no provider.
    */
   brief?: PrBriefs;
+  /**
+   * Eval Pipeline (L06) — tests inject a fake service so a route can be
+   * exercised with no Postgres, no provider and no batch actually running.
+   */
+  eval?: Evals;
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
@@ -118,6 +129,7 @@ export class Container {
   private _projectContext?: ProjectContext;
   private _onboarding?: OnboardingTours;
   private _brief?: PrBriefs;
+  private _eval?: Evals;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -316,6 +328,79 @@ export class Container {
       jobs: this.jobs,
     }));
   }
+
+  /**
+   * Eval Pipeline (L06) — an agent's eval set, one on-demand batch over it, and
+   * the numbers a prompt edit moves.
+   *
+   * The one place that names this module's concrete classes, as it is for
+   * `projectContext`, `onboarding` and `brief`: `EvalDeps` declares five ports
+   * and knows nothing about Drizzle, about `src/adapters/**` or about a sibling
+   * module, so the composition root is what binds them. Three of the five are
+   * wiring rather than plumbing — `findings` is the shared review repository and
+   * `agents` the shared agents repository, which is how this module reads
+   * findings, pull requests and agent versions while importing no sibling; and
+   * `parseDiff` is the `diffParser` arrow property below, which is what keeps it
+   * off `src/adapters/**` entirely.
+   *
+   * The runner's `skills` port is bound the same way, and it is what makes the
+   * THIRD lever of this feature work: a replay carries the batch's snapshotted
+   * prompt and model plus the agent's currently linked skill bodies, so editing
+   * a linked skill moves the numbers. Bound from `this.skills` — the service, not
+   * `SkillsRepository` — because the enabled filter and `wrapUntrusted` are that
+   * service's rules.
+   *
+   * **The service and its runner share ONE repository instance.** Two would be
+   * two connection users writing the same rows for no reason, and a fake
+   * injected into one of them in a test would leave the other real.
+   *
+   * No bound is passed to the runner: the four deadline/concurrency figures live
+   * in `modules/eval/constants.ts`, and `EvalRunnerDeps` accepts overrides only
+   * so a test can exercise a deadline in milliseconds rather than in minutes.
+   *
+   * Exposed as the `Evals` INTERFACE so `ContainerOverrides.eval` can carry a
+   * fake with no database behind it.
+   */
+  get eval(): Evals {
+    if (this.overrides.eval) return this.overrides.eval;
+    if (this._eval) return this._eval;
+    const store = new EvalRepository(this.db);
+    return (this._eval = new EvalService({
+      store,
+      findings: this.reviewRepo,
+      agents: this.agentsRepo,
+      parseDiff: this.diffParser,
+      runner: new EvalRunner({
+        store,
+        parseDiff: this.diffParser,
+        llm: (id) => this.llm(id),
+        bus: this.runBus,
+        // The agent's enabled skill bodies, from the same service the real
+        // review path resolves them through — `this.skills`, the SERVICE and not
+        // the repository, because the enabled filter and the untrusted-source
+        // wrapping are its rules and the eval module must not own a second copy
+        // of them.
+        skills: this.skills,
+      }),
+    }));
+  }
+
+  /**
+   * L06 — a raw unified diff parsed into files and hunks.
+   *
+   * Wired here for the reason `fileRole` above gives: the parser is an ADAPTER,
+   * and a feature module reaching into `src/adapters/**` is the blind spot
+   * `depcruise` cannot express as a rule (`OA-APP-001`) — it is caught by
+   * reading, or not at all. The eval module declares the shape it needs (`DiffParser` in
+   * `modules/eval/types.ts` — a bare call signature) and this property satisfies
+   * it structurally, so that module imports nothing under `src/adapters/`.
+   *
+   * An arrow property rather than a method, as `featureModel` and `fileRole` are:
+   * it satisfies the bare call signature directly and carries `this` with it
+   * wherever the container is destructured. Pure — no clock, no I/O, no secrets —
+   * so there is nothing to cache and nothing to override.
+   */
+  readonly diffParser = (raw: string): UnifiedDiff => parseUnifiedDiff(raw);
 
   /**
    * L03 — the workspace's chosen provider+model for one feature.

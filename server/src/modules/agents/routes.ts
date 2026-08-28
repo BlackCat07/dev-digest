@@ -24,6 +24,7 @@ const VersionParams = z.object({
  *   PUT    /agents/:id              → update / toggle enabled (versions config)
  *   GET    /agents/:id/versions     → config history (newest first)
  *   GET    /agents/:id/versions/:version → one config snapshot
+ *   POST   /agents/:id/versions/:version/promote → make that config current
  *   GET    /agents/:id/skills       → linked skills (ordered)
  *   POST   /agents/:id/skills       → set/reorder linked skills OR link one
  *   GET    /agents/:id/models       → dynamic model list for the agent's provider
@@ -139,6 +140,32 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
       const version = await service.getVersion(workspaceId, req.params.id, req.params.version);
       if (!version) throw new NotFoundError('Agent version not found');
       return version;
+    },
+  );
+
+  /**
+   * L06 — promote a stored version.
+   *
+   * It lands in the AGENTS module and not in eval, because the write is an agent
+   * write: `AgentsRepository.update` already bumps the version and snapshots the
+   * new config, so promotion reuses that path and mutates no existing
+   * `agent_versions` row. Eval merely offers the button.
+   *
+   * The response is the UPDATED agent, whose `version` is a NEW number higher
+   * than the promoted one — a screen that rendered the promoted number would be
+   * reporting the input rather than what happened.
+   *
+   * No body: the version to promote is in the path, and a declared body would
+   * reject the body-less request the client actually sends.
+   */
+  app.post(
+    '/agents/:id/versions/:version/promote',
+    { schema: { params: VersionParams } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const agent = await service.promoteVersion(workspaceId, req.params.id, req.params.version);
+      if (!agent) throw new NotFoundError('Agent version not found');
+      return agent;
     },
   );
 

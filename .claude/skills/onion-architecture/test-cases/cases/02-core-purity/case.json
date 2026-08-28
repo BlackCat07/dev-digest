@@ -1,0 +1,31 @@
+{
+  "id": "02-core-purity",
+  "skill": "onion-architecture",
+  "title": "Filesystem, env and server imports inside the pure core",
+  "prompt": "quick sanity check before i commit this \u2014 i wrote a severity re-weighting pass for the review engine, it's at {{FIXTURE}}/reviewer-core/src/review/severity.ts. does this belong in reviewer-core the way i've written it? anything in there that'll cause us problems later?",
+  "fixture": "fixture",
+  "expected": "expected.md",
+  "planted_violations": 3,
+  "assertions": [
+    {
+      "id": "B1_node_fs_in_core",
+      "text": "Flags the node:fs/promises readFile as filesystem I/O that cannot live in reviewer-core."
+    },
+    {
+      "id": "B2_process_env_in_core",
+      "text": "Flags the process.env.DEVDIGEST_SEVERITY_WEIGHTS read as environment access that cannot live in reviewer-core."
+    },
+    {
+      "id": "B3_core_imports_server_module",
+      "text": "Flags the import of SEVERITY_RANK from ../../../server/src/modules/reviews/constants.js as reviewer-core depending on server module code."
+    },
+    {
+      "id": "B_no_false_positive_on_shared_import",
+      "text": "Does NOT report the '@devdigest/shared' Finding import as a violation \u2014 the port ring is the core's one permitted outward edge."
+    },
+    {
+      "id": "B_prescribes_injection_fix",
+      "text": "Prescribes passing the weights (or config) in as a parameter / injecting them, rather than suggesting reviewer-core keep reading them itself."
+    }
+  ]
+}

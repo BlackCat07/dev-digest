@@ -72,6 +72,34 @@ export function formatAge(iso: string | null | undefined): string {
   return `${Math.round(days / 365.25)}y`;
 }
 
+/**
+ * An absolute local timestamp, `YYYY-MM-DD HH:mm`.
+ *
+ * For the places where WHEN matters more than HOW LONG AGO — a run you are about
+ * to compare against another run, where "1h" and "1h" are two different runs that
+ * look like one. {@link formatAge} stays the right answer for a freshness hint.
+ *
+ * Built by hand rather than with `toLocaleString()`, which two components already
+ * call locally, and for two reasons. It varies by the viewer's locale, so the
+ * field order itself changes (`5/29/2026` vs `29.05.2026`) and a column of dates
+ * stops being sortable by eye; and it renders differently under Node and under
+ * the browser, which is a hydration mismatch wherever a timestamp reaches the
+ * server pass. The parts below come from the local-time getters, so the clock is
+ * still the reader's own — only the layout is fixed.
+ *
+ * `null` / unparseable → `"—"`, the same contract as `formatAge`.
+ */
+export function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    ` ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  );
+}
+
 /** Token in→out flow, thousands-scaled (e.g. "8.2K→1.3K", "12K→1.5K"). */
 export function formatTokenFlow(
   tokensIn: number | null | undefined,

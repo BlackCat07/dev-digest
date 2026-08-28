@@ -1,0 +1,31 @@
+{
+  "id": "03-notifications",
+  "skill": "onion-architecture",
+  "title": "Cross-ring wiring: adapter, platform and a raw SDK",
+  "prompt": "We're adding Slack notifications to DevDigest. The wiring is spread over three files under {{FIXTURE}}/server/src/ \u2014 a Slack client under adapters/, a notifier under platform/, and a notify helper inside the reviews module. Review the wiring: is each piece in the right place, and do the imports between them run the right way?",
+  "fixture": "fixture",
+  "expected": "expected.md",
+  "planted_violations": 3,
+  "assertions": [
+    {
+      "id": "C1_adapter_imports_module_service",
+      "text": "Flags adapters/slack/client.ts importing and depending on modules/reviews/service.js \u2014 an adapter must not know about a feature module."
+    },
+    {
+      "id": "C2_platform_imports_module_internals",
+      "text": "Flags platform/notifier.ts importing modules/settings internals (repository.js / helpers.js) \u2014 only the composition root may know modules exist."
+    },
+    {
+      "id": "C3_module_imports_simple_git_sdk",
+      "text": "Flags modules/reviews/notify.ts importing the simple-git SDK directly instead of going through a port."
+    },
+    {
+      "id": "C_no_false_positive_on_slack_sdk",
+      "text": "Does NOT report the '@slack/web-api' import inside adapters/slack/client.ts as a violation \u2014 an adapter is exactly where a vendor SDK belongs."
+    },
+    {
+      "id": "C_names_gitclient_port_as_fix",
+      "text": "Names the existing GitClient port / container.git as the correct route for the diff read, rather than only saying 'use a port'."
+    }
+  ]
+}

@@ -28,8 +28,9 @@ export interface NavGroup {
  * shared primitives — adding a route here is not that. Adding an entry is fine;
  * changing how `NavItem` looks is not.
  *
- * Only routes that EXIST belong here. Conventions, Eval Dashboard, Memory and the
- * rest arrive with their lessons; listing them early would ship dead links.
+ * Only routes that EXIST belong here. Memory and the rest arrive with their
+ * lessons; listing them early would ship dead links. `eval` is listed because
+ * `/eval` exists as of L06 — the shell marks it active on any path under it.
  */
 export const NAV: NavGroup[] = [
   {
@@ -58,6 +59,7 @@ export const NAV: NavGroup[] = [
         href: "/repos/:repoId/conventions",
         gKey: "c",
       },
+      { key: "eval", label: "Eval Dashboard", icon: "FlaskConical", href: "/eval", gKey: "e" },
     ],
   },
 ];
@@ -91,6 +93,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { keys: "g s", label: "Go to Skills", group: "Navigation" },
   { keys: "g a", label: "Go to Agents", group: "Navigation" },
   { keys: "g c", label: "Go to Conventions", group: "Navigation" },
+  { keys: "g e", label: "Go to Eval Dashboard", group: "Navigation" },
   { keys: "j / k", label: "Next / previous finding", group: "Findings" },
   { keys: "a", label: "Accept finding", group: "Findings" },
   { keys: "d", label: "Dismiss finding", group: "Findings" },

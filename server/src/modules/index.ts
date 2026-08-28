@@ -16,6 +16,9 @@ import onboarding from './onboarding/routes.js';
 import brief from './brief/routes.js';
 import reviews from './reviews/routes.js';
 import repoIntel from './repo-intel/routes.js';
+// `eval` is not a legal binding name in a module (ES modules are strict mode), so
+// the import is aliased and the REGISTRY KEY below carries the module's real name.
+import evalPipeline from './eval/routes.js';
 
 /**
  * Module registry. Each feature module is a Fastify plugin in
@@ -27,9 +30,9 @@ import repoIntel from './repo-intel/routes.js';
  * bundler, and vitest — native dynamic import() of .ts files is not portable.)
  *
  * This is the Part-0 starter set plus L02's `skills`/`conventions`, L03's
- * `intent` and `smart-diff`, L04's `blast` + `prior-prs`, and L05's
- * `project-context` + `onboarding` + `brief`. Each further lesson adds
- * its own module here (eval/ci/hooks, memory, plugins,
+ * `intent` and `smart-diff`, L04's `blast` + `prior-prs`, L05's
+ * `project-context` + `onboarding` + `brief`, and L06's `eval`. Each further
+ * lesson adds its own module here (ci/hooks, memory, plugins,
  * …) without touching any other module.
  */
 export const modules: Record<string, FastifyPluginAsync> = {
@@ -50,4 +53,5 @@ export const modules: Record<string, FastifyPluginAsync> = {
   brief,
   reviews,
   repoIntel,
+  eval: evalPipeline,
 };
