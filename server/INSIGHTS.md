@@ -368,6 +368,24 @@ Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
 
+- **2026-08-28** — **A multi-agent group is NOT identified by its file and line, and a
+  persisted record keyed that way silently merges groups.** `SPEC-05`'s `EC-9` allows two
+  groups at one file and line differing only in their titles — two agents flagging
+  intersecting ranges with unrelated titles do not cluster — while `EC-32` asserts the
+  opposite in one sentence, and the code followed the sentence. `GroupLabel` and
+  `StanceNote` were stored as `(file, line, …)`, so on a real run three groups sharing
+  `test/tasks.test.ts:70` all rendered the SAME synthesised heading while two of the three
+  labels sat unused in the blob, and the client was handed three identical React keys. The
+  key now carries the group's **deterministic fallback title** (`AC-31`), which both sides
+  already held and neither persisted. Prefer a CONTENT key over a positional one here: if
+  the grouping rule changes, a content key stops matching and the group keeps its fallback
+  title — a state the read already renders (`AC-38`) — whereas an index would attach a
+  label to the wrong group with no signal at all. Same shape as the 2026-08-03 entry above
+  (a per-agent `Map` keyed on a nullable `agent_id` collapses every agent-deleted row into
+  one bucket): the bug is always "the natural key is not unique and nothing says so".
+  Evidence: `src/modules/multi-agent/helpers.ts` (`mergeSynthesis`),
+  `src/modules/multi-agent/schemas.ts` (`GroupLabel`), `test/multi-agent-read.test.ts`.
+
 - **2026-08-23** — **`AgentsRepository.snapshotVersion` re-reads `skillIdsForAgent(row.id)` from
   INSIDE `update`, so a caller that wants the new version's snapshot to record a particular skill
   set must write the links BEFORE calling `update`.** Writing them after leaves the snapshot
@@ -661,6 +679,20 @@ Conventions and architectural decisions, each with the reason behind it.
 Dependency and tooling quirks.
 
 <!-- append below -->
+
+- **2026-08-28** — **Where the NUL bytes of the 2026-08-19 entry come from, and how to stop
+  making them.** Extends 2026-08-19 (`grep` without `-a` reports nothing on a source file
+  holding a NUL). The cause is a **raw `0x00` written into a template literal as a key
+  separator** — `` `${locationKey(f, l)}<NUL>${agentId}` `` — which is a sound separator
+  (it cannot occur in a path or a uuid) written the one way that breaks every text tool:
+  `file(1)` calls the whole file `data`, and `grep`/`ripgrep` then return **silence**, not
+  "binary file matches". Write it as the escape `\0` instead: byte-identical at runtime,
+  ASCII in the source, and the file needs no `-a` at all. Fixed in
+  `src/modules/multi-agent/helpers.ts` (`mergeSynthesis`) — this was the THIRD file with
+  the defect, and it cost real time, because the module was invisible to every grep while
+  a bug in it was being hunted. The two files 2026-08-19 names,
+  `src/modules/project-context/service.ts` and `src/modules/onboarding/service.ts`, are
+  still raw and still need `-a`. Evidence: `src/modules/multi-agent/helpers.ts`.
 
 - **2026-08-25** — **`depcruise`'s `application-no-db-schema` does not cover `src/db/client.ts`**,
   so a service can acquire a Drizzle *handle* — and with it `db.transaction` — while the onion gate

@@ -58,6 +58,29 @@ Approaches and solutions that worked and should be reused.
 
 <!-- append below -->
 
+- **2026-08-28** — **Headless Chrome is the visual check this package has been missing, and
+  it costs one command.** The 2026-08-23 entry in *What Doesn't Work* establishes that a
+  `curl` of a client route proves nothing about a rendered control; the answer is not "no
+  cheap check exists" but this:
+
+  ```sh
+  CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  "$CHROME" --headless=new --disable-gpu --hide-scrollbars \
+    --virtual-time-budget=15000 --window-size=1440,1400 \
+    --screenshot=after.png "http://localhost:3000/<route>"
+  ```
+
+  `--virtual-time-budget` is the load-bearing flag: it lets the page hydrate and its
+  TanStack Query reads settle before the shot, which is exactly what a `curl` cannot wait
+  for. Drive `localhost`, never `127.0.0.1` — the 2026-08-20 entry below explains why the
+  API refuses the second. The `Read` tool renders a PNG, so the shot is directly readable
+  by whoever took it, and a **design export** can be rendered the same way (`file://…`,
+  `--virtual-time-budget=4000`) and put beside it. Used this session to catch three things
+  no test could see: a scrollbar drawn under a tab strip that fitted, a strip whose rule
+  stopped short of the page edges, and a trace control that slid down a card as its summary
+  grew. Evidence: `../docs/dispatching-subagents.md` (the commands, with the
+  export-rendering variant).
+
 - **2026-08-03** — A hover panel anchored to a PR-list row has to be `position: fixed` off
   `getBoundingClientRect()`, **not** the `absolute`-inside-a-`relative`-wrapper shape
   `vendor/ui/kit/Dropdown.tsx` uses: the list's `s.tableCard` sets `overflow: hidden`, which
