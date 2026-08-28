@@ -26,7 +26,6 @@ import type { Agent, AgentRunEstimate, MultiAgentRun } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/runs.json";
 import { AgentPicker, type AgentPickerProps } from "./AgentPicker";
 import { formatDurationSeconds } from "@/lib/format";
-import { resultsRoute } from "./helpers";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -291,22 +290,10 @@ describe("AgentPicker", () => {
   });
 });
 
-/* The two pure helpers, exercised directly. `resultsRoute` is where the fan-out's
-   destination is decided, and a miss returns null rather than the current path —
-   navigating a reader back to the page they are already on reads as "the button
-   did nothing", which is the failure mode this test pins. */
+/* The formatter, exercised directly. `resultsRoute` moved to
+   `src/lib/multi-agent-routes.ts` when the pull-request header became its second
+   consumer, and its case moved with it to `src/lib/multi-agent-routes.test.ts`. */
 describe("AgentPicker helpers", () => {
-  it("turns a pull-request path into that pull request's results route", () => {
-    expect(resultsRoute("/repos/repo-1/pulls/482")).toBe("/repos/repo-1/multi-agent/482");
-    // A deeper path still resolves to the same pull request. A query string
-    // cannot appear here — `usePathname` strips it — so it is not a case.
-    expect(resultsRoute("/repos/repo-1/pulls/482/anything")).toBe(
-      "/repos/repo-1/multi-agent/482",
-    );
-    expect(resultsRoute("/repos/repo-1/pulls")).toBeNull();
-    expect(resultsRoute(null)).toBeNull();
-  });
-
   it("reports a missing mean duration as absent, never as zero", () => {
     // The formatter now lives in `src/lib/format.ts` — the Configure-run screen
     // is its second consumer and it is one subtree over (`DDG-UI-002`). The

@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useCallback } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Icon, Avatar, Badge, Button, Tabs } from "@devdigest/ui";
+import { useMultiAgentRun } from "@/lib/hooks";
+import { resultsRoute } from "@/lib/multi-agent-routes";
 import { AgentPicker } from "../AgentPicker";
 import { s } from "./styles";
 import type { PrDetail } from "@/lib/types";
@@ -68,6 +72,23 @@ export function PrDetailHeader({
   onRunStart,
   onRunsStarted,
 }: PrDetailHeaderProps) {
+  const t = useTranslations("runs");
+  const router = useRouter();
+  // Same derivation the picker uses: this header is handed `pr` and `prId`, not
+  // the route segments.
+  const multiAgentHref = resultsRoute(usePathname());
+  /* The standing way back into a fan-out's results. Before this, the ONLY
+     navigation into `/repos/:repoId/multi-agent/:number` was the picker's
+     `router.push` the moment a run started — leave the page and the results
+     were reachable by typing the URL and no other way, even though the read
+     still answered.
+
+     Gated on the read having SUCCEEDED, not on the absence of an error: a 404
+     is the routine "this pull request was never fanned out" answer
+     (`useMultiAgentRun` surfaces it rather than swallowing it), and it must
+     leave the row exactly as it was — never an error, never a dead control. */
+  const { data: multiRun } = useMultiAgentRun(prId);
+
   const handleRunStart = useCallback(() => {
     onRunStart();
   }, [onRunStart]);
@@ -134,6 +155,16 @@ export function PrDetailHeader({
           >
             View on GitHub
           </Button>
+          {multiRun && multiAgentHref && (
+            <Button
+              kind="secondary"
+              size="sm"
+              icon="Users"
+              onClick={() => router.push(multiAgentHref)}
+            >
+              {t("results.openFromPr")}
+            </Button>
+          )}
           {prId && (
             <AgentPicker
               prId={prId}

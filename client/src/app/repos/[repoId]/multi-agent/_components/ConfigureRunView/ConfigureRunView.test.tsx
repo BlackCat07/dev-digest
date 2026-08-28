@@ -228,8 +228,12 @@ describe("ConfigureRunView", () => {
     // AC-52 — two numbered steps, and step 1 above step 2. The order is the
     // design: step 2 cannot show an agent's last verdict here, and the run
     // action cannot know where to POST, until step 1 is answered.
-    const step1 = screen.getByText("1 · Choose a pull request");
-    const step2 = screen.getByText("2 · Choose agents");
+    // The step labels are the words alone — the digit is the badge's job, so
+    // each label appears exactly once and the disabled panel carries its own
+    // heading rather than repeating step 2's.
+    const step1 = screen.getByText("Choose a pull request");
+    const step2 = screen.getByText("Choose agents");
+    expect(screen.getByText("Pick a pull request first")).toBeInTheDocument();
     expect(step1.compareDocumentPosition(step2) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     // AC-54 — the agent step is worded, not merely dimmed, and no agent card
@@ -339,8 +343,10 @@ describe("ConfigureRunView", () => {
     // AC-105 / EC-31 — an empty state under the step's own numbered heading,
     // not a picker you can open and find nothing in. The agent step stays
     // disabled behind it (AC-54).
-    expect(screen.getByText("1 · Choose a pull request")).toBeInTheDocument();
+    expect(screen.getByText("Choose a pull request")).toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    // The numbered badge is rendered from the step's index, beside its label.
+    expect(screen.getByText("1", { selector: "span" })).toBeInTheDocument();
 
     // AC-105 states the STATE, in words. The step heading names the step; only
     // this sentence says that there is nothing here to choose from, and its

@@ -33,8 +33,8 @@ import type { Agent } from "@devdigest/shared";
 import { useAgents } from "@/lib/hooks/agents";
 import { useAgentEstimates, useStartMultiRun } from "@/lib/hooks/multi-agent";
 import { formatDurationSeconds } from "@/lib/format";
+import { resultsRoute } from "@/lib/multi-agent-routes";
 import { AGENTS_ROUTE } from "./constants";
-import { resultsRoute } from "./helpers";
 import { s } from "./styles";
 
 /** Stable empty list, so `agents` is not a new array on every render. */

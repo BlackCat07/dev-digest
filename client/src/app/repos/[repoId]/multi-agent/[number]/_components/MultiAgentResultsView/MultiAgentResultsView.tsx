@@ -36,7 +36,7 @@
 import React from "react";
 import { notFound, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { EmptyState, ErrorState, Skeleton } from "@devdigest/ui";
+import { Button, EmptyState, ErrorState, Icon, Skeleton } from "@devdigest/ui";
 import { AppShell } from "@/components/app-shell";
 import RunTraceDrawer from "@/components/run-trace-drawer";
 import { ApiError } from "@/lib/api";
@@ -58,6 +58,7 @@ import {
 } from "./constants";
 import {
   findPrId,
+  findPrTitle,
   formatTotalSeconds,
   isNoRunError,
   parsePrNumber,
@@ -78,6 +79,7 @@ export function MultiAgentResultsView({ repoId, number }: { repoId: string; numb
   const prNumber = parsePrNumber(number);
   const { data: pulls, isLoading: pullsLoading } = usePulls(repoId);
   const prId = findPrId(pulls, prNumber);
+  const prTitle = findPrTitle(pulls, prNumber);
 
   const { data: run, isLoading: runLoading, error, refetch } = useMultiAgentRun(prId);
   const { data: agents } = useAgents();
@@ -198,32 +200,64 @@ export function MultiAgentResultsView({ repoId, number }: { repoId: string; numb
   return (
     <AppShell crumb={crumb}>
       <div style={s.page}>
+        {/* Two rows, as the reference draws them. Row 1 is the screen: the way
+            back, its name, what the run is, and the mode toggle. Row 2 is the
+            subject: which pull request, and what the fan-out cost. The rule
+            under row 2 is what separates the header from the results. */}
         <header style={s.header}>
-          <div style={s.headerText}>
-            {prNumber != null && <span style={s.eyebrow}>{t("drawer.pr", { number: prNumber })}</span>}
-            <h1 style={s.title}>{t("page.title")}</h1>
-            <p style={s.meta}>
+          {/* The way back to Configure-run, which is the screen that starts a
+              fan-out. Without it the pair is one-directional: Configure pushes
+              here, and here offered nothing back. */}
+          <Button
+            kind="secondary"
+            size="sm"
+            icon="Settings"
+            style={s.backButton}
+            onClick={() => router.push(`/repos/${repoId}/multi-agent`)}
+          >
+            {t("results.backToConfigure")}
+          </Button>
+          <h1 style={s.title}>{t("page.title")}</h1>
+          <span style={s.meta}>{t("results.selectedAgents", { count: run.agent_count })}</span>
+          <span style={s.headerSpacer} />
+          <ModeToggle value={mode} onChange={setMode} />
+        </header>
+
+        <div style={s.subBar}>
+          {prNumber != null && (
+            <span className="mono" style={s.subBarNumber}>
+              #{prNumber}
+            </span>
+          )}
+          {prTitle != null && prTitle !== "" && <span style={s.subBarTitle}>{prTitle}</span>}
+          <span style={s.subBarStats}>
+            {/* The agents glyph, the same one the Agents screen and the sidebar
+                entry use (`vendor/ui/nav.ts` keys that entry to `Cpu`), so one
+                icon means "agent" everywhere in the product. */}
+            <Icon.Cpu size={14} style={s.subBarIcon} />
+            <span>
               {t("page.meta", {
                 count: run.agent_count,
                 duration: formatTotalSeconds(run.total_duration_ms),
                 cost: formatCost(run.total_cost_usd),
               })}
-            </p>
-          </div>
-          <ModeToggle value={mode} onChange={setMode} />
-        </header>
+            </span>
+          </span>
+        </div>
 
-        {mode === "columns" ? (
-          <AgentColumns columns={run.columns} onOpenTrace={openTrace} />
-        ) : (
-          <AgentTabsPane columns={run.columns} onOpenTrace={openTrace} />
-        )}
+        <div style={s.results}>
+          {mode === "columns" ? (
+            <AgentColumns columns={run.columns} onOpenTrace={openTrace} />
+          ) : (
+            <AgentTabsPane columns={run.columns} onOpenTrace={openTrace} />
+          )}
 
-        {/* Below the results, OUTSIDE the mode branch, so it renders once in
-            columns mode and once in tabs mode from one mount point (AC-77).
-            Its groups, stances and totals arrive computed on the server in
-            `run.conflicts`; nothing about them is derived in the browser. */}
-        <DisagreementBlock groups={run.conflicts} />
+          {/* Below the results, OUTSIDE the mode branch, so it renders once in
+              columns mode and once in tabs mode from one mount point (AC-77).
+              Its groups, stances and totals arrive computed on the server in
+              `run.conflicts`; nothing about them is derived in the browser. */}
+          <DisagreementBlock groups={run.conflicts} />
+        </div>
       </div>
 
       {traceColumn && (

@@ -118,7 +118,14 @@ function block(groups: readonly Conflict[]) {
 }
 
 const panels = () => screen.getAllByRole("group");
-const filter = () => screen.getByRole("checkbox", { name: "Show only conflicts" });
+
+/** The `Show only conflicts` control is a switch, and its name is carried by
+    the label rendered beside it rather than by the control itself — the
+    vendored `Toggle` takes no `aria-label`. So the two facts are asserted
+    separately: `filterLabel()` for the words, `filter()` for the control and
+    its `aria-checked` state. */
+const filter = () => screen.getByRole("switch");
+const filterLabel = () => screen.getByText("Show only conflicts");
 
 /** `noUncheckedIndexedAccess` is on in this package, and an index into a query
     result is genuinely `T | undefined`. Throwing here fails the test at the
@@ -178,6 +185,10 @@ describe("DisagreementBlock", () => {
   it("keeps only the groups two or more agents flagged when Show only conflicts is on, and restores them when it is off", () => {
     block(GROUPS);
 
+    // The control is a switch, worded, and off to begin with.
+    expect(filterLabel()).toBeInTheDocument();
+    expect(filter()).toHaveAttribute("aria-checked", "false");
+
     // Unfiltered: all three, single-flagger included.
     expect(screen.getByText("Rate limit window never resets")).toBeInTheDocument();
     expect(screen.getByText("Loader issues one query per row")).toBeInTheDocument();
@@ -212,7 +223,8 @@ describe("DisagreementBlock", () => {
       screen.getByText("No conflicts — the agents agree on every flagged location."),
     ).toBeInTheDocument();
     expect(screen.queryAllByRole("group")).toHaveLength(0);
-    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryByText("Show only conflicts")).toBeNull();
   });
 
   it("states the same emptiness when the filter hides every group", () => {

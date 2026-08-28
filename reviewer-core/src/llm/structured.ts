@@ -20,6 +20,7 @@ export function toJsonSchema<T>(schema: z.ZodType<T>, name: string): JsonSchema 
   const rf = zodResponseFormat(schema as z.ZodTypeAny, name);
   const json = rf.json_schema.schema as Record<string, unknown>;
   stripNumericRangeKeywords(json);
+  inlineDefinitions(json);
   return { schema: json, name };
 }
 
@@ -59,6 +60,79 @@ function stripNumericRangeKeywords(node: unknown): void {
     obj.description = typeof obj.description === 'string' ? `${obj.description} ${hint}` : hint;
   }
   for (const value of Object.values(obj)) stripNumericRangeKeywords(value);
+}
+
+/**
+ * Google rejects `$ref`, so every reference is inlined and the `definitions`
+ * block is dropped.
+ *
+ * `zodResponseFormat` hoists a schema reused in two places into `definitions`
+ * and points at it with `{"$ref": "#/definitions/..."}`. OpenAI and DeepSeek
+ * resolve that; Google AI Studio does not, and answers the whole request with
+ *
+ *   400 INVALID_ARGUMENT — reference to undefined schema at
+ *   properties.findings.items.properties.evidence.anyOf.0.items.properties.component
+ *
+ * which OpenRouter passes through as a bare "400 Provider returned error". The
+ * effect was total: EVERY review by an agent on a Gemini model failed, in under
+ * a second, with no tokens spent — while the same schema on DeepSeek answered
+ * 200. Measured 2026-08-28 against the shared `Review` schema, whose
+ * `finding.evidence[].component` and `trifecta.components[]` share one enum.
+ *
+ * Inlining loses nothing: `definitions` is a de-duplication device, not a
+ * constraint, and `parseWithRepair` still re-checks every response against the
+ * original zod schema. The same reasoning as `stripNumericRangeKeywords` above —
+ * the wire schema is trimmed to the dumbest validator, and the real validation
+ * happens here on the way back.
+ *
+ * A cyclic or unresolvable reference is left exactly as it was, and then the
+ * `definitions` block is KEPT, because removing it would turn a schema this
+ * function merely failed to simplify into a schema that is definitively broken.
+ */
+function inlineDefinitions(root: Record<string, unknown>): void {
+  const defsKey = '$defs' in root ? '$defs' : 'definitions' in root ? 'definitions' : null;
+  if (defsKey === null) return;
+  const defs = root[defsKey];
+  if (defs === null || typeof defs !== 'object' || Array.isArray(defs)) return;
+  const table = defs as Record<string, unknown>;
+  const prefix = `#/${defsKey}/`;
+  let unresolved = false;
+
+  const resolve = (node: unknown, seen: readonly string[]): unknown => {
+    if (Array.isArray(node)) return node.map((item) => resolve(item, seen));
+    if (node === null || typeof node !== 'object') return node;
+    const obj = node as Record<string, unknown>;
+
+    const ref = obj.$ref;
+    if (typeof ref === 'string') {
+      const target = ref.startsWith(prefix) ? table[ref.slice(prefix.length)] : undefined;
+      // Points outside this table, or points at something already being
+      // expanded further up this branch — inlining it would not terminate.
+      if (target === undefined || seen.includes(ref)) {
+        unresolved = true;
+        return obj;
+      }
+      // A `$ref` node may carry siblings (`description`, `title`). They are the
+      // caller's words about THIS use of the shared shape, so they win over the
+      // target's own.
+      const { $ref: _ref, ...siblings } = obj;
+      const expanded = resolve(target, [...seen, ref]);
+      if (expanded === null || typeof expanded !== 'object' || Array.isArray(expanded)) {
+        return expanded;
+      }
+      return { ...(expanded as Record<string, unknown>), ...siblings };
+    }
+
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) out[key] = resolve(value, seen);
+    return out;
+  };
+
+  for (const key of Object.keys(root)) {
+    if (key === defsKey) continue;
+    root[key] = resolve(root[key], []);
+  }
+  if (!unresolved) delete root[defsKey];
 }
 
 /** Best-effort extraction of a JSON object/array from a model's text output. */

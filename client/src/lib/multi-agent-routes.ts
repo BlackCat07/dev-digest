@@ -1,7 +1,14 @@
-/* Pure helpers private to AgentPicker. */
+/* multi-agent-routes.ts — build Multi-Agent Review routes from what a screen
+   already holds. Mirrors `github-urls.ts`: a URL helper with more than one
+   consumer belongs in `src/lib/`, not under one unit's `helpers.ts`, which is
+   unit-private under the barrel convention (`client/INSIGHTS.md`, 2026-08-02).
+
+   Second consumer is why it moved: `AgentPicker` navigates here after a
+   fan-out, and `PrDetailHeader` offers the standing way back into the results
+   of a run that already happened. */
 
 /**
- * The multi-agent results route for the pull request this picker is mounted on:
+ * The multi-agent results route for the pull request the CALLER is mounted on:
  * `/repos/:repoId/pulls/:number` → `/repos/:repoId/multi-agent/:number`.
  *
  * Derived from the pathname rather than from `useParams()` on purpose. The

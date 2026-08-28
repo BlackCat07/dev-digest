@@ -28,7 +28,7 @@
 
 import { useId, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Checkbox, SeverityBadge } from "@devdigest/ui";
+import { Icon, SEV, Toggle } from "@devdigest/ui";
 import type { Conflict, ConflictTake } from "@devdigest/shared";
 import { groupKey, visibleGroups } from "./helpers";
 import { s } from "./styles";
@@ -47,18 +47,26 @@ export function DisagreementBlock({ groups }: { groups: readonly Conflict[] }) {
     <section aria-labelledby={headingId} style={s.block}>
       <div style={s.head}>
         <h2 id={headingId} style={s.heading}>
+          <Icon.Activity size={14} aria-hidden style={s.headingIcon} />
           {t("conflicts.title")}
         </h2>
 
         {/* No filter where there is nothing to filter: a control that can only
             turn a single empty statement into the same empty statement is
-            noise. */}
+            noise.
+
+            `Toggle` at `size={15}` is the design's switch exactly — a 27.75×19
+            track with a 15px knob — and it is the vendored primitive, so this
+            surface neither forks it nor restyles it. It renders a real
+            `role="switch"` carrying `aria-checked`, so the state stays
+            programmatic; its NAME, though, comes from the label beside it and
+            not from the control, because the primitive accepts no
+            `aria-label`. */}
         {groups.length > 0 && (
-          <Checkbox
-            checked={onlyConflicts}
-            onChange={setOnlyConflicts}
-            label={<span style={s.filterLabel}>{t("conflicts.onlyConflicts")}</span>}
-          />
+          <div style={s.filter}>
+            <span style={s.filterLabel}>{t("conflicts.onlyConflicts")}</span>
+            <Toggle on={onlyConflicts} onChange={setOnlyConflicts} size={15} />
+          </div>
         )}
       </div>
 
@@ -70,8 +78,16 @@ export function DisagreementBlock({ groups }: { groups: readonly Conflict[] }) {
               sentences for it to be about. */}
           <p style={s.synthesised}>{t("conflicts.synthesisedNote")}</p>
           <div style={s.groups}>
-            {visible.map((group) => (
-              <ConflictPanel key={groupKey(group)} group={group} />
+            {/* The index is a TIE-BREAKER, not the key. `groupKey` is
+                file:line:title, which the server can and does emit twice: it
+                keys a synthesised label by (file, line) alone, so every group
+                sharing a location is handed the same title and the content key
+                collides. Two panels with one key make React drop or duplicate
+                one of them — a wrong title is a bug, a vanished panel is a
+                worse one. Remove the suffix once the server tells groups at one
+                location apart. */}
+            {visible.map((group, i) => (
+              <ConflictPanel key={`${groupKey(group)}#${i}`} group={group} />
             ))}
           </div>
         </>
@@ -96,7 +112,10 @@ function ConflictPanel({ group }: { group: Conflict }) {
 
   return (
     <section role="group" aria-labelledby={labelId} style={s.panel}>
+      {/* One line, and the location leads it: file:line is what a reader
+          matches against the diff, and the title is what it is called. */}
       <div id={labelId} style={s.panelHead}>
+        <Icon.Code size={13} aria-hidden style={s.panelHeadIcon} />
         <span className="mono" style={s.location}>
           {group.file}:{group.line}
         </span>
@@ -120,10 +139,11 @@ function ConflictPanel({ group }: { group: Conflict }) {
 /**
  * One agent's stance on one location.
  *
- * `SeverityBadge` WITHOUT `compact`: the compact variant renders the icon alone
- * and drops the label (`client/INSIGHTS.md`, 2026-08-24), and this badge is the
- * only statement of the verdict in the cell — dropping the word would leave
- * colour and glyph as its sole carriers, which AC-88 forbids.
+ * A dot in the severity colour plus the severity WORD, rather than the badge
+ * pill: at this density a row of four pills reads as four buttons. The word is
+ * never dropped — colour alone would be the sole carrier of the verdict, which
+ * AC-88 forbids — and it comes from `SEV`, the design system's own registry, so
+ * this surface invents no fourth copy of the severity labels.
  *
  * The note is rendered as the sentence it is and nothing branches on it. It may
  * be empty — that is the state the whole screen is in until synthesis lands,
@@ -138,11 +158,19 @@ function StanceCell({ take }: { take: ConflictTake }) {
     <li style={s.cell}>
       <span style={s.agentName}>{take.persona}</span>
 
-      {take.verdict === "ignored" ? (
-        <span style={s.didNotFlag}>{t("conflicts.didNotFlag")}</span>
-      ) : (
-        <SeverityBadge severity={take.verdict} />
-      )}
+      <span style={s.stance}>
+        {take.verdict === "ignored" ? (
+          <>
+            <span aria-hidden style={s.dot("var(--text-muted)")} />
+            <span style={s.didNotFlag}>{t("conflicts.didNotFlag")}</span>
+          </>
+        ) : (
+          <>
+            <span aria-hidden style={s.dot(SEV[take.verdict].c)} />
+            <span style={s.verdict}>{SEV[take.verdict].label}</span>
+          </>
+        )}
+      </span>
 
       {take.note.trim() !== "" && <p style={s.note}>{take.note}</p>}
     </li>

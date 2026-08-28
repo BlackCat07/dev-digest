@@ -29,7 +29,15 @@
 import React from "react";
 import { notFound, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Button, Checkbox, EmptyState, ErrorState, SelectInput, Skeleton } from "@devdigest/ui";
+import {
+  Button,
+  Checkbox,
+  EmptyState,
+  ErrorState,
+  Icon,
+  SelectInput,
+  Skeleton,
+} from "@devdigest/ui";
 import type { Agent, AgentRunEstimate } from "@devdigest/shared";
 import { AppShell } from "@/components/app-shell";
 import { formatDurationSeconds } from "@/lib/format";
@@ -129,8 +137,7 @@ export function ConfigureRunView({ repoId }: { repoId: string }) {
         </section>
 
         <section style={s.step}>
-          <div style={s.stepHead}>
-            <span style={s.stepLabel}>{t("configure.step2")}</span>
+          <StepHead index={2} label={t("configure.step2")} disabled={!selectedPull}>
             {selectedPull && agentList.length > 0 && (
               <span style={s.stepHeadSpacer}>
                 <Button kind="tertiary" size="sm" onClick={selectAll}>
@@ -138,10 +145,21 @@ export function ConfigureRunView({ repoId }: { repoId: string }) {
                 </Button>
               </span>
             )}
-          </div>
+          </StepHead>
 
-          {/* AC-54: worded, not merely dimmed. The sentence is the carrier. */}
-          {!selectedPull && <div style={s.disabledStep}>{t("configure.selectPrFirst")}</div>}
+          {/* AC-54: worded, not merely dimmed. The sentence is the carrier, and
+              the icon and the muted palette only echo it. The heading reuses
+              the step's own label rather than inventing a second name for the
+              step — no new copy key enters the catalogue for a restyle. */}
+          {!selectedPull && (
+            <div style={s.disabledStep}>
+              <span style={s.disabledIcon}>
+                <Icon.GitPullRequest size={21} aria-hidden />
+              </span>
+              <div style={s.disabledTitle}>{t("configure.selectPrFirstTitle")}</div>
+              <p style={s.disabledBody}>{t("configure.selectPrFirst")}</p>
+            </div>
+          )}
 
           {selectedPull && agentList.length === 0 && (
             <EmptyState
@@ -182,8 +200,8 @@ export function ConfigureRunView({ repoId }: { repoId: string }) {
           {/* Beside the action, and announced when it changes: the number the
               reviewer is committing to is the one thing on this screen that
               moves without the page moving. */}
-          <div role="status" aria-live="polite" style={s.aggregate}>
-            <EstimateText estimate={aggregate} />
+          <div role="status" aria-live="polite">
+            <EstimateText estimate={aggregate} className="mono" style={s.aggregate} />
           </div>
         </div>
       </div>
@@ -214,10 +232,12 @@ function PullRequestStep({
 }) {
   const t = useTranslations("runs");
 
+  const head = <StepHead index={1} label={t("configure.step1")} disabled={false} />;
+
   if (loading) {
     return (
       <>
-        <span style={s.stepLabel}>{t("configure.step1")}</span>
+        {head}
         <Skeleton height={42} style={s.skeletonRow} />
       </>
     );
@@ -226,7 +246,7 @@ function PullRequestStep({
   if (error) {
     return (
       <>
-        <span style={s.stepLabel}>{t("configure.step1")}</span>
+        {head}
         <ErrorState title={t("configure.step1")} />
       </>
     );
@@ -237,23 +257,23 @@ function PullRequestStep({
   // find nothing in reads as a broken read, while an empty state reads as an
   // answer.
   //
-  // The title is the SENTENCE, not the step heading. Repeating "1 · Choose a
-  // pull request" as the title of the thing telling you there is nothing to
-  // choose says only what the step is called; AC-105 asks for the state to be
-  // stated. The numbered heading still renders above it, so the two steps are
-  // in order either way.
+  // The title is the SENTENCE, not the step heading. Repeating "Choose a pull
+  // request" as the title of the thing telling you there is nothing to choose
+  // says only what the step is called; AC-105 asks for the state to be stated.
+  // The numbered heading still renders above it, so the two steps are in order
+  // either way.
   if (options.length === 0) {
     return (
       <>
-        <span style={s.stepLabel}>{t("configure.step1")}</span>
+        {head}
         <EmptyState icon="GitPullRequest" title={t("configure.noOpenPulls")} />
       </>
     );
   }
 
   return (
-    <label style={s.stepLabel}>
-      {t("configure.step1")}
+    <label style={s.stepBlock}>
+      {head}
       <SelectInput
         value={value}
         onChange={onChange}
@@ -261,6 +281,39 @@ function PullRequestStep({
         options={[{ value: "", label: t("page.selectPr") }, ...options]}
       />
     </label>
+  );
+}
+
+/**
+ * A step's head row: the numbered badge, the step's label, and whatever the
+ * step hangs on the right.
+ *
+ * The badge is drawn from the step's own INDEX rather than parsed out of the
+ * copy — the catalogue owns the words, and a component that split a string on
+ * `·` would break the moment the copy is translated. The copy used to open with
+ * the digit itself ("1 · Choose a pull request"); it no longer does, because the
+ * badge became the carrier and the two together printed the number twice. AC-52
+ * asks for two NUMBERED steps in order, and the badge is what numbers them.
+ */
+function StepHead({
+  index,
+  label,
+  disabled,
+  children,
+}: {
+  index: number;
+  label: string;
+  disabled: boolean;
+  children?: React.ReactNode;
+}) {
+  return (
+    <span style={s.stepHead}>
+      <span aria-hidden style={s.stepBadge(disabled)}>
+        {index}
+      </span>
+      <span style={s.stepLabel(disabled)}>{label}</span>
+      {children}
+    </span>
   );
 }
 
@@ -298,7 +351,7 @@ function AgentRunCard({
           which is a different and much worse claim. */}
       {verdict && verdict.trim() !== "" && <div style={s.cardVerdict}>{verdict}</div>}
 
-      <EstimateText estimate={toAggregate(estimate)} style={s.cardEstimate} />
+      <EstimateText estimate={toAggregate(estimate)} className="mono" style={s.cardEstimate} />
     </div>
   );
 }
@@ -323,19 +376,25 @@ function toAggregate(estimate: AgentRunEstimate | undefined): AggregateEstimate 
 function EstimateText({
   estimate,
   style,
+  className,
 }: {
   estimate: AggregateEstimate;
   style?: React.CSSProperties;
+  className?: string;
 }) {
   const t = useTranslations("runs");
   // One null check rather than two: the shared formatter already answers `null`
   // for an absent figure, which is the same state this branch renders.
   const duration = formatDurationSeconds(estimate.durationMs);
   if (duration == null) {
-    return <span style={style}>{t("configure.estimateUnavailable")}</span>;
+    return (
+      <span className={className} style={style}>
+        {t("configure.estimateUnavailable")}
+      </span>
+    );
   }
   return (
-    <span style={style}>
+    <span className={className} style={style}>
       {t("configure.estimate", {
         duration,
         cost: estimate.costUsd == null ? NO_ESTIMATE : formatEstimateCost(estimate.costUsd),

@@ -119,9 +119,10 @@
   },
   "configure": {
     "title": "Configure a run",
-    "step1": "1 · Choose a pull request",
-    "step2": "2 · Choose agents",
+    "step1": "Choose a pull request",
+    "step2": "Choose agents",
     "selectPrFirst": "Choose a pull request first — then pick the agents to run on it.",
+    "selectPrFirstTitle": "Pick a pull request first",
     "selectAll": "Select all",
     "run": "Run {count, plural, one {# agent} other {# agents}}",
     "estimate": "Estimated {duration} · {cost}",
@@ -146,7 +147,10 @@
       "cost": "Cost"
     },
     "viewTrace": "View trace",
-    "noScore": "No score"
+    "noScore": "No score",
+    "backToConfigure": "Configure run",
+    "openFromPr": "Multi-agent results",
+    "selectedAgents": "{count, plural, one {# selected agent} other {# selected agents}} · parallel"
   },
   "detail": {
     "rationale": "Rationale",

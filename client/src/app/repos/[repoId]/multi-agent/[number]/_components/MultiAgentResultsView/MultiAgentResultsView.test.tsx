@@ -345,31 +345,43 @@ describe("MultiAgentResultsView — columns mode", () => {
     // AC-62/AC-63 — the header's figures, then three rows carrying severity,
     // category, title and file:line.
     const done = col("Security Reviewer");
-    expect(within(done).getByText("Done")).toBeInTheDocument();
+    // A settled-well column carries NO status chip — the score beside it is what
+    // says the run finished. The word is kept only for the statuses AC-67 and
+    // AC-68 are about, asserted further down.
+    expect(within(done).queryByText("Done")).toBeNull();
     expect(within(done).getByText("82")).toBeInTheDocument();
-    // `lib/format.ts`'s adaptive precision, the same formatter every other
-    // run-cost figure in the tree uses: 3dp below a dollar, because 2dp
+    // The head's ONE metric line: duration and cost together, mono and
+    // tabular. `lib/format.ts`'s adaptive precision, the same formatter every
+    // other run-cost figure in the tree uses: 3dp below a dollar, because 2dp
     // renders a real sub-cent run as a misleading "$0.00".
-    expect(within(done).getByText("$0.060")).toBeInTheDocument();
+    expect(within(done).getByText("8.2s · $0.060")).toBeInTheDocument();
     expect(within(done).getByText("Rate limit missing on /login")).toBeInTheDocument();
     expect(within(done).getByText("src/routes/auth.ts:28")).toBeInTheDocument();
     expect(within(done).getByText("src/db/loader.ts:88")).toBeInTheDocument();
     expect(within(done).getByText("src/lib/cache.ts:14")).toBeInTheDocument();
-    // AC-63 — the category, as one of `FindingCategory`'s five words, beside
-    // the title. Not a colour: the word itself is in the row.
+    // AC-63/AC-88 — severity is a glyph in the severity colour, and the word
+    // is its ACCESSIBLE NAME rather than visible text: colour is never the
+    // sole carrier. Queried by role for that reason — `getByText` would find
+    // nothing here even though the row states its severity.
+    expect(within(done).getByRole("img", { name: "Critical" })).toBeInTheDocument();
+    expect(within(done).getByRole("img", { name: "Warning" })).toBeInTheDocument();
+    // AC-63 — every column row carries its category beside the title. The
+    // reference export omits the tag in columns mode, but the criterion is
+    // explicit ("carrying the severity, the category, the title and the file
+    // and line") and an approved criterion outranks the export.
     expect(within(done).getByText("security")).toBeInTheDocument();
-    expect(within(done).getByText("Critical")).toBeInTheDocument();
     expect(within(done).getByText("3 findings")).toBeInTheDocument();
 
     // AC-67 — "running" as a WORD, reachable by a text query, not a spinner.
     expect(within(col("Performance Reviewer")).getByText("Running")).toBeInTheDocument();
 
     // AC-68 — the failed column shows the outcome and the reason the run
-    // recorded, and NO score: the "Score" label only exists on the branch that
-    // draws the gauge, so its absence is the assertion.
+    // recorded, and NO score. The gauge renders its figure as a bare number, so
+    // the absence of any number-only node in that column is the assertion (the
+    // metric line reads "1.4s · $0.010" and the footer "0 findings").
     const failed = col("Correctness Reviewer");
     expect(within(failed).getByText("Provider returned 503 after three attempts.")).toBeInTheDocument();
-    expect(within(failed).queryByText("Score")).toBeNull();
+    expect(within(failed).queryByText(/^\d{1,3}$/)).toBeNull();
 
     // AC-19 — cancelled is its own outcome, not a failure.
     const cancelled = col("Style Reviewer");
@@ -385,6 +397,19 @@ describe("MultiAgentResultsView — columns mode", () => {
     expect(meta).toHaveTextContent(
       "4 agents · parallel fan-out, up to 4 at once · 8.2s total · $0.070",
     );
+
+    // The sub-bar names the pull request, not just its number — the reference's
+    // second header row carries `#482` AND the title, read from the same cached
+    // pulls list that resolved the number to the uuid, so the two can never
+    // describe different rows. Scoped to the sub-bar: the shell's breadcrumb
+    // renders `#482` too, and an unscoped query matches both. Anchored on the
+    // TITLE, which is a direct child of the sub-bar — the stats sit in their own
+    // right-aligned group, so the meta text's parent is that group, not the row.
+    const title = screen.getByText("Add rate limiting");
+    const subBar = title.parentElement;
+    expect(subBar).not.toBeNull();
+    expect(within(subBar as HTMLElement).getByText("#482")).toBeInTheDocument();
+    expect(within(subBar as HTMLElement).getByText(/parallel fan-out/)).toBeInTheDocument();
 
     // AC-66 — the view itself opened nothing; no drawer is open.
     expect(streams.opened).toEqual([]);
@@ -420,7 +445,7 @@ describe("MultiAgentResultsView — columns mode", () => {
     ).toBeInTheDocument();
     // The outcome half of AC-68 is still a word, and still not a score.
     expect(within(failed).getByText("Failed")).toBeInTheDocument();
-    expect(within(failed).queryByText("Score")).toBeNull();
+    expect(within(failed).queryByText(/^\d{1,3}$/)).toBeNull();
   });
 });
 
@@ -499,7 +524,10 @@ describe("MultiAgentResultsView — polling", () => {
     await flush(2000);
     expect(multiAgentCalls()).toBe(first + 2);
     await flush(1);
-    expect(within(col("Performance Reviewer")).getByText("Done")).toBeInTheDocument();
+    // Settled: the running word is gone and the score has arrived. Asserting the
+    // ABSENCE of "Running" is what this test is really about — the poll stops
+    // when the last column leaves a non-terminal status.
+    expect(within(col("Performance Reviewer")).queryByText("Running")).toBeNull();
 
     // Five poll windows later, unmoved: a settled multi-run generates no
     // traffic at all.

@@ -59,6 +59,24 @@ export function findPrId(pulls: readonly PrMeta[] | undefined, number: number | 
 }
 
 /**
+ * That same pull request's title, for the sub-bar (the reference's second header
+ * row names the pull request, not just its number).
+ *
+ * Read from the SAME cached list as `findPrId` rather than from a second query:
+ * the title and the id must describe one row, and a screen that fetched them
+ * separately could render one pull request's number beside another's title
+ * while the two reads were out of step. `null` until the list has answered, so
+ * the sub-bar renders the number alone rather than an empty gap.
+ */
+export function findPrTitle(
+  pulls: readonly PrMeta[] | undefined,
+  number: number | null,
+): string | null {
+  if (number == null) return null;
+  return pulls?.find((p) => p.number === number)?.title ?? null;
+}
+
+/**
  * A column's findings in the shape the run-trace drawer takes (AC-64).
  *
  * The drawer's props are fixed — it is a relocated, shared unit that "gains no

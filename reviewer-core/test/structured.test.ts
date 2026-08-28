@@ -60,3 +60,70 @@ describe('toJsonSchema — provider-portable schemas', () => {
     if (!result.ok) expect(result.repromptMessage).toContain('score');
   });
 });
+
+/**
+ * toJsonSchema — `$ref` must never reach the wire schema either.
+ *
+ * `zodResponseFormat` hoists a shape used in two places into `definitions` and
+ * points at it with `{"$ref": "#/definitions/..."}`. Google AI Studio does not
+ * resolve that and 400s the whole request with "reference to undefined schema",
+ * which OpenRouter passes through as a bare "400 Provider returned error" — so
+ * every review by an agent on a Gemini model failed, in under a second, while
+ * the same schema on DeepSeek answered 200. Measured 2026-08-28.
+ */
+describe('toJsonSchema — references are inlined', () => {
+  const Shared = z.enum(['private_data_access', 'untrusted_input', 'exfil_path']);
+  const TwoUses = z.object({
+    evidence: z.array(z.object({ component: Shared, file: z.string() })),
+    trifecta: z.object({ components: z.array(Shared) }),
+  });
+
+  it('emits no $ref and no definitions block when every reference resolves', () => {
+    const { schema } = toJsonSchema(TwoUses, 'TwoUses');
+    const wire = JSON.stringify(schema);
+
+    expect(wire).not.toContain('$ref');
+    expect(schema).not.toHaveProperty('definitions');
+    expect(schema).not.toHaveProperty('$defs');
+  });
+
+  it('expands the shared shape at BOTH use sites, not just the first', () => {
+    const { schema } = toJsonSchema(TwoUses, 'TwoUses');
+    const props = (schema as Record<string, never>).properties as Record<string, never>;
+
+    const evidenceItem = (props.evidence as Record<string, never>).items as Record<string, never>;
+    const component = (evidenceItem.properties as Record<string, never>).component as {
+      enum?: string[];
+    };
+    const trifectaItems = (
+      ((props.trifecta as Record<string, never>).properties as Record<string, never>)
+        .components as Record<string, never>
+    ).items as { enum?: string[] };
+
+    // The point of the fix: a de-duplicated shape becomes two complete copies.
+    expect(component.enum).toEqual(['private_data_access', 'untrusted_input', 'exfil_path']);
+    expect(trifectaItems.enum).toEqual(['private_data_access', 'untrusted_input', 'exfil_path']);
+  });
+
+  it('still validates a response against the ORIGINAL zod schema', () => {
+    // Inlining is a wire-format concern only: what comes back is checked against
+    // the schema the caller passed, so nothing about validation is loosened.
+    const good = parseWithRepair(
+      TwoUses,
+      JSON.stringify({
+        evidence: [{ component: 'exfil_path', file: 'a.ts' }],
+        trifecta: { components: ['untrusted_input'] },
+      }),
+    );
+    expect(good.ok).toBe(true);
+
+    const bad = parseWithRepair(
+      TwoUses,
+      JSON.stringify({
+        evidence: [{ component: 'not_a_member', file: 'a.ts' }],
+        trifecta: { components: [] },
+      }),
+    );
+    expect(bad.ok).toBe(false);
+  });
+});
