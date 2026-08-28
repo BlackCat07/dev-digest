@@ -694,6 +694,17 @@ Dependency and tooling quirks.
   `src/modules/project-context/service.ts` and `src/modules/onboarding/service.ts`, are
   still raw and still need `-a`. Evidence: `src/modules/multi-agent/helpers.ts`.
 
+- **2026-08-28** — **Corrects the bullet above, and nobody's list of the NUL-byte files was
+  right.** Counted directly (`b"\x00" in f.read_bytes()` over every `.ts`/`.tsx`), `server/src`
+  holds exactly **four**: `src/adapters/depgraph/index.ts`,
+  `src/modules/project-context/service.ts`, `src/modules/repo-intel/pipeline/repo-map.ts` and
+  `src/platform/model-router.ts`. `client/src` and `reviewer-core/src` hold none. So the bullet
+  above is wrong that `src/modules/onboarding/service.ts` is still raw — it is clean now — and
+  `.claude/skills/pr-self-review/gate.md` names only two of the four, missing
+  `project-context/service.ts` and `model-router.ts`. Three sources, three different lists, none
+  of them complete: **count it, do not cite it.** The `-a` flag stays load-bearing for any
+  `grep -r` over `server/src` until all four are written as `\0` escapes.
+
 - **2026-08-25** — **`depcruise`'s `application-no-db-schema` does not cover `src/db/client.ts`**,
   so a service can acquire a Drizzle *handle* — and with it `db.transaction` — while the onion gate
   stays at its 22-warning baseline. The rule's `to.path` is
