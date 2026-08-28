@@ -7,6 +7,21 @@ import type { CSSProperties } from "react";
 
    `var(--bg)` is not a token: the base background is `var(--bg-primary)`, and
    an unknown custom property drops silently (`client/INSIGHTS.md`, 2026-08-06). */
+/**
+ * The results band's own insets, exported because ONE child has to cancel them.
+ *
+ * Tabs mode's strip is a header bar in the reference: its rule runs the full
+ * width of the page, continuing the sub-bar's rule directly above it. Inside a
+ * padded band its rule would stop `RESULTS_INSET_X` short at each end and the
+ * strip would read as a floating widget rather than as the bottom of the
+ * header stack. `AgentTabsPane` cancels both insets with a negative margin and
+ * restores the horizontal one as its own padding, so the tab labels still line
+ * up with the content below them. The numbers live here so the two sides cannot
+ * drift apart silently.
+ */
+export const RESULTS_INSET_X = 28;
+export const RESULTS_INSET_TOP = 20;
+
 export const s = {
   /* The page owns no padding of its own: the header row and the results area
      are two bands with different vertical rhythm (18px vs 20px) over one shared
@@ -82,7 +97,7 @@ export const s = {
     display: "flex",
     flexDirection: "column",
     gap: 42,
-    padding: "20px 28px",
+    padding: `${RESULTS_INSET_TOP}px ${RESULTS_INSET_X}px`,
   } satisfies CSSProperties,
   /* The back button and the mode toggle share the header's right-hand slot. */
   headerActions: {

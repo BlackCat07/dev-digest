@@ -91,12 +91,17 @@ export function FindingDetail({
 
   return (
     <div style={s.panel}>
-      <section style={s.section}>
-        <span style={s.sectionLabel}>{t("detail.rationale")}</span>
-        <div style={s.prose}>
-          <Markdown>{finding.rationale}</Markdown>
-        </div>
-      </section>
+      {/* No `RATIONALE` label. The reference opens the panel on the agent's
+          prose directly, and it is right to: the panel is reached by expanding
+          a finding, so the first paragraph in it can only be that finding's
+          reasoning, and a label over it names what the reader has already been
+          told. `SUGGESTED FIX` below keeps its label because it is the one
+          section that is sometimes absent — there, the label is what tells the
+          reader which of the two blocks they are looking at. AC-72 asks for the
+          rationale to be SHOWN, and does not ask for it to be titled. */}
+      <div style={s.prose}>
+        <Markdown>{finding.rationale}</Markdown>
+      </div>
 
       {/* No heading above nothing (AC-72): `suggestion` is nullish on the
           contract, and an agent that proposed no fix must not leave a

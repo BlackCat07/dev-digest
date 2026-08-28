@@ -160,14 +160,17 @@ describe("FindingDetail — expanding a finding", () => {
     // AC-104, before. Exactly one tag, because the expansion must WRAP this row
     // rather than render a second one beside it.
     expect(within(first).getAllByText("security")).toHaveLength(1);
-    expect(within(first).queryByText("Rationale")).toBeNull();
+    // Collapsed: the rationale is the panel's first block and there is no
+    // panel yet. The prose is the carrier — the reference draws no `RATIONALE`
+    // label over it, so its absence is what says "not expanded".
+    expect(within(first).queryByText(/credential-stuffing target/)).toBeNull();
 
     fireEvent.click(within(first).getByRole("button", { name: /Rate limit missing/ }));
 
     // AC-104, after — same tag, same word, still exactly one.
     expect(within(first).getAllByText("security")).toHaveLength(1);
-    // AC-72 — both sections, with the agent's own prose under each.
-    expect(within(first).getByText("Rationale")).toBeInTheDocument();
+    // AC-72 — both sections. The rationale is its prose (no label above it);
+    // the fix is labelled, because it is the section that can be absent.
     expect(within(first).getByText(/credential-stuffing target/)).toBeInTheDocument();
     expect(within(first).getByText("Suggested fix")).toBeInTheDocument();
     expect(within(first).getByText(/Wrap the handler in the shared/)).toBeInTheDocument();
@@ -190,7 +193,6 @@ describe("FindingDetail — expanding a finding", () => {
     // fix heading. The label is what must be absent, not merely the prose.
     const second = row(1);
     fireEvent.click(within(second).getByRole("button", { name: /Magic number 3600/ }));
-    expect(within(second).getByText("Rationale")).toBeInTheDocument();
     expect(within(second).getByText(/3600 appears twice/)).toBeInTheDocument();
     expect(within(second).queryByText("Suggested fix")).toBeNull();
   });

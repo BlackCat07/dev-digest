@@ -5,12 +5,14 @@ import type { CSSProperties } from "react";
 
 /** The expanded panel. */
 export const s = {
+  /* The card's second band. It owns its own padding because the card owns
+     none — the collapsed row above is the first band, and the rule between them
+     runs the full width of the card, as the reference draws it. */
   panel: {
     display: "flex",
     flexDirection: "column",
     gap: 12,
-    marginTop: 10,
-    paddingTop: 12,
+    padding: "12px 14px",
     borderTop: "1px solid var(--border)",
   } satisfies CSSProperties,
   section: {
@@ -18,12 +20,16 @@ export const s = {
     flexDirection: "column",
     gap: 6,
   } satisfies CSSProperties,
+  /* `SUGGESTED FIX` — 11px/700, 0.05em, uppercase, `--text-muted`, per the
+     reference. It is the ONE label in the panel: the rationale is the agent's
+     prose and opens the panel directly, with nothing standing over it. */
   sectionLabel: {
-    fontSize: 10.5,
+    fontSize: 11,
     fontWeight: 700,
-    letterSpacing: "0.06em",
+    letterSpacing: "0.05em",
     textTransform: "uppercase",
     color: "var(--text-muted)",
+    lineHeight: 1.5,
   } satisfies CSSProperties,
   prose: {
     fontSize: 13,
@@ -67,17 +73,17 @@ export const row = {
    *
    * A real `<button>`, not a `<div onClick>`: the row is the only way to reach
    * the rationale and the three actions, and a click handler on a div is
-   * unreachable by keyboard. It resets the native chrome and re-declares the
-   * column layout the row had while it was the `<article>`'s direct content, so
-   * the collapsed row looks identical before and after this change.
+   * unreachable by keyboard. It resets the native chrome and owns the card's
+   * first band: the severity chip, the two-line body and the chevron, laid out
+   * as one 12px/14px-padded row. The card itself is padding-free, so this
+   * button and the panel below it are the only two boxes in it.
    */
   disclosure: {
     display: "flex",
-    flexDirection: "column",
     alignItems: "flex-start",
-    gap: 6,
+    gap: 10,
     width: "100%",
-    padding: 0,
+    padding: "12px 14px",
     border: 0,
     background: "none",
     color: "inherit",
