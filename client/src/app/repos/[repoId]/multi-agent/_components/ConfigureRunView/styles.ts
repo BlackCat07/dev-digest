@@ -81,13 +81,6 @@ export const s = {
     color: disabled ? "var(--text-muted)" : "var(--text-primary)",
   }),
 
-  stepHint: {
-    fontSize: 12.5,
-    lineHeight: 1.5,
-    color: "var(--text-muted)",
-    marginTop: 8,
-  } satisfies CSSProperties,
-
   stepHeadSpacer: { marginLeft: "auto" } satisfies CSSProperties,
 
   /**

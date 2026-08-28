@@ -20,9 +20,6 @@ import { RESULTS_INSET_TOP, RESULTS_INSET_X } from "../../styles";
    `var(--bg-primary)`, and an unknown custom property drops silently
    (`client/INSIGHTS.md`, 2026-08-06). */
 
-/** Content width the reference caps the pane at: 760px, so a rationale
-    paragraph keeps a readable measure however wide the window gets. The tab
-    strip above it is deliberately not capped — it is chrome, not prose. */
 /**
  * The pane's reading width — deliberately the SAME number as the pull-request
  * page's tab column (`PrDetailView/styles.ts` `s.tabColumn.maxWidth`), so a

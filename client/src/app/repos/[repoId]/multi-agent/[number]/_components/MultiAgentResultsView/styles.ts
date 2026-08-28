@@ -99,13 +99,6 @@ export const s = {
     gap: 42,
     padding: `${RESULTS_INSET_TOP}px ${RESULTS_INSET_X}px`,
   } satisfies CSSProperties,
-  /* The back button and the mode toggle share the header's right-hand slot. */
-  headerActions: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    flexWrap: "wrap",
-  } satisfies CSSProperties,
   title: {
     fontSize: 20,
     fontWeight: 700,
