@@ -142,10 +142,6 @@
       "failed": "Failed",
       "cancelled": "Cancelled"
     },
-    "column": {
-      "score": "Score",
-      "cost": "Cost"
-    },
     "viewTrace": "View trace",
     "noScore": "No score",
     "backToConfigure": "Configure run",
