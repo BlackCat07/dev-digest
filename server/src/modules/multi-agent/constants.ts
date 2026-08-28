@@ -141,3 +141,22 @@ export const MAX_MATERIAL_RATIONALE_CHARS = 400;
  */
 export const MAX_LABEL_CHARS = 120;
 export const MAX_NOTE_CHARS = 400;
+
+/**
+ * How long a parent with NO runs yet is treated as a fan-out still starting.
+ *
+ * `createMultiAgentRun` commits the parent and only then writes one `agent_runs`
+ * row per agent — the two cannot join a transaction, and the module's `discard`
+ * documents why. In the window between them the newest parent has ZERO runs, so
+ * a predicate that asks only "has a `running` run?" answers *no* and lets a
+ * second fan-out through. That window is the whole of the AC-9 defect: a lock
+ * around the check does not close it, because there is nothing yet to see.
+ *
+ * So a parent with no runs counts as in flight — but only for a bounded time. A
+ * process killed between the two writes would otherwise leave a parent that
+ * refuses every future fan-out for that pull request, forever, with nothing to
+ * clear it; the same reasoning the engine already applies when it reaps orphaned
+ * `running` runs on boot. Generous on purpose: it only has to outlast N inserts
+ * on one connection.
+ */
+export const MULTI_RUN_STARTING_MS = 30_000;

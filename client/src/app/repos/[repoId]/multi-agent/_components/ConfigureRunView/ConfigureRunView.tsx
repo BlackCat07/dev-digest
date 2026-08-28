@@ -53,6 +53,7 @@ import {
   openPullsDescending,
   type AggregateEstimate,
 } from "./helpers";
+import { refusalReason } from "@/lib/api-errors";
 import { s } from "./styles";
 
 export function ConfigureRunView({ repoId }: { repoId: string }) {
@@ -204,6 +205,16 @@ export function ConfigureRunView({ repoId }: { repoId: string }) {
             <EstimateText estimate={aggregate} className="mono" style={s.aggregate} />
           </div>
         </div>
+
+        {/* The server's refusal, said out loud. Without this a `422
+            too_many_agents` (AC-8) or a `409 multi_agent_run_in_flight` (AC-9)
+            was indistinguishable from a mis-click: the spinner ran, the screen
+            did not move, and nothing was said. */}
+        {startRun.isError && (
+          <p role="alert" style={s.error}>
+            {refusalReason(startRun.error) ?? t("startFailed")}
+          </p>
+        )}
       </div>
     </AppShell>
   );

@@ -209,7 +209,7 @@ function harness(
   const provider = new CountingProvider(behaviour);
 
   const store: MultiAgentStore = {
-    create: unreachable('create'),
+    createIfIdle: unreachable('createIfIdle'),
     discard: unreachable('discard'),
     latestForPull: async () => parent,
     runsOf: async () => over.runs ?? RUNS,
@@ -471,7 +471,7 @@ function triggerHarness(): TriggerHarness {
     reviewRepo: repo,
     agentsRepo: { getById: async (_ws: string, id: string) => agents.find((a) => a.id === id) },
     multiAgentRecorder: {
-      create: async () => ({ id: MULTI_RUN, ranAt: new Date() }),
+      createIfIdle: async () => ({ id: MULTI_RUN, ranAt: new Date() }),
       latestForPull: async () => undefined,
     },
     multiAgentNotes: {

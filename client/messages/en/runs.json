@@ -183,5 +183,6 @@
       "cta": "Choose agents to run"
     },
     "crumb": "Multi-Agent Review"
-  }
+  },
+  "startFailed": "The run could not be started."
 }

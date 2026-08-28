@@ -262,6 +262,46 @@ describe("AgentPicker", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  it("says why a fan-out was refused instead of looking like a mis-click", async () => {
+    // The server names its refusals — `422 too_many_agents` (AC-8), `409
+    // multi_agent_run_in_flight` (AC-9). This used to be swallowed: the spinner
+    // ran, the panel did not move, and nothing was said, so the reviewer
+    // concluded they had missed the button and pressed again.
+    fetchMock.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/multi-agent-run")) {
+        return {
+          ok: false,
+          status: 409,
+          json: async () => ({
+            error: {
+              code: "multi_agent_run_in_flight",
+              message: "This pull request already has a multi-agent run in progress",
+            },
+          }),
+        } as unknown as Response;
+      }
+      return route(input);
+    });
+
+    renderPicker();
+    openPanel();
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Security Auditor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run 1 agent" }));
+
+    // The server's own sentence, announced.
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("This pull request already has a multi-agent run in progress");
+
+    // And the selection survives, so the reviewer can act on what they just read
+    // rather than rebuilding it.
+    expect(screen.getByRole("checkbox", { name: "Security Auditor" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(push).not.toHaveBeenCalled();
+  });
+
   it("renders the no-agents copy and no picker when the workspace has none", async () => {
     agentsFixture = [];
     renderPicker();

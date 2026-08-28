@@ -35,6 +35,7 @@ import { useAgentEstimates, useStartMultiRun } from "@/lib/hooks/multi-agent";
 import { formatDurationSeconds } from "@/lib/format";
 import { resultsRoute } from "@/lib/multi-agent-routes";
 import { AGENTS_ROUTE } from "./constants";
+import { refusalReason } from "@/lib/api-errors";
 import { s } from "./styles";
 
 /** Stable empty list, so `agents` is not a new array on every render. */
@@ -118,9 +119,11 @@ export function AgentPicker({
       const href = resultsRoute(pathname);
       if (href) router.push(href);
     } catch {
-      // Swallowed rather than left to reject unhandled: the failure is already
-      // on `start.isError`, the panel stays open with the selection intact, and
-      // the catalogue carries no picker-level error string to render.
+      // Swallowed rather than left to reject unhandled — the panel stays open
+      // with the selection intact and the refusal is RENDERED below off
+      // `start.error`. It used to be swallowed and never shown, which made a
+      // `422 too_many_agents` or a `409 multi_agent_run_in_flight` look
+      // identical to a mis-click: spinner, then nothing.
     }
   };
 
@@ -195,6 +198,12 @@ export function AgentPicker({
                 </Button>
               </div>
             </>
+          )}
+
+          {start.isError && (
+            <p role="alert" style={s.error}>
+              {refusalReason(start.error) ?? t("startFailed")}
+            </p>
           )}
 
           <div style={s.manageRow}>

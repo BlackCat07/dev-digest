@@ -56,7 +56,7 @@ function unreachable(name: string) {
 
 function store(over: Partial<MultiAgentStore>): MultiAgentStore {
   return {
-    create: unreachable('create'),
+    createIfIdle: unreachable('createIfIdle'),
     latestForPull: unreachable('latestForPull'),
     discard: unreachable('discard'),
     runsOf: unreachable('runsOf'),

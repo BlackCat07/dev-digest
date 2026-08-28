@@ -50,8 +50,12 @@ export const MAX_MULTI_AGENT_RUN_AGENTS = 8;
  * query over `agent_runs`, which belongs to this module's own repository.
  */
 export interface MultiRunRecorder {
-  create(workspaceId: string, prId: string): Promise<{ id: string; ranAt: Date }>;
-  latestForPull(workspaceId: string, prId: string): Promise<{ id: string } | undefined>;
+  /**
+   * Insert the parent, or answer `null` because a fan-out for this pull request
+   * is still running (AC-9). Atomic — see the implementation's own note for why
+   * the check cannot live out here.
+   */
+  createIfIdle(workspaceId: string, prId: string): Promise<{ id: string; ranAt: Date } | null>;
   /**
    * Undo {@link MultiRunRecorder.create} after the fan-out it was created for
    * failed to start. Called on one error path only, in
@@ -315,20 +319,18 @@ export class ReviewService {
 
     const targets = await this.resolveTargets(workspaceId, { agentIds: requested });
 
-    // AC-9. `latestForPull` says WHICH multi-run is the most recent one (the
-    // other module's question); `hasRunningRunForMultiRun` says whether it is
-    // still going (this module's own table). Nothing is written on this path, so
-    // the first multi-run is untouched by construction rather than by care.
-    const previous = await this.multiRuns.latestForPull(workspaceId, prId);
-    if (previous && (await this.repo.hasRunningRunForMultiRun(workspaceId, previous.id))) {
+    // AC-9, asked and answered in ONE transaction on the other side of the port.
+    // Asking it here — read the latest parent, then ask whether it is still
+    // going, then insert — is three awaits with nothing holding them together,
+    // and two concurrent callers both pass it. `null` is the refusal.
+    const parent = await this.multiRuns.createIfIdle(workspaceId, prId);
+    if (!parent) {
       throw new AppError(
         'multi_agent_run_in_flight',
         'This pull request already has a multi-agent run in progress',
         409,
       );
     }
-
-    const parent = await this.multiRuns.create(workspaceId, prId);
 
     // The parent is committed and the runs are not, and the two writes cannot
     // be made one: `runReview` fires `void executeRuns(...)` before it returns,

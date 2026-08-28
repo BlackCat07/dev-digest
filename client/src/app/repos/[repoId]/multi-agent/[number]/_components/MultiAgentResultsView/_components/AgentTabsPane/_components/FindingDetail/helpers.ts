@@ -1,6 +1,6 @@
+export { refusalReason } from "@/lib/api-errors";
 /** Pure helpers for FindingDetail. */
 
-import { ApiError } from "@/lib/api";
 
 /**
  * The sentence the server sent for a NAMED refusal, or `null`.
@@ -19,7 +19,3 @@ import { ApiError } from "@/lib/api";
  * `null` and rendering nothing left a dropped connection completely silent,
  * which reads as a control that does not work.
  */
-export function refusalReason(error: unknown): string | null {
-  if (!(error instanceof ApiError)) return null;
-  return error.code ? error.message : null;
-}

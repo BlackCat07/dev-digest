@@ -116,6 +116,14 @@ export const s = {
     borderTop: "1px solid var(--border)",
   } satisfies CSSProperties,
 
+  /** The server's own sentence when a fan-out is refused. */
+  error: {
+    margin: "8px 0 0",
+    fontSize: 12.5,
+    lineHeight: 1.45,
+    color: "var(--crit)",
+  } satisfies CSSProperties,
+
   manageRow: {
     display: "flex",
     alignItems: "center",

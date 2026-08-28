@@ -167,13 +167,17 @@ function harness(): Harness {
   let parentSeq = 0;
 
   const recorder: MultiRunRecorder = {
-    create: async (_ws: string, _prId: string) => {
+    // AC-9 is decided HERE now, not by the service — the real recorder answers it
+    // and the insert in one transaction, which is what stops two concurrent
+    // callers both passing a guard the service used to hold open across three
+    // awaits. `null` is the refusal the service turns into the 409.
+    createIfIdle: async (_ws: string, _prId: string) => {
+      if (state.previous?.running) return null;
       const id = `${PARENT.slice(0, -1)}${parentSeq}`;
       parentSeq += 1;
       state.parents.push(id);
       return { id, ranAt: new Date('2026-08-25T10:00:00.000Z') };
     },
-    latestForPull: async () => (state.previous ? { id: state.previous.id } : undefined),
     discard: async (_ws: string, id: string) => {
       state.discarded.push(id);
       // A failing delete leaves the row where it is, which is the state the

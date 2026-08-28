@@ -154,8 +154,14 @@ export interface StoredMultiAgentFinding {
  * `container.multiAgentRecorder`.
  */
 export interface MultiAgentRecorder {
-  /** Insert the parent record every run of one fan-out will be stamped with. */
-  create(workspaceId: string, prId: string): Promise<CreatedMultiAgentRun>;
+  /**
+   * Insert the parent record every run of one fan-out will be stamped with —
+   * atomically, and only while the pull request has no fan-out still running
+   * (AC-9). `null` means it has one. There is deliberately no unguarded
+   * `create`: a check the caller performs separately is a race, and this port
+   * is the only way in.
+   */
+  createIfIdle(workspaceId: string, prId: string): Promise<CreatedMultiAgentRun | null>;
   /** The pull request's most recent multi-run, or `undefined` when it has none. */
   latestForPull(workspaceId: string, prId: string): Promise<StoredMultiAgentRun | undefined>;
   /**

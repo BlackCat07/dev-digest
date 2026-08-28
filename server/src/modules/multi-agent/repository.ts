@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
+import { MULTI_RUN_STARTING_MS } from './constants.js';
 import { MultiAgentNotes } from './schemas.js';
 import type {
   CreatedMultiAgentRun,
@@ -61,12 +62,72 @@ export class MultiAgentRepository implements MultiAgentStore {
    * two values the create path's response needs, and a narrower return is one
    * less field a fake has to build.
    */
-  async create(workspaceId: string, prId: string): Promise<CreatedMultiAgentRun> {
-    const [row] = await this.db
-      .insert(t.multiAgentRuns)
-      .values({ workspaceId, prId })
-      .returning({ id: t.multiAgentRuns.id, ranAt: t.multiAgentRuns.ranAt });
-    return row!;
+  /**
+   * Insert the parent record — but only while this pull request has no fan-out
+   * still running (AC-9). Answers `null` when it does, which the caller turns
+   * into the `409`.
+   *
+   * **The check and the insert are ONE statement-sequence inside ONE
+   * transaction, and that is the whole point of this method.** The service used
+   * to read "is there a live predecessor?" and then insert, as two awaited
+   * calls; two requests for the same pull request could both complete the read
+   * before either reached the insert, so both passed the guard and two fan-outs
+   * ran — billing the workspace twice, and leaving the earlier one invisible to
+   * `GET /pulls/:id/multi-agent`, which reports only the most recent parent.
+   *
+   * `FOR UPDATE` on the PULL-REQUEST row is what serialises them. It is the one
+   * row both callers name, it already exists (a fan-out cannot be started for a
+   * pull request that does not), and locking it is cheaper and narrower than a
+   * table-level lock. `multi_agent_runs` has no unique constraint to fall back
+   * on: `multi_agent_runs_pr_ran_idx` is a plain `(pr_id, ran_at DESC)` index.
+   *
+   * This transaction is NOT the one the module's `discard` compensates for —
+   * that one cannot exist because `runReview` fires background work inside it.
+   * This one closes before any run is created, so no background connection can
+   * be waiting on rows it cannot see.
+   */
+  async createIfIdle(workspaceId: string, prId: string): Promise<CreatedMultiAgentRun | null> {
+    return this.db.transaction(async (tx) => {
+      await tx.execute(sql`select id from pull_requests where id = ${prId} for update`);
+
+      const [latest] = await tx
+        .select({ id: t.multiAgentRuns.id, ranAt: t.multiAgentRuns.ranAt })
+        .from(t.multiAgentRuns)
+        .where(
+          and(eq(t.multiAgentRuns.workspaceId, workspaceId), eq(t.multiAgentRuns.prId, prId)),
+        )
+        .orderBy(desc(t.multiAgentRuns.ranAt), desc(t.multiAgentRuns.id))
+        .limit(1);
+
+      if (latest) {
+        const runs = await tx
+          .select({ status: t.agentRuns.status })
+          .from(t.agentRuns)
+          .where(
+            and(
+              eq(t.agentRuns.workspaceId, workspaceId),
+              eq(t.agentRuns.multiAgentRunId, latest.id),
+            ),
+          );
+
+        // Still executing. `running` only — a row with a status nobody
+        // recognises must not wedge the pull request into refusing forever.
+        if (runs.some((run) => run.status === 'running')) return null;
+
+        // No runs YET. This is the window the caller cannot close: the parent is
+        // committed before its runs are, so for a moment the newest fan-out
+        // looks like nothing at all. Bounded, so a create killed between the two
+        // writes cannot block this pull request permanently.
+        const startingFor = Date.now() - latest.ranAt.getTime();
+        if (runs.length === 0 && startingFor < MULTI_RUN_STARTING_MS) return null;
+      }
+
+      const [row] = await tx
+        .insert(t.multiAgentRuns)
+        .values({ workspaceId, prId })
+        .returning({ id: t.multiAgentRuns.id, ranAt: t.multiAgentRuns.ranAt });
+      return row!;
+    });
   }
 
   /**
