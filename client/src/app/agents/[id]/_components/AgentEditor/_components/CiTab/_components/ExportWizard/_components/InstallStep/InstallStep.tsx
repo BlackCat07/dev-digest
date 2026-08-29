@@ -36,10 +36,21 @@ export function InstallStep({
     <>
       <div>
         <div style={s.installHeading}>{t("exportWizard.installCardTitle")}</div>
+        {/* The repository is named ONCE, inside the sentence. It used to be
+            repeated as a bare mono line underneath, which read as a second,
+            different fact rather than as the same one restated. */}
         <div style={s.installBody}>{t("exportWizard.installCardBody", { repo, count: fileCount })}</div>
-        <div className="mono" style={s.installRepo}>
-          {repo}
-        </div>
+      </div>
+      {/* TWO different credentials, and conflating them costs a failed export.
+          `secretNote` is about a secret the USER adds to the target repository,
+          which DevDigest never reads (N15). `tokenNote` is about the token
+          DevDigest itself commits with — and it names Workflows explicitly
+          because a token with Contents and Pull requests still gets a 403 on
+          `POST /git/trees`, whose message says only "Resource not accessible by
+          personal access token" and never which permission is missing. */}
+      <div style={s.note}>
+        <Icon.Shield size={15} style={{ color: "var(--text-muted)", flexShrink: 0, marginTop: 1 }} />
+        <div style={s.noteBody}>{t("exportWizard.tokenNote")}</div>
       </div>
       <div style={s.note}>
         <Icon.Lock size={15} style={{ color: "var(--text-muted)", flexShrink: 0, marginTop: 1 }} />

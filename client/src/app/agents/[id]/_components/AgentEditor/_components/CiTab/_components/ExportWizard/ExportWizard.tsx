@@ -25,6 +25,7 @@ import { Button, Icon, Modal } from "@devdigest/ui";
 import type { Agent, CiExportInput } from "@devdigest/shared";
 import { CI_DEFAULT_POST_AS, CI_DEFAULT_TARGET, CI_DEFAULT_TRIGGERS, isRepoSlug, sortCiFiles } from "@/lib/ci";
 import { useCiPreview, useExportToCi } from "@/lib/hooks/ci";
+import { useActiveRepo } from "@/lib/repo-context";
 import { STEP_CONFIGURE, STEP_INSTALL, STEP_PREVIEW, STEP_TARGET, WIZARD_STEPS } from "../../constants";
 import { s } from "../../styles";
 import { ConfigureStep } from "./_components/ConfigureStep";
@@ -63,19 +64,22 @@ function WizardSteps({ step, labels }: { step: number; labels: readonly string[]
   );
 }
 
-export function ExportWizard({
-  agent,
-  initialRepo,
-  onClose,
-}: {
-  agent: Agent;
-  /** Pre-filled by the "Update CI" entry — the same path, one field already answered. */
-  initialRepo: string;
-  onClose: () => void;
-}) {
+export function ExportWizard({ agent, onClose }: { agent: Agent; onClose: () => void }) {
   const t = useTranslations("ci");
   const [step, setStep] = React.useState(STEP_TARGET);
-  const [repo, setRepo] = React.useState(initialRepo);
+
+  /**
+   * The target repository is the ACTIVE one, and it is read rather than asked.
+   *
+   * Not state, so there is nothing to keep in sync and nothing to reset between
+   * openings: the shell's repo switcher is the single control that answers "which
+   * repository", and the wizard is downstream of it. `isRepoSlug` below is not
+   * validating user input any more — nothing here is typed — it is the guard for
+   * the one case the context can produce, `activeRepo === null`, which holds
+   * Continue rather than letting the request go out with an empty `repo`.
+   */
+  const { activeRepo } = useActiveRepo();
+  const repo = activeRepo?.full_name ?? "";
   const [triggers, setTriggers] = React.useState<string[]>([...CI_DEFAULT_TRIGGERS]);
   const [postAs, setPostAs] = React.useState<CiExportInput["post_as"]>(CI_DEFAULT_POST_AS);
 
@@ -137,7 +141,7 @@ export function ExportWizard({
     >
       <div style={s.wizardBody}>
         <WizardSteps step={step} labels={WIZARD_STEPS.map((k) => t(k))} />
-        {step === STEP_TARGET && <TargetStep target={CI_DEFAULT_TARGET} repo={repo} onRepo={setRepo} />}
+        {step === STEP_TARGET && <TargetStep target={CI_DEFAULT_TARGET} />}
         {step === STEP_PREVIEW && (
           <PreviewStep files={files} isPending={preview.isPending} error={preview.error} />
         )}

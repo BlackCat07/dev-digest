@@ -13,8 +13,8 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Checkbox, FormField, Icon, SelectInput } from "@devdigest/ui";
-import { CI_POST_AS_OPTIONS, CI_TRIGGER_EVENTS } from "@/lib/ci";
+import { Badge, FormField, Icon } from "@devdigest/ui";
+import { CI_DEFAULT_POST_AS, CI_POST_AS_OPTIONS, CI_TRIGGER_EVENTS, CI_TRIGGER_PREFIX } from "@/lib/ci";
 import type { CiExportInput } from "@devdigest/shared";
 import { s } from "../../../../styles";
 
@@ -44,24 +44,59 @@ export function ConfigureStep({
   return (
     <>
       <FormField label={t("exportWizard.triggerLabel")} hint={t("exportWizard.triggerHint")}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {CI_TRIGGER_EVENTS.map((event) => (
-            <Checkbox
-              key={event}
-              checked={triggers.includes(event)}
-              onChange={(on) => toggle(event, on)}
-              label={<span className="mono">{event}</span>}
-            />
-          ))}
+        {/* Chips rather than a column of checkboxes: three short, related values
+            read as one set side by side. `role="checkbox"` is kept — the control
+            is still three independent toggles, and dropping the role to make it
+            look like a segmented control would announce it as one. */}
+        <div style={s.triggerChips}>
+          {CI_TRIGGER_EVENTS.map((event) => {
+            const on = triggers.includes(event);
+            return (
+              <button
+                key={event}
+                type="button"
+                role="checkbox"
+                aria-checked={on}
+                onClick={() => toggle(event, !on)}
+                className="mono"
+                style={on ? s.triggerChipOn : s.triggerChip}
+              >
+                {on && <Icon.Check size={12} />}
+                {`${CI_TRIGGER_PREFIX}${event}`}
+              </button>
+            );
+          })}
         </div>
       </FormField>
       <FormField label={t("exportWizard.postResultsLabel")}>
-        <SelectInput
-          value={postAs}
-          mono={false}
-          onChange={(v) => onPostAs(v as CiExportInput["post_as"])}
-          options={CI_POST_AS_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
-        />
+        {/* A local radiogroup and not `SelectInput`: three mutually exclusive
+            options, all of them short, and one of them carrying a "recommended"
+            badge a `<select>` has nowhere to put. `vendor/ui` ships no radio
+            primitive and is not ours to add one to for a single screen, so the
+            group is composed here the way the target cards already are. */}
+        <div role="radiogroup" aria-label={t("exportWizard.postResultsLabel")} style={s.postAsGroup}>
+          {CI_POST_AS_OPTIONS.map((o) => {
+            const on = o.value === postAs;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => onPostAs(o.value)}
+                style={s.postAsRow}
+              >
+                <span style={on ? s.radioDotOn : s.radioDot} aria-hidden="true" />
+                <span style={s.postAsLabel}>{t(o.labelKey)}</span>
+                {o.value === CI_DEFAULT_POST_AS && (
+                  <Badge color="var(--accent-text)" bg="var(--accent-bg)">
+                    {t("exportWizard.recommended")}
+                  </Badge>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </FormField>
       <div style={s.note}>
         <Icon.Info size={15} style={{ color: "var(--text-muted)", flexShrink: 0, marginTop: 1 }} />

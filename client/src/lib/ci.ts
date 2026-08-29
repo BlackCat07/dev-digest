@@ -27,14 +27,18 @@ import type { IconName } from "@devdigest/ui";
 // ===========================================================================
 
 /**
- * `owner/name`, as GitHub itself spells it — the Target step's Continue stays
- * disabled until the field matches.
+ * `owner/name`, as GitHub itself spells it.
+ *
+ * Since the wizard took its repository from the active repo rather than from a
+ * field, nothing here validates typing — the pattern is the wizard's guard for
+ * the one bad value the repo context can produce, `activeRepo === null`, which
+ * holds Continue instead of sending an empty `repo`.
  *
  * Deliberately tighter than "two segments separated by a slash": each segment
  * must START with an alphanumeric, which is what rules out `acme/..` and
  * `acme/.git` reaching a value the server puts in a URL path and a commit
  * message. The server validates this again with its own zod schema — this is
- * the field's enable/disable rule, not the authorization.
+ * a client-side guard, never the authorization.
  */
 export const CI_REPO_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
@@ -44,7 +48,7 @@ export function isRepoSlug(value: string): boolean {
 }
 
 // ===========================================================================
-// The targets — one card, and only one
+// The targets — four cards, one of them selectable
 // ===========================================================================
 
 /** One card on the wizard's Target step. */
@@ -54,18 +58,29 @@ export interface CiTargetOption {
   labelKey: string;
   descKey: string;
   icon: IconName;
+  /** False renders the card dimmed, unfocusable and unclickable. */
+  enabled: boolean;
 }
 
 /**
- * The targets the wizard offers. ONE entry, on purpose.
+ * Every value `CiTarget` holds, in the order the cards are drawn — and exactly
+ * one of them selectable.
  *
- * `CiTarget` keeps all four of its values — the contract is not narrowed and the
- * server rejects the other three by name — but a disabled card is a promise with
- * no date, and three of them is three promises. When CircleCI ships, its card is
- * added here and nothing else moves.
+ * `enabled: false` is a DISPLAY fact and nothing more. It stops a click; it is
+ * not what makes the other three targets unavailable. The server rejects them by
+ * name in `CiService`, so flipping a flag here exports nothing: a target ships
+ * when its generator does.
+ *
+ * This reverses SPEC-05's original N4 / AC-52, which offered the single card so
+ * as not to make three promises with no date. The three now carry an explicit
+ * "coming soon" instead, which is the same promise made legible rather than
+ * hidden — see the amendment in `specs/export-to-ci.md`.
  */
 export const CI_TARGETS: readonly CiTargetOption[] = [
-  { value: "gha", labelKey: "exportWizard.targets.gha", descKey: "exportWizard.targets.ghaDesc", icon: "Workflow" },
+  { value: "gha", labelKey: "exportWizard.targets.gha", descKey: "exportWizard.targets.ghaDesc", icon: "Workflow", enabled: true },
+  { value: "circle", labelKey: "exportWizard.targets.circle", descKey: "exportWizard.targets.circleDesc", icon: "RefreshCw", enabled: false },
+  { value: "jenkins", labelKey: "exportWizard.targets.jenkins", descKey: "exportWizard.targets.jenkinsDesc", icon: "Settings", enabled: false },
+  { value: "cli", labelKey: "exportWizard.targets.cli", descKey: "exportWizard.targets.cliDesc", icon: "Command", enabled: false },
 ];
 
 // ===========================================================================
@@ -98,6 +113,17 @@ export const CI_DEFAULT_TRIGGERS: readonly string[] = ["opened", "synchronize", 
  * generator intersects the request with this same set.
  */
 export const CI_TRIGGER_EVENTS: readonly string[] = ["opened", "synchronize", "reopened"];
+
+/**
+ * DISPLAY-ONLY prefix for a trigger chip's label.
+ *
+ * The values above are what GitHub writes under `types:` and what this feature
+ * puts on the wire, and they stay bare. The chip shows `pull_request:opened`
+ * because a chip reading `opened` alone says nothing about WHAT was opened — the
+ * event is the pair, and the label is the only place the user sees it. Never
+ * concatenate this into a request.
+ */
+export const CI_TRIGGER_PREFIX = "pull_request:";
 
 /** One option of the "Post results as" control. */
 export interface CiPostAsOption {
@@ -187,6 +213,9 @@ export interface CiStatusDisplay {
 const CI_STATUS_DISPLAY: Record<CiStatusValue, CiStatusDisplay> = {
   succeeded: { labelKey: "runs.status.succeeded", color: "var(--ok)" },
   no_findings: { labelKey: "runs.status.noFindings", color: "var(--ok)" },
+  /* Muted, NOT green: nothing was reviewed, so this is an absence of a verdict
+     rather than a clean one, and a green dot beside it would read as approval. */
+  skipped: { labelKey: "runs.status.skipped", color: "var(--text-muted)" },
   failed: { labelKey: "runs.status.failed", color: "var(--crit)" },
   running: { labelKey: "runs.status.running", color: "var(--warn)" },
   artifact_missing: { labelKey: "runs.status.artifactMissing", color: "var(--text-muted)" },
@@ -207,6 +236,7 @@ export const CI_STATUS_VALUES: readonly CiStatusValue[] = [
   "no_findings",
   "failed",
   "running",
+  "skipped",
   "artifact_missing",
   "artifact_unreadable",
   "result_file_missing",

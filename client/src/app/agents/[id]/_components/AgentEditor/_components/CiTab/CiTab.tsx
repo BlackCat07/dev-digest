@@ -90,26 +90,29 @@ export function CiTab({ agent }: { agent: Agent }) {
   const t = useTranslations("ci");
   const repos = useRepos();
   const installs = useAgentCiInstallations(agent.id);
-  const [wizard, setWizard] = React.useState<{ repo: string } | null>(null);
+  const [wizardOpen, setWizardOpen] = React.useState(false);
 
   const hasRepo = (repos.data ?? []).length > 0;
   const installations = installs.data ?? [];
 
   const heading = (
     <div style={s.header}>
-      <div>
+      <div style={s.headerTitle}>
         <h2 style={s.h2}>{t("ciTab.heading")}</h2>
-        <p style={s.sub}>{t("ciTab.subtitle")}</p>
+        {hasRepo && (
+          <Badge dot color="var(--ok)" bg="transparent">
+            {t("ciTab.activeIn", { count: installations.length })}
+          </Badge>
+        )}
       </div>
       {hasRepo && (
         <div style={s.headerActions}>
-          <Badge color="var(--text-secondary)">{t("ciTab.activeIn", { count: installations.length })}</Badge>
           {installations[0] && (
-            <Button icon="RefreshCw" onClick={() => setWizard({ repo: installations[0]!.repo })}>
+            <Button icon="RefreshCw" onClick={() => setWizardOpen(true)}>
               {t("ciTab.update")}
             </Button>
           )}
-          <Button kind="primary" icon="Upload" onClick={() => setWizard({ repo: "" })}>
+          <Button kind="primary" icon="Plus" onClick={() => setWizardOpen(true)}>
             {t("ciTab.exportToCi")}
           </Button>
         </div>
@@ -163,15 +166,13 @@ export function CiTab({ agent }: { agent: Agent }) {
             ))}
           </ul>
         )}
-        <button type="button" style={{ ...s.addRow, marginTop: 8 }} onClick={() => setWizard({ repo: "" })}>
+        <button type="button" style={{ ...s.addRow, marginTop: 8 }} onClick={() => setWizardOpen(true)}>
           <Icon.Plus size={14} />
           {t("ciTab.addRepo")}
         </button>
       </div>
       <GateSection agent={agent} />
-      {wizard && (
-        <ExportWizard agent={agent} initialRepo={wizard.repo} onClose={() => setWizard(null)} />
-      )}
+      {wizardOpen && <ExportWizard agent={agent} onClose={() => setWizardOpen(false)} />}
     </div>
   );
 }

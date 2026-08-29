@@ -27,8 +27,23 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Agent, CiExport, CiExportPreview, CiInstallation, Repo } from "@devdigest/shared";
 import agentsMessages from "../../../../../../../../messages/en/agents.json";
 import ciMessages from "../../../../../../../../messages/en/ci.json";
+import { RepoProvider } from "@/lib/repo-context";
 import { CiTab } from "./CiTab";
 import { CI_MODEL_KEY_ENV } from "./constants";
+
+/**
+ * The wizard takes its target repository from `useActiveRepo()`, so the tab is
+ * mounted inside a real `RepoProvider` and the provider needs a route. The agent
+ * editor is NOT a repo-scoped route, so no `:repoId` is in the path and the
+ * active repo falls back to the first the workspace lists — which is exactly the
+ * production path this feature runs on. `ContextTab.test.tsx` mocks it the same
+ * way.
+ */
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/agents/ag1",
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 /** Stored as `warning`, so the gate section has a value that is not the default. */
 const AGENT: Agent = {
@@ -173,21 +188,28 @@ function renderTab() {
   return render(
     <QueryClientProvider client={qc}>
       <NextIntlClientProvider locale="en" messages={{ ci: ciMessages, agents: agentsMessages }}>
-        <CiTab agent={AGENT} />
+        <RepoProvider>
+          <CiTab agent={AGENT} />
+        </RepoProvider>
       </NextIntlClientProvider>
     </QueryClientProvider>,
   );
 }
 
-const repoField = () =>
-  screen.getByRole("textbox", { name: ciMessages.exportWizard.repoLabel }) as HTMLInputElement;
 const continueBtn = () => screen.getByRole("button", { name: ciMessages.exportWizard.continue });
 const backBtn = () => screen.getByRole("button", { name: ciMessages.exportWizard.back });
 
-/** Open the wizard from the add-a-repository row and fill in a valid repository. */
-async function openWizardWithRepo(repo = "acme/payments-api") {
+/** The "Post results as" radio carrying `label`. */
+const postAsRadio = (label: string) => screen.getByRole("radio", { name: new RegExp(label) });
+
+/**
+ * Open the wizard from the add-a-repository row.
+ *
+ * Nothing is filled in afterwards: the target repository is the active one and
+ * the step has no control at all.
+ */
+async function openWizard() {
   fireEvent.click(await screen.findByRole("button", { name: ciMessages.ciTab.addRepo }));
-  fireEvent.change(repoField(), { target: { value: repo } });
 }
 
 describe("AgentEditor — CI tab", () => {
@@ -245,7 +267,7 @@ describe("AgentEditor — CI tab", () => {
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
-  it("shows the empty state with no installations, and the add row opens a wizard gated on owner/name", async () => {
+  it("shows the empty state with no installations, and the add row opens the wizard on its four targets", async () => {
     // AC-48 (none), AC-51, AC-52, AC-53.
     routes.set("/agents/ag1/ci-installations", { status: 200, body: [] });
     renderTab();
@@ -261,12 +283,26 @@ describe("AgentEditor — CI tab", () => {
       ),
     ).toEqual(["Target", "Preview", "Configure", "Install"]);
 
-    // AC-52 — GitHub Actions is the only target offered. One card, not four with
-    // three disabled.
-    const targets = within(dialog).getAllByRole("radio");
-    expect(targets).toHaveLength(1);
+    // AC-52 (amended) — all four targets are drawn, and exactly one of them can
+    // be picked. The other three are really `disabled`, not merely dimmed, so no
+    // click can move the selection off GitHub Actions.
+    const group = within(dialog).getByRole("radiogroup", {
+      name: ciMessages.exportWizard.steps.target,
+    });
+    // TWO columns, explicitly. `auto-fit` fitted three cards across this modal
+    // and dropped the fourth alone onto a second row.
+    expect(group).toHaveStyle({ gridTemplateColumns: "repeat(2, 1fr)" });
+    const targets = within(group).getAllByRole("radio");
+    expect(targets).toHaveLength(4);
     const targetTitle = within(targets[0]!).getByText(ciMessages.exportWizard.targets.gha);
     expect(targetTitle).toBeInTheDocument();
+    expect(targets[0]).toBeEnabled();
+    expect(targets[0]).toHaveAttribute("aria-checked", "true");
+    for (const other of targets.slice(1)) {
+      expect(other).toBeDisabled();
+      expect(other).toHaveAttribute("aria-checked", "false");
+      expect(within(other).getByText(ciMessages.exportWizard.comingSoon)).toBeInTheDocument();
+    }
 
     // AC-65 — the four step labels and the target card's title declare
     // `var(--text-primary)`. Asserted on the LITERAL token because an unknown
@@ -279,21 +315,38 @@ describe("AgentEditor — CI tab", () => {
     }
     expect(targetTitle).toHaveStyle({ color: "var(--text-primary)" });
 
-    // AC-53 — Continue stays disabled until the field matches `owner/name`.
-    expect(continueBtn()).toBeDisabled();
-    fireEvent.change(repoField(), { target: { value: "acme" } });
-    expect(continueBtn()).toBeDisabled();
-    fireEvent.change(repoField(), { target: { value: "acme/payments-api" } });
+    // AC-53 — the Target step asks for no repository, in any form. The export
+    // goes to the ACTIVE repo, so there is nothing to type and nothing to pick.
+    expect(within(dialog).queryByRole("combobox")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("textbox")).not.toBeInTheDocument();
     expect(continueBtn()).toBeEnabled();
   });
 
-  it("pre-fills the repository from the update entry, and renders a preview failure inline without losing it", async () => {
-    // N12 (update is the same path, one field answered), AC-55, AC-56.
+  it("sends the ACTIVE repository, not the first installation's", async () => {
+    // AC-53. Two repositories are connected and the agent is already installed
+    // in `acme/payments-api`; the active repo — the first the workspace lists,
+    // since the agent editor carries no `:repoId` — is `acme/billing-worker`.
+    // The export must follow the shell, not the installation list, or "Update CI
+    // config" would silently re-point at whichever row happened to be first.
+    const ACTIVE: Repo = { ...REPO, id: "re0", name: "billing-worker", full_name: "acme/billing-worker" };
+    routes.set("/repos", { status: 200, body: [ACTIVE, REPO] });
+    renderTab();
+
+    await openWizard();
+    fireEvent.click(continueBtn());
+    await screen.findAllByText(PREVIEW.files[0]!.path);
+
+    expect(posts.at(-1)?.path).toBe("/agents/ag1/export-ci/preview");
+    expect(posts.at(-1)?.body).toMatchObject({ repo: "acme/billing-worker" });
+  });
+
+  it("opens the same wizard from the update entry, and renders a preview failure inline", async () => {
+    // N12 (update is the same path, not a second one), AC-55, AC-56.
     routes.set("POST /agents/ag1/export-ci/preview", "pending");
     renderTab();
 
     fireEvent.click(await screen.findByRole("button", { name: ciMessages.ciTab.update }));
-    expect(repoField()).toHaveValue("acme/payments-api");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     // AC-55 — while the preview is generating, the copy says so and Continue is
     // held disabled.
@@ -314,34 +367,41 @@ describe("AgentEditor — CI tab", () => {
     expect(within(alert).getByText("repository not found")).toBeInTheDocument();
     expect(continueBtn()).toBeDisabled();
 
-    // …and returning to Target shows the repository still filled in.
+    // …and Back returns to a Target step that still has GitHub Actions picked.
     fireEvent.click(backBtn());
-    expect(repoField()).toHaveValue("acme/payments-api");
+    expect(screen.getAllByRole("radio")[0]).toHaveAttribute("aria-checked", "true");
   });
 
   it("walks Preview → Configure → Install and opens the pull request", async () => {
     // AC-54, AC-57, AC-58, AC-59, AC-60.
     renderTab();
-    await openWizardWithRepo();
+    await openWizard();
     fireEvent.click(continueBtn());
 
     // AC-54 — every generated file listed by path, in a fixed order.
     const paths = PREVIEW.files.map((f) => f.path);
-    for (const path of paths) expect(await screen.findByText(path)).toBeInTheDocument();
+    // `findAllByText`: the OPEN file's path appears twice, once in its row and
+    // once in the pane header beside it.
+    for (const path of paths) expect((await screen.findAllByText(path)).length).toBeGreaterThan(0);
     const dialog = screen.getByRole("dialog");
     const listed = within(dialog)
       .getAllByRole("listitem")
       .map((li) => li.textContent ?? "");
-    expect(listed.map((text) => paths.find((p) => text.startsWith(p)))).toEqual(paths);
+    expect(listed).toEqual(paths);
 
     // …viewable, and NOT editable: no input and no editor for any file, and the
     // mock's "editable" chip is not shipped.
-    fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${paths[0]}`) }));
+    //
     // Read off the node rather than through a text query: the accessible-name
     // and text-matching normalisation collapses the newlines and the runs of
     // spaces that a YAML file is made of, so only `textContent` can assert the
     // contents VERBATIM (`client/INSIGHTS.md`, 2026-08-19).
+    //
+    // The step opens on the FIRST file rather than on an empty pane…
     expect(dialog.querySelector("pre")?.textContent).toBe(PREVIEW.files[0]!.contents);
+    // …and picking another swaps the pane to it.
+    fireEvent.click(screen.getByRole("button", { name: paths[1]! }));
+    expect(dialog.querySelector("pre")?.textContent).toBe(PREVIEW.files[1]!.contents);
     expect(within(dialog).queryAllByRole("textbox")).toHaveLength(0);
     expect(dialog.querySelectorAll("textarea")).toHaveLength(0);
     expect(within(dialog).getByText(ciMessages.exportWizard.readOnly)).toBeInTheDocument();
@@ -351,7 +411,7 @@ describe("AgentEditor — CI tab", () => {
     fireEvent.click(continueBtn());
     const boxes = screen.getAllByRole("checkbox");
     expect(boxes.map((b) => b.getAttribute("aria-checked"))).toEqual(["true", "true", "true"]);
-    expect(screen.getByRole("combobox")).toHaveValue("github_review");
+    expect(postAsRadio(ciMessages.exportWizard.postAs.githubReview)).toHaveAttribute("aria-checked", "true");
 
     // AC-58 — the sentence about making the check REQUIRED, and no claim that a
     // GitHub App is needed (the stale string this feature replaced).
@@ -375,6 +435,12 @@ describe("AgentEditor — CI tab", () => {
     expect(
       screen.getByText(msg(ciMessages.exportWizard.secretNote, { key: CI_MODEL_KEY_ENV })),
     ).toBeInTheDocument();
+    // …and the OTHER credential, which is a different one: the token DevDigest
+    // commits with. Contents and Pull requests alone still fail, so Workflows is
+    // named — GitHub's 403 never says which permission is missing.
+    const tokenNote = screen.getByText(ciMessages.exportWizard.tokenNote);
+    expect(tokenNote).toBeInTheDocument();
+    expect(tokenNote.textContent).toContain("Workflows");
 
     // AC-60 — the link to the opened (or reused) pull request.
     fireEvent.click(screen.getByRole("button", { name: ciMessages.exportWizard.install }));
@@ -393,12 +459,12 @@ describe("AgentEditor — CI tab", () => {
       body: { error: { code: "github_permission", message: "missing `contents: write`" } },
     });
     renderTab();
-    await openWizardWithRepo();
+    await openWizard();
     fireEvent.click(continueBtn());
-    await screen.findByText(PREVIEW.files[0]!.path);
+    await screen.findAllByText(PREVIEW.files[0]!.path);
 
     fireEvent.click(continueBtn());
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "pr_comment" } });
+    fireEvent.click(postAsRadio(ciMessages.exportWizard.postAs.prComment));
     fireEvent.click(continueBtn());
     fireEvent.click(screen.getByRole("button", { name: ciMessages.exportWizard.install }));
 
@@ -408,10 +474,10 @@ describe("AgentEditor — CI tab", () => {
 
     // Nothing the user chose was thrown away by the failure.
     fireEvent.click(backBtn());
-    expect(screen.getByRole("combobox")).toHaveValue("pr_comment");
+    expect(postAsRadio(ciMessages.exportWizard.postAs.prComment)).toHaveAttribute("aria-checked", "true");
     fireEvent.click(backBtn());
     fireEvent.click(backBtn());
-    expect(repoField()).toHaveValue("acme/payments-api");
+    expect(screen.getAllByRole("radio")[0]).toHaveAttribute("aria-checked", "true");
     await waitFor(() => expect(posts.some((p) => p.path === "/agents/ag1/export-ci")).toBe(true));
   });
 });

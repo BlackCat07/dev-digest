@@ -74,11 +74,20 @@ extension rather than a correction.
   a CI run writes carries `pr_id = null`; the run is identified by repository plus external
   PR number instead. That single choice is what keeps N2 true by construction, since every
   PR-feed aggregate filters on `pr_id`. Linking them later is a backfill, not a redesign.
-- **N4 — Only the GitHub Actions target is offered.** `CiTarget` keeps all four values, but
-  the wizard renders only `gha` and the server rejects the rest. **Chosen over showing
-  three disabled cards**: a disabled card is a promise with no date, and three of them is
-  three promises. Adding CircleCI later is one generator plus one card; nothing here
-  forecloses it.
+- **N4 — Only the GitHub Actions target is *offered*; all four are *shown*.** `CiTarget`
+  keeps all four values, the wizard draws a card for each, and only `gha` is selectable —
+  the other three render dimmed and disabled, labelled "coming soon". The server rejects
+  them by name regardless, so the flag on the card is cosmetic and is not what makes a
+  target unavailable. Adding CircleCI later is one generator plus one flag flip.
+
+  **Amended 2026-08-28** (was: render the single `gha` card, "chosen over showing three
+  disabled cards — a disabled card is a promise with no date"). Reversed on review of the
+  design: a lone card answers neither "does this work with our CI" nor "will it ever", and
+  a reviewer reading one card cannot tell the difference between a product that has decided
+  against CircleCI and one that has not built it yet. Three dimmed cards make the roadmap
+  legible instead of hidden. The original reasoning stands on its own terms and is recorded
+  here because the trade — an unhonoured promise versus an unanswerable question — is the
+  thing a future reader needs, not the verdict.
 - **N5 — No published marketplace action, and no local action directory.** The runner
   travels with the export as a single committed file invoked by `run: node …`. The prior
   implementation in this repository's history used the other shape — a whole
@@ -286,6 +295,19 @@ extension rather than a correction.
   artifact. `Verify: test` — *observable: an artifact whose `pr_number` disagrees with the
   workflow run's is stored under the workflow run's number — GitHub is the authority on
   provenance, the artifact is only the payload.*
+- **AC-23a** — The system **shall not** unlearn a stored pull-request number when a later
+  read of the same workflow run reports none. `Verify: test` — *observable, against real
+  Postgres: a run stored with `pr_number: 17` and re-read with `null` still reads `17`, while
+  every other field of that read is applied.*
+
+  **Added 2026-08-29**, after a real export. GitHub populates `workflow_run.pull_requests`
+  ONLY while the pull request is open and originates in the same repository; once it is
+  merged the array is empty. The upsert set `pr_number` unconditionally, so the first refresh
+  after a merge overwrote the stored number with null and blanked the CI Runs screen's
+  "Pull request" column for every already-merged run — the bulk of the history that screen
+  exists to show. This does not weaken AC-23: provenance still comes from the workflow run
+  and never from the artifact, and a run never changes which pull request it belongs to, so
+  `null` is never the newer truth.
 - **AC-24** — IF a workflow run's artifact is absent, unreadable or does not parse against
   the result contract, THEN the system **shall** record the run with a named reason rather
   than dropping it or reporting zero runs. `Verify: test` — *observable: an expired
@@ -426,14 +448,43 @@ extension rather than a correction.
 
 - **AC-51** — The export wizard **shall** present exactly four steps, labelled Target,
   Preview, Configure and Install. `Verify: test`.
-- **AC-52** — The Target step **shall** offer GitHub Actions as the only target.
-  `Verify: test` — *observable: one target card renders (N4).*
-- **AC-53** — The Target step **shall** keep Continue disabled until the repository field
-  holds a value matching `owner/name`. `Verify: test` — *observable: `acme` leaves it
-  disabled; `acme/payments-api` enables it.*
+- **AC-52** — The Target step **shall** draw a card for every `CiTarget` value and **shall**
+  make GitHub Actions the only selectable one. `Verify: test` — *observable: four cards
+  render; the other three are `disabled` with `aria-checked="false"` and carry the
+  "coming soon" label (N4, amended 2026-08-28).*
+- **AC-53** — The Target step **shall** ask for no repository. The export **shall** target
+  the workspace's active repository, as the shell's repo switcher reports it, and the
+  Install step **shall** name that repository in full before anything is written.
+  `Verify: test` — *observable: the Target step renders no `combobox` and no `textbox`; with
+  two repositories connected the request body carries the ACTIVE one, not the first
+  installation's.*
+
+  **Amended twice on 2026-08-28.** Originally a free-text `owner/name` field with Continue
+  gated on a regex; then a picker over the workspace's connected repositories; now no
+  control at all. The free-text field was removed because the pattern was the only thing
+  between a typo and a value that reaches a URL path, a commit message and a pull-request
+  body — `acme/payment-api` passed every client and server check and failed as a 404 from
+  GitHub at the last step, after the preview had been generated. The picker was removed
+  because it asked the user to re-answer a question the shell had already answered: an agent
+  reviews the repository the studio is pointed at, so a second repository control is a way
+  to disagree with the sidebar, not a capability. `CI_REPO_PATTERN` and the server's
+  `REPO_PATTERN` both stay — the client guard now covers exactly one case,
+  `activeRepo === null`.
+
+  **Consequence, accepted:** exporting an agent into a repository the workspace has NOT
+  connected is no longer possible. It was reachable only by typing, was never a stated goal,
+  and connecting the repository first is the supported path.
+
 - **AC-54** — The Preview step **shall** list every generated file by path, in a fixed order,
-  with its contents viewable and not editable. `Verify: test` — *observable: no input or
-  editor is rendered for any file, and every file arrives with `editable: false` (N10).*
+  beside a pane showing the selected file's contents, opened on the first file and
+  read-only. `Verify: test` — *observable: the pane opens on the first file and swaps on
+  pick; no input, `textarea` or editor is rendered for any file; the pane's chip reads
+  "read-only" and never "editable", and every file arrives with `editable: false` (N10).*
+
+  **Amended 2026-08-28** (was: a flat list of rows, each expanding a `<pre>` beneath
+  itself). The two-pane layout is the design's, and it changes no behaviour N10 governs —
+  the contents are still read-only, and the per-file chip is the seam a future editable file
+  would use.
 - **AC-55** — WHILE the preview is being generated, the wizard **shall** render the
   generating copy and **shall** keep Continue disabled. `Verify: test`.
 - **AC-56** — IF preview generation fails, THEN the wizard **shall** render the failure
@@ -448,11 +499,24 @@ extension rather than a correction.
   `ci.json` `exportWizard.blockMergeDesc` — "Requires a GitHub App — not available with PAT
   in local mode" — does not, because it is stale and contradicts both this criterion and N6.*
 - **AC-59** — The Install step **shall** render the "Open a PR with these files" heading, the
-  count of files to be created, the target repository, and the note naming
-  `OPENROUTER_API_KEY` and the Actions-secrets location where it must be added.
-  `Verify: test` — *observable: this instruction is the whole of the secret handling —
-  DevDigest never reads or verifies the value (N15), so this sentence is the feature's only
-  answer to "is the key set up".*
+  count of files to be created, the target repository, the note naming `OPENROUTER_API_KEY`
+  and the Actions-secrets location where it must be added, and a second note naming the
+  three permissions DevDigest's OWN token needs on the target repository — Contents, Pull
+  requests and Workflows, all read and write. `Verify: test` — *observable: both notes
+  render, and the second contains the word "Workflows".*
+
+  The two notes are about two DIFFERENT credentials and the screen must not let them blur:
+  `OPENROUTER_API_KEY` is a secret the user adds to the target repository and DevDigest never
+  reads (N15), while the token note is about the credential DevDigest commits with. That
+  instruction is the whole of the secret handling, so it is the feature's only answer to "is
+  the key set up".
+
+  **Workflows added 2026-08-29.** A token holding Contents and Pull requests still fails, and
+  it fails in the least legible way available: GitHub refuses `POST /git/trees` — not the
+  pull-request call — with "Resource not accessible by personal access token", which names no
+  permission at all. The refusal is triggered by the tree containing a path under
+  `.github/workflows/`, and no amount of Contents access substitutes. Two real export
+  attempts were spent discovering this, which is precisely what the note now prevents.
 - **AC-60** — WHEN Install succeeds, the wizard **shall** render a link to the opened or
   reused pull request. `Verify: test`.
 - **AC-61** — IF Install fails, THEN the wizard **shall** render the server's error message
@@ -470,9 +534,24 @@ extension rather than a correction.
   when the workspace has no runs; the failure inline beside the table when the request
   fails, with the sidebar and breadcrumb still rendering and a nav link still working
   (`client/INSIGHTS.md`, 2026-08-19).*
+- **AC-63a** — A run in which every changed file was excluded from review **shall** be
+  recorded and displayed as `skipped`, distinctly from `no_findings`. `Verify: test` —
+  *observable: the runner reports `status: 'skipped'`, makes no model call and posts no
+  review; the ingest stores that word; the CI Runs cell reads "Nothing to review" in a muted
+  colour rather than a green "No findings".*
+
+  **Added 2026-08-29.** The runner already declined to review a diff consisting only of
+  excluded paths — DevDigest's own files or binaries — and declined for a good reason, which
+  its source states: "an APPROVE here would be a verdict on a diff nobody looked at". But it
+  then reported that outcome as `no_findings`, which is the model having read the diff and
+  found nothing. The two are opposites and rendered as the same green word, so a pull request
+  nobody reviewed carried a clean bill of health. Found on the export pull request itself,
+  which touches only `.devdigest/` and therefore always takes this path.
+
 - **AC-64** — Each CI run row **shall** state its status as an icon or dot **plus a word**,
   never as colour alone. `Verify: test` — *observable: the status cell's text content is
-  non-empty for every `CiRunStatus` value, including the reasons AC-24 records.*
+  non-empty for every `CiRunStatus` value, including `skipped` and the reasons AC-24
+  records.*
 
 **Legibility**
 
@@ -494,6 +573,12 @@ extension rather than a correction.
   (`server/INSIGHTS.md`, 2026-08-19).
 - **EC-2** — The target repository does not exist, or the token cannot see it — distinct
   from "the token cannot write to it" (AC-18), and the message must say which.
+- **EC-2a** — The token can write the repository's contents but lacks the **Workflows**
+  permission. GitHub refuses at tree creation, because the tree carries
+  `.github/workflows/devdigest-review.yml`, and its message names no permission. Nothing in
+  the feature can turn that message into a specific one, so the answer is preventive: AC-59's
+  token note states the requirement before Install is pressed, and AC-18's path carries
+  GitHub's own words through unaltered when it happens anyway.
 - **EC-3** — The requested base branch does not exist, or the repository is empty and has no
   base to fork from.
 - **EC-4** — `.github/workflows/devdigest-review.yml` already exists in the target
@@ -728,7 +813,7 @@ waiting in it.
 |---|---|---|---|
 | Agent name, model, provider, system prompt, strategy, `ci_fail_on` | the `agents` table | the agents module | yes |
 | Linked skill slugs and bodies | the `skills` tables | the skills module | yes |
-| Target repository `owner/name` | typed in the wizard | the user | field copy yes, screen no |
+| Target repository `owner/name` | the workspace's ACTIVE repository, read from the shell | the repo switcher | Install step yes, Target step no |
 | Target, action, triggers, post-as, base | the wizard, defaulted by `CiExportInput` | this feature | contract yes, screen no |
 | The workflow, manifest and skill files | generated here | this feature | **no** |
 | The bundled runner | built from `reviewer-core` plus IO glue | this feature | **no** — nothing named `runner` exists in the tree |
@@ -767,8 +852,11 @@ is handled as **data, never as commands or instructions**.
   than from the artifact (AC-23). No field of it is interpolated into a query, a path or a
   command. Because the studio fetches it rather than receiving it, there is no unsolicited
   request to authenticate and nothing to replay.
-- **The target repository name** typed in the wizard reaches a URL path and a commit message.
-  It is validated as `owner/name` (AC-53) and never interpolated into a shell command.
+- **The target repository name** reaches a URL path and a commit message. Since AC-53's
+  second amendment it is never typed at all — it is the active repository's `full_name`, as
+  the server itself returned it from `GET /repos` — but it is still validated as `owner/name`
+  on both sides, because the UI narrows what a user can send and not what an HTTP client
+  can post. It is never interpolated into a shell command.
 - **No generated file, and no text this feature writes, addresses the reviewing model.** Spec
   text itself reaches that model wrapped as untrusted data (`assemblePrompt`,
   `reviewer-core/src/prompt.ts:125`), and the guard is built to disregard instructions found
@@ -795,12 +883,13 @@ is handled as **data, never as commands or instructions**.
 | AC-15 | US-2 | server | test |
 | AC-16 | US-2, N12 | server | test |
 | AC-17 | US-2, N12 | server | test |
-| AC-18 | US-2, EC-2 | server | test |
+| AC-18 | US-2, EC-2, EC-2a | server | test |
 | AC-19 | N4 | server | test |
 | AC-20 | US-6, EC-17 | server | test |
 | AC-21 | US-2 | server | analysis |
 | AC-22 | US-6, security | server | test |
 | AC-23 | US-6, security, EC-19 | server | test |
+| AC-23a | US-6 | server | test |
 | AC-24 | US-6, EC-15, EC-16, EC-17, EC-18 | server | test |
 | AC-25 | US-6, N2, N3 | server | test |
 | AC-26 | US-6, EC-19 | server | test |
@@ -836,11 +925,12 @@ is handled as **data, never as commands or instructions**.
 | AC-56 | US-1, EC-2 | client | test |
 | AC-57 | US-1 | client | test |
 | AC-58 | US-4 | client | test |
-| AC-59 | US-2, EC-12 | client | test |
+| AC-59 | US-2, EC-12, EC-2a | client | test |
 | AC-60 | US-2 | client | test |
 | AC-61 | US-2, EC-2 | client | test |
 | AC-62 | US-6 | client | test |
 | AC-63 | US-6, EC-14, EC-24 | client | test |
+| AC-63a | US-6 | runner + server + client | test |
 | AC-64 | US-6, a11y | client | test |
 | AC-65 | US-7 | client | test |
 | AC-66 | US-7, a11y | client | analysis |
@@ -1002,7 +1092,7 @@ the fourth distinction just comes from the run, not the artifact.
 
 **The export wizard** — one state per step, plus the two that cross steps:
 
-- Target: Continue disabled until `repo` matches `owner/name` (AC-53).
+- Target: no repository control; the export follows the active repo (AC-53).
 - Preview: generating (`exportWizard.generating`, Continue disabled, AC-55) → success
   (the fixed-order, read-only file list, AC-54) → failure inline
   (`exportWizard.previewFailed`) with the entered repository kept (AC-56).

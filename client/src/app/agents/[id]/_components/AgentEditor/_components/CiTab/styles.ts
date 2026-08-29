@@ -19,12 +19,60 @@ import type { CSSProperties } from "react";
  * requires exactly those three to. Both values clear 4.5:1 against the surface
  * behind them (`--bg-elevated`, `#1c1c1c` / `#ffffff`).
  */
+
+/** Shared by the selectable target card and the three dimmed ones. */
+const targetCardBase = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 12,
+  textAlign: "left",
+  padding: "14px 16px",
+  borderRadius: 8,
+  width: "100%",
+} satisfies CSSProperties;
+
+/** Shared by the preview's file rows, checked and not. */
+const previewFileRowBase = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 8,
+  width: "100%",
+  padding: "7px 10px",
+  borderRadius: 6,
+  border: "1px solid transparent",
+  background: "transparent",
+  fontSize: 12,
+  lineHeight: 1.45,
+  textAlign: "left",
+  cursor: "pointer",
+} satisfies CSSProperties;
+
+/** Shared by the "Post results as" radio dot, filled and not. */
+const radioDotBase = {
+  width: 16,
+  height: 16,
+  borderRadius: 99,
+  flexShrink: 0,
+  boxSizing: "border-box",
+} satisfies CSSProperties;
+
+/** Shared by a trigger chip and its checked variant. */
+const triggerChipBase = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "7px 12px",
+  borderRadius: 7,
+  fontSize: 13,
+  cursor: "pointer",
+} satisfies CSSProperties;
+
 export const s = {
   // -- the tab ------------------------------------------------------------
   wrap: { display: "flex", flexDirection: "column", gap: 22, maxWidth: 860 } satisfies CSSProperties,
-  header: { display: "flex", alignItems: "flex-start", gap: 14 } satisfies CSSProperties,
+  header: { display: "flex", alignItems: "center", gap: 14 } satisfies CSSProperties,
+  headerTitle: { display: "flex", alignItems: "center", gap: 12, minWidth: 0 } satisfies CSSProperties,
   h2: { fontSize: 18, fontWeight: 700, color: "var(--text-primary)" } satisfies CSSProperties,
-  sub: { fontSize: 13, color: "var(--text-secondary)", marginTop: 4, lineHeight: 1.5 } satisfies CSSProperties,
   headerActions: {
     marginLeft: "auto",
     display: "flex",
@@ -106,19 +154,68 @@ export const s = {
   /** AC-65 — the target card's title. */
   targetTitle: { fontSize: 14, fontWeight: 600, color: "var(--text-primary)" } satisfies CSSProperties,
   targetDesc: { display: "block", fontSize: 12.5, color: "var(--text-secondary)", marginTop: 3 } satisfies CSSProperties,
-  targetGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 } satisfies CSSProperties,
-  targetCard: {
+  /* Exactly two columns, never `auto-fit`: four cards on one 760px-wide modal
+     fit three across and drop the fourth onto a row of its own, which reads as a
+     mistake rather than as a grid. Two-by-two also keeps the one selectable card
+     paired with a disabled one, so the row is not all-live-then-all-dead. */
+  targetGrid: { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 } satisfies CSSProperties,
+  /** The selectable card. */
+  targetCard: { ...targetCardBase, border: "1px solid var(--accent)", background: "var(--accent-bg)", cursor: "default" } satisfies CSSProperties,
+  /**
+   * A target named but not built. Dimmed rather than hidden, and `opacity` on the
+   * card rather than a muted colour on the title, so `targetTitle` keeps the
+   * literal `var(--text-primary)` AC-65 asserts on.
+   */
+  targetCardDisabled: { ...targetCardBase, border: "1px solid var(--border)", background: "transparent", cursor: "not-allowed", opacity: 0.5 } satisfies CSSProperties,
+
+  /** Trigger events, as a row of toggles rather than a column of checkboxes. */
+  triggerChips: { display: "flex", flexWrap: "wrap", gap: 8 } satisfies CSSProperties,
+  triggerChip: { ...triggerChipBase, border: "1px solid var(--border-strong)", background: "transparent", color: "var(--text-secondary)" } satisfies CSSProperties,
+  triggerChipOn: { ...triggerChipBase, border: "1px solid var(--accent)", background: "var(--accent-bg)", color: "var(--accent-text)" } satisfies CSSProperties,
+
+  /** "Post results as" — a composed radiogroup; `vendor/ui` ships no radio. */
+  postAsGroup: { display: "flex", flexDirection: "column", gap: 2 } satisfies CSSProperties,
+  postAsRow: {
     display: "flex",
-    alignItems: "flex-start",
-    gap: 12,
-    textAlign: "left",
-    padding: "14px 16px",
-    borderRadius: 8,
-    border: "1px solid var(--accent)",
-    background: "var(--accent-bg)",
-    cursor: "default",
+    alignItems: "center",
+    gap: 10,
     width: "100%",
+    padding: "7px 4px",
+    border: "none",
+    background: "transparent",
+    textAlign: "left",
+    cursor: "pointer",
   } satisfies CSSProperties,
+  postAsLabel: { fontSize: 14, color: "var(--text-secondary)" } satisfies CSSProperties,
+  radioDot: { ...radioDotBase, border: "1.5px solid var(--border-strong)" } satisfies CSSProperties,
+  /** The filled state, drawn as a ring so the dot reads at 16px. */
+  radioDotOn: { ...radioDotBase, border: "5px solid var(--accent)" } satisfies CSSProperties,
+
+  // -- Preview, as two panes ----------------------------------------------
+  previewSplit: { display: "grid", gridTemplateColumns: "minmax(0, 260px) minmax(0, 1fr)", gap: 14, alignItems: "start" } satisfies CSSProperties,
+  previewListPane: { minWidth: 0 } satisfies CSSProperties,
+  previewFileRow: { ...previewFileRowBase, color: "var(--text-secondary)" } satisfies CSSProperties,
+  previewFileRowOn: { ...previewFileRowBase, border: "1px solid var(--accent)", background: "var(--accent-bg)", color: "var(--accent-text)" } satisfies CSSProperties,
+  /** Paths wrap rather than truncate — the tail is the part that identifies them. */
+  previewFileName: { minWidth: 0, overflowWrap: "anywhere" } satisfies CSSProperties,
+  previewPane: {
+    minWidth: 0,
+    display: "flex",
+    flexDirection: "column",
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--bg-surface)",
+    overflow: "hidden",
+  } satisfies CSSProperties,
+  previewPaneHead: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "10px 12px",
+    borderBottom: "1px solid var(--border)",
+  } satisfies CSSProperties,
+  previewPanePath: { flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--text-primary)", overflowWrap: "anywhere" } satisfies CSSProperties,
+  previewPaneFoot: { padding: "8px 12px", borderTop: "1px solid var(--border)", fontSize: 11.5, color: "var(--text-muted)" } satisfies CSSProperties,
 
   fileList: { display: "flex", flexDirection: "column", gap: 6, listStyle: "none", margin: 0, padding: 0 } satisfies CSSProperties,
   fileRow: {
@@ -142,12 +239,11 @@ export const s = {
    * for every generated file.
    */
   filePre: {
-    margin: "6px 0 0",
+    margin: 0,
     padding: 12,
-    maxHeight: 220,
+    maxHeight: 320,
+    minHeight: 220,
     overflow: "auto",
-    borderRadius: 7,
-    border: "1px solid var(--border)",
     background: "var(--code-bg)",
     color: "var(--text-secondary)",
     fontSize: 12,
@@ -170,7 +266,6 @@ export const s = {
   /** AC-65 — the Install step's heading. */
   installHeading: { fontSize: 15, fontWeight: 700, color: "var(--text-primary)" } satisfies CSSProperties,
   installBody: { fontSize: 13, color: "var(--text-secondary)", marginTop: 6, lineHeight: 1.55 } satisfies CSSProperties,
-  installRepo: { fontSize: 13, color: "var(--text-primary)", marginTop: 10 } satisfies CSSProperties,
 
   /** An inline failure — beside the step it belongs to, never a full-screen state. */
   inlineError: {
