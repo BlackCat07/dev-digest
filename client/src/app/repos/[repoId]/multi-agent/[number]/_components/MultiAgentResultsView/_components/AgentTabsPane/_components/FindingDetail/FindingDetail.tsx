@@ -7,7 +7,7 @@
    here — there is no memory module behind `Learn`, and `Reply to author` exists
    on the pull-request page only as an `aria-disabled` placeholder with no
    handler. Shipping two dead controls on a brand-new screen is a review finding,
-   not fidelity (SPEC-05 N-1, N-2). The pull-request page renders them because
+   not fidelity (SPEC-06 N-1, N-2). The pull-request page renders them because
    it inherited them; this screen never will.
 
    **Nothing here is new machinery.** `Accept` and `Dismiss` go through the
@@ -141,7 +141,12 @@ export function FindingDetail({
           size="sm"
           icon="FlaskConical"
           disabled={evalCase.isPending}
-          onClick={() => evalCase.mutate(finding.id)}
+          /* `{ finding_id }` alone is the untouched-draft body `useCreateEvalCase`
+             documents: L06 (c3e1930) widened this mutation from a bare finding id
+             to `EvalCaseCreate`, whose other three fields the pull-request page's
+             draft modal fills in. This detail pane has no such modal and files the
+             case as derived, which is what the bare body means. */
+          onClick={() => evalCase.mutate({ finding_id: finding.id })}
         >
           {t("detail.turnIntoEvalCase")}
         </Button>
