@@ -6,7 +6,8 @@ adds one feature.
 ## Before answering
 
 Search the curated docs FIRST — they may already answer it — then read code. In each
-package (`client`, `server`, `reviewer-core`, `e2e`, `mcp-server`, `evals`, `agent-runner`):
+package (`client`, `server`, `reviewer-core`, `e2e`, `mcp-server`, `evals`, `agent-runner`;
+`agent-runner-lab/` is archived — see below):
 
 - `INSIGHTS.md` — dated, file-grounded findings; always present
 - `docs/` — curated deep-dives; start at `docs/README.md`
@@ -41,12 +42,18 @@ is built to are the "The rules it is built to" section of its README, because th
 rules the exported workflow depends on and splitting them across two files is how the two drift.
 It is also the one package managed by **npm** (`package-lock.json`), not pnpm.
 
-Upstream carries **two incompatible packages both named `agent-runner`**, and this repository
-ships the `dist/runner.mjs` one described above. `upstream/lesson-7-lab/agent-runner` is the
-other: pnpm, entered through `src/run.ts`, ncc-bundled to `dist/index.js`, with its journal at
-`agent-runner/insights/INSIGHTS.md`. It was vendored here in `7ed4240` and superseded by the
-Export-to-CI feature's own runner at the L07 fan-out merge; a doc, a path or a script that
-names `dist/index.js` or `insights/INSIGHTS.md` is describing that dead variant.
+**And one that is archived, next door:** `agent-runner-lab/` is a SECOND, incompatible
+runner for the same job — pnpm, entered through `src/run.ts`, ncc-bundled to `dist/index.js`,
+with its journal at `agent-runner-lab/insights/INSIGHTS.md` rather than the package root, and
+its own `CLAUDE.md`. It was vendored from `upstream/lesson-7-lab/agent-runner` in `7ed4240`
+and superseded at the L07 fan-out merge, where the Export-to-CI feature's runner took the
+`agent-runner/` directory. **Nothing imports it and no gate runs it**; it is kept as the
+record of that work and still type-checks and passes its 23 tests. Two consequences worth
+knowing before touching either: the two packages share filenames (`src/diff.ts`,
+`src/github.ts`, `src/manifest.ts`, `tsconfig.json`) with different contents, so a path
+alone does not say which runner you are reading; and a doc, a path or a script naming
+`dist/index.js` or `insights/INSIGHTS.md` means the LAB one, while `dist/runner.mjs` and a
+root-level `INSIGHTS.md` mean the shipping one.
 
 ## Session protocol (engineering-insights loop)
 
@@ -102,8 +109,9 @@ Never hand-edit:
 
 - Stack, commands, architecture, how to run → read `README.md`
 - Working inside a package → read that package's CLAUDE.md: `server/CLAUDE.md`,
-  `client/CLAUDE.md`, `reviewer-core/CLAUDE.md`, `e2e/CLAUDE.md`, `mcp-server/CLAUDE.md`.
-  `agent-runner/` has none — read `agent-runner/README.md`
+  `client/CLAUDE.md`, `reviewer-core/CLAUDE.md`, `e2e/CLAUDE.md`, `mcp-server/CLAUDE.md`,
+  `agent-runner-lab/CLAUDE.md`. The shipping `agent-runner/` has none — read
+  `agent-runner/README.md`
 - Agent prompt templates → read `docs/agent-prompts/`
 - **Writing a brief for a subagent** → read `docs/dispatching-subagents.md`. A
   subagent inherits no images and no chat: an artifact reaches it as a **path**, never
