@@ -4198,10 +4198,10 @@ var require_zod = __commonJS({
     };
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.z = void 0;
-    var z24 = __importStar(require_external());
-    exports.z = z24;
+    var z25 = __importStar(require_external());
+    exports.z = z25;
     __exportStar(require_external(), exports);
-    exports.default = z24;
+    exports.default = z25;
   }
 });
 
@@ -7369,7 +7369,7 @@ var require_ponyfill = __commonJS({
       const R = t("[[AbortSteps]]"), T = t("[[ErrorSteps]]"), q = t("[[CancelSteps]]"), C = t("[[PullSteps]]"), P = t("[[ReleaseSteps]]");
       function E(e2, t2) {
         e2._ownerReadableStream = t2, t2._reader = e2, "readable" === t2._state ? B(e2) : "closed" === t2._state ? (function(e3) {
-          B(e3), z24(e3);
+          B(e3), z25(e3);
         })(e2) : A(e2, t2._storedError);
       }
       function W(e2, t2) {
@@ -7395,7 +7395,7 @@ var require_ponyfill = __commonJS({
       function j(e2, t2) {
         void 0 !== e2._closedPromise_reject && (y(e2._closedPromise), e2._closedPromise_reject(t2), e2._closedPromise_resolve = void 0, e2._closedPromise_reject = void 0);
       }
-      function z24(e2) {
+      function z25(e2) {
         void 0 !== e2._closedPromise_resolve && (e2._closedPromise_resolve(void 0), e2._closedPromise_resolve = void 0, e2._closedPromise_reject = void 0);
       }
       const L = Number.isFinite || function(e2) {
@@ -8363,25 +8363,25 @@ var require_ponyfill = __commonJS({
             y(e3);
           }
           function B2() {
-            return v2 = "closed", r2 ? L2() : z25((() => (Xe(t2) && (T2 = ot(t2), R2 = t2._state), T2 || "closed" === R2 ? d(void 0) : "erroring" === R2 || "errored" === R2 ? f(u2) : (T2 = true, l2.close()))), false, void 0), null;
+            return v2 = "closed", r2 ? L2() : z26((() => (Xe(t2) && (T2 = ot(t2), R2 = t2._state), T2 || "closed" === R2 ? d(void 0) : "erroring" === R2 || "errored" === R2 ? f(u2) : (T2 = true, l2.close()))), false, void 0), null;
           }
           function A2(e3) {
-            return S2 || (v2 = "errored", s2 = e3, o2 ? L2(true, e3) : z25((() => l2.abort(e3)), true, e3)), null;
+            return S2 || (v2 = "errored", s2 = e3, o2 ? L2(true, e3) : z26((() => l2.abort(e3)), true, e3)), null;
           }
           function j2(e3) {
-            return w2 || (R2 = "errored", u2 = e3, n2 ? L2(true, e3) : z25((() => i2.cancel(e3)), true, e3)), null;
+            return w2 || (R2 = "errored", u2 = e3, n2 ? L2(true, e3) : z26((() => i2.cancel(e3)), true, e3)), null;
           }
           if (void 0 !== a2 && (O2 = () => {
             const e3 = void 0 !== a2.reason ? a2.reason : new Ot("Aborted", "AbortError"), t3 = [];
-            o2 || t3.push((() => "writable" === R2 ? l2.abort(e3) : d(void 0))), n2 || t3.push((() => "readable" === v2 ? i2.cancel(e3) : d(void 0))), z25((() => Promise.all(t3.map(((e4) => e4())))), true, e3);
+            o2 || t3.push((() => "writable" === R2 ? l2.abort(e3) : d(void 0))), n2 || t3.push((() => "readable" === v2 ? i2.cancel(e3) : d(void 0))), z26((() => Promise.all(t3.map(((e4) => e4())))), true, e3);
           }, a2.aborted ? O2() : a2.addEventListener("abort", O2)), Ut(e2) && (v2 = e2._state, s2 = e2._storedError), Xe(t2) && (R2 = t2._state, u2 = t2._storedError, T2 = ot(t2)), Ut(e2) && Xe(t2) && (q2 = true, p2()), "errored" === v2) A2(s2);
           else if ("erroring" === R2 || "errored" === R2) j2(u2);
           else if ("closed" === v2) B2();
           else if (T2 || "closed" === R2) {
             const e3 = new TypeError("the destination writable stream closed before all data could be piped to it");
-            n2 ? L2(true, e3) : z25((() => i2.cancel(e3)), true, e3);
+            n2 ? L2(true, e3) : z26((() => i2.cancel(e3)), true, e3);
           }
-          function z25(e3, t3, r3) {
+          function z26(e3, t3, r3) {
             function o3() {
               return "writable" !== R2 || T2 ? n3() : _((function() {
                 let e4;
@@ -8396,7 +8396,7 @@ var require_ponyfill = __commonJS({
             S2 || (S2 = true, q2 ? o3() : _(C2, o3));
           }
           function L2(e3, t3) {
-            z25(void 0, e3, t3);
+            z26(void 0, e3, t3);
           }
           function F2(e3, t3) {
             return w2 = true, l2.releaseLock(), i2.releaseLock(), void 0 !== a2 && a2.removeEventListener("abort", O2), e3 ? W2(t3) : E2(void 0), null;
@@ -8767,7 +8767,7 @@ var require_ponyfill = __commonJS({
       function Jt(e2) {
         e2._state = "closed";
         const t2 = e2._reader;
-        if (void 0 !== t2 && (z24(t2), Z(t2))) {
+        if (void 0 !== t2 && (z25(t2), Z(t2))) {
           const e3 = t2._readRequests;
           t2._readRequests = new v(), e3.forEach(((e4) => {
             e4._closeSteps();
@@ -28891,7 +28891,7 @@ var require_dist = __commonJS({
 });
 
 // src/main.ts
-var import_zod24 = __toESM(require_zod(), 1);
+var import_zod25 = __toESM(require_zod(), 1);
 import { readFile as readFile2, writeFile } from "node:fs/promises";
 import { join as join2 } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -28960,7 +28960,7 @@ var FindingAction = import_zod.z.object({
 });
 
 // ../server/src/vendor/shared/contracts/review-api.ts
-var import_zod3 = __toESM(require_zod(), 1);
+var import_zod5 = __toESM(require_zod(), 1);
 
 // ../server/src/vendor/shared/contracts/brief.ts
 var import_zod2 = __toESM(require_zod(), 1);
@@ -29043,226 +29043,390 @@ var PrBrief = import_zod2.z.object({
   history: PrHistory
 });
 
-// ../server/src/vendor/shared/contracts/review-api.ts
-var FindingRecord = Finding.extend({
-  review_id: import_zod3.z.string(),
-  accepted_at: import_zod3.z.string().nullable(),
-  dismissed_at: import_zod3.z.string().nullable()
-});
-var ReviewRecord = import_zod3.z.object({
-  id: import_zod3.z.string(),
-  pr_id: import_zod3.z.string(),
-  agent_id: import_zod3.z.string().nullable(),
-  run_id: import_zod3.z.string().nullable(),
-  agent_name: import_zod3.z.string().nullish(),
-  kind: import_zod3.z.enum(["summary", "review"]),
-  verdict: Verdict.nullable(),
-  summary: import_zod3.z.string().nullable(),
-  score: import_zod3.z.number().int().nullable(),
-  model: import_zod3.z.string().nullable(),
-  grounding: import_zod3.z.string().nullish(),
-  created_at: import_zod3.z.string(),
-  findings: import_zod3.z.array(FindingRecord)
-});
-var ReviewRunTarget = import_zod3.z.object({
-  run_id: import_zod3.z.string(),
-  agent_id: import_zod3.z.string(),
-  agent_name: import_zod3.z.string()
-});
-var ReviewRunResponse = import_zod3.z.object({
-  pr_id: import_zod3.z.string(),
-  runs: import_zod3.z.array(ReviewRunTarget),
-  reviews: import_zod3.z.array(ReviewRecord)
-});
-var PrIntentRecord = Intent.extend({ pr_id: import_zod3.z.string() });
+// ../server/src/vendor/shared/contracts/platform.ts
+var import_zod4 = __toESM(require_zod(), 1);
 
 // ../server/src/vendor/shared/contracts/knowledge.ts
-var import_zod4 = __toESM(require_zod(), 1);
-var ConformanceStatus = import_zod4.z.enum(["implemented", "missing", "out_of_scope"]);
-var ConformanceItem = import_zod4.z.object({
-  requirement: import_zod4.z.string(),
+var import_zod3 = __toESM(require_zod(), 1);
+var ConformanceStatus = import_zod3.z.enum(["implemented", "missing", "out_of_scope"]);
+var ConformanceItem = import_zod3.z.object({
+  requirement: import_zod3.z.string(),
   status: ConformanceStatus,
-  evidence_file: import_zod4.z.string().nullish(),
-  notes: import_zod4.z.string().nullish()
+  evidence_file: import_zod3.z.string().nullish(),
+  notes: import_zod3.z.string().nullish()
 });
-var Conformance = import_zod4.z.object({
-  spec_id: import_zod4.z.string(),
-  spec_title: import_zod4.z.string(),
-  items: import_zod4.z.array(ConformanceItem),
-  completeness_pct: import_zod4.z.number().min(0).max(100)
+var Conformance = import_zod3.z.object({
+  spec_id: import_zod3.z.string(),
+  spec_title: import_zod3.z.string(),
+  items: import_zod3.z.array(ConformanceItem),
+  completeness_pct: import_zod3.z.number().min(0).max(100)
 });
-var OnboardingLink = import_zod4.z.object({
-  label: import_zod4.z.string(),
-  path: import_zod4.z.string()
+var OnboardingLink = import_zod3.z.object({
+  label: import_zod3.z.string(),
+  path: import_zod3.z.string()
 });
-var OnboardingSection = import_zod4.z.object({
-  kind: import_zod4.z.string(),
-  title: import_zod4.z.string(),
-  body: import_zod4.z.string(),
+var OnboardingSection = import_zod3.z.object({
+  kind: import_zod3.z.string(),
+  title: import_zod3.z.string(),
+  body: import_zod3.z.string(),
   // markdown
-  diagram: import_zod4.z.string().nullish(),
+  diagram: import_zod3.z.string().nullish(),
   // mermaid
-  links: import_zod4.z.array(OnboardingLink)
+  links: import_zod3.z.array(OnboardingLink)
 });
-var Onboarding = import_zod4.z.object({
-  sections: import_zod4.z.array(OnboardingSection)
+var Onboarding = import_zod3.z.object({
+  sections: import_zod3.z.array(OnboardingSection)
 });
-var EvalPerTrace = import_zod4.z.object({
-  name: import_zod4.z.string(),
-  pass: import_zod4.z.boolean(),
-  expected: import_zod4.z.unknown(),
-  actual: import_zod4.z.unknown()
+var EvalPerTrace = import_zod3.z.object({
+  name: import_zod3.z.string(),
+  pass: import_zod3.z.boolean(),
+  expected: import_zod3.z.unknown(),
+  actual: import_zod3.z.unknown()
 });
-var EvalRun = import_zod4.z.object({
-  recall: import_zod4.z.number().min(0).max(1),
-  precision: import_zod4.z.number().min(0).max(1),
-  citation_accuracy: import_zod4.z.number().min(0).max(1),
-  traces_passed: import_zod4.z.number().int(),
-  traces_total: import_zod4.z.number().int(),
-  duration_ms: import_zod4.z.number().int(),
-  cost_usd: import_zod4.z.number().nullable(),
-  per_trace: import_zod4.z.array(EvalPerTrace)
+var EvalRun = import_zod3.z.object({
+  recall: import_zod3.z.number().min(0).max(1),
+  precision: import_zod3.z.number().min(0).max(1),
+  citation_accuracy: import_zod3.z.number().min(0).max(1),
+  traces_passed: import_zod3.z.number().int(),
+  traces_total: import_zod3.z.number().int(),
+  duration_ms: import_zod3.z.number().int(),
+  cost_usd: import_zod3.z.number().nullable(),
+  per_trace: import_zod3.z.array(EvalPerTrace)
 });
-var EvalOwnerKind = import_zod4.z.enum(["skill", "agent"]);
-var EvalCase = import_zod4.z.object({
-  id: import_zod4.z.string(),
+var EvalOwnerKind = import_zod3.z.enum(["skill", "agent"]);
+var EvalCase = import_zod3.z.object({
+  id: import_zod3.z.string(),
   owner_kind: EvalOwnerKind,
-  owner_id: import_zod4.z.string(),
-  name: import_zod4.z.string(),
-  input_diff: import_zod4.z.string(),
-  input_files: import_zod4.z.unknown(),
-  input_meta: import_zod4.z.unknown(),
-  expected_output: import_zod4.z.unknown(),
-  notes: import_zod4.z.string().nullish()
+  owner_id: import_zod3.z.string(),
+  name: import_zod3.z.string(),
+  input_diff: import_zod3.z.string(),
+  input_files: import_zod3.z.unknown(),
+  input_meta: import_zod3.z.unknown(),
+  expected_output: import_zod3.z.unknown(),
+  notes: import_zod3.z.string().nullish()
 });
-var MemoryScope = import_zod4.z.enum(["repo", "global", "team"]);
-var MemoryKind = import_zod4.z.enum([
+var MemoryScope = import_zod3.z.enum(["repo", "global", "team"]);
+var MemoryKind = import_zod3.z.enum([
   "decision",
   "convention",
   "preference",
   "fact",
   "learning"
 ]);
-var MemorySource = import_zod4.z.object({
-  pr: import_zod4.z.number().int().nullish(),
-  context: import_zod4.z.string()
+var MemorySource = import_zod3.z.object({
+  pr: import_zod3.z.number().int().nullish(),
+  context: import_zod3.z.string()
 });
-var MemoryItem = import_zod4.z.object({
-  content: import_zod4.z.string(),
+var MemoryItem = import_zod3.z.object({
+  content: import_zod3.z.string(),
   scope: MemoryScope,
   kind: MemoryKind,
-  confidence: import_zod4.z.number().min(0).max(1),
-  sources: import_zod4.z.array(MemorySource)
+  confidence: import_zod3.z.number().min(0).max(1),
+  sources: import_zod3.z.array(MemorySource)
 });
-var SkillType = import_zod4.z.enum(["rubric", "convention", "security", "custom"]);
-var SkillSource = import_zod4.z.enum(["manual", "imported_url", "extracted", "community"]);
-var Skill = import_zod4.z.object({
-  id: import_zod4.z.string(),
-  name: import_zod4.z.string(),
-  description: import_zod4.z.string(),
+var SkillType = import_zod3.z.enum(["rubric", "convention", "security", "custom"]);
+var SkillSource = import_zod3.z.enum(["manual", "imported_url", "extracted", "community"]);
+var Skill = import_zod3.z.object({
+  id: import_zod3.z.string(),
+  name: import_zod3.z.string(),
+  description: import_zod3.z.string(),
   type: SkillType,
   source: SkillSource,
-  body: import_zod4.z.string(),
-  enabled: import_zod4.z.boolean(),
-  version: import_zod4.z.number().int(),
-  evidence_files: import_zod4.z.array(import_zod4.z.string()).nullish()
+  body: import_zod3.z.string(),
+  enabled: import_zod3.z.boolean(),
+  version: import_zod3.z.number().int(),
+  evidence_files: import_zod3.z.array(import_zod3.z.string()).nullish()
 });
-var CommunitySkill = import_zod4.z.object({
-  name: import_zod4.z.string(),
-  repo: import_zod4.z.string(),
-  stars: import_zod4.z.number().int(),
-  lang: import_zod4.z.string(),
-  desc: import_zod4.z.string()
+var CommunitySkill = import_zod3.z.object({
+  name: import_zod3.z.string(),
+  repo: import_zod3.z.string(),
+  stars: import_zod3.z.number().int(),
+  lang: import_zod3.z.string(),
+  desc: import_zod3.z.string()
 });
-var ConventionCandidate = import_zod4.z.object({
-  id: import_zod4.z.string(),
-  rule: import_zod4.z.string(),
-  evidence_path: import_zod4.z.string(),
-  evidence_snippet: import_zod4.z.string(),
-  confidence: import_zod4.z.number().min(0).max(1),
-  accepted: import_zod4.z.boolean()
+var ConventionCandidate = import_zod3.z.object({
+  id: import_zod3.z.string(),
+  rule: import_zod3.z.string(),
+  evidence_path: import_zod3.z.string(),
+  evidence_snippet: import_zod3.z.string(),
+  confidence: import_zod3.z.number().min(0).max(1),
+  accepted: import_zod3.z.boolean()
 });
-var Provider = import_zod4.z.enum(["openai", "anthropic", "openrouter"]);
-var ReviewStrategy = import_zod4.z.enum(["single-pass", "map-reduce", "auto"]);
-var CiFailOn = import_zod4.z.enum(["never", "critical", "warning", "any"]);
-var Agent = import_zod4.z.object({
-  id: import_zod4.z.string(),
-  name: import_zod4.z.string(),
-  description: import_zod4.z.string(),
+var Provider = import_zod3.z.enum(["openai", "anthropic", "openrouter"]);
+var ReviewStrategy = import_zod3.z.enum(["single-pass", "map-reduce", "auto"]);
+var CiFailOn = import_zod3.z.enum(["never", "critical", "warning", "any"]);
+var Agent = import_zod3.z.object({
+  id: import_zod3.z.string(),
+  name: import_zod3.z.string(),
+  description: import_zod3.z.string(),
   provider: Provider,
-  model: import_zod4.z.string(),
-  system_prompt: import_zod4.z.string(),
-  output_schema: import_zod4.z.unknown().nullish(),
-  enabled: import_zod4.z.boolean(),
-  version: import_zod4.z.number().int(),
+  model: import_zod3.z.string(),
+  system_prompt: import_zod3.z.string(),
+  output_schema: import_zod3.z.unknown().nullish(),
+  enabled: import_zod3.z.boolean(),
+  version: import_zod3.z.number().int(),
   strategy: ReviewStrategy.default("single-pass"),
   ci_fail_on: CiFailOn.default("critical"),
   // Inject repo-intel context (repo skeleton + callers + rank note) into this
   // agent's review prompt. Default on; gated again by the global flag.
-  repo_intel: import_zod4.z.boolean().default(true)
+  repo_intel: import_zod3.z.boolean().default(true)
 });
-var AgentSkillLink = import_zod4.z.object({
-  agent_id: import_zod4.z.string(),
-  skill_id: import_zod4.z.string(),
-  order: import_zod4.z.number().int()
+var AgentSkillLink = import_zod3.z.object({
+  agent_id: import_zod3.z.string(),
+  skill_id: import_zod3.z.string(),
+  order: import_zod3.z.number().int()
 });
-var AgentVersionConfig = import_zod4.z.object({
+var AgentVersionConfig = import_zod3.z.object({
   provider: Provider,
-  model: import_zod4.z.string(),
-  system_prompt: import_zod4.z.string(),
-  output_schema: import_zod4.z.unknown().nullish(),
+  model: import_zod3.z.string(),
+  system_prompt: import_zod3.z.string(),
+  output_schema: import_zod3.z.unknown().nullish(),
   strategy: ReviewStrategy,
   ci_fail_on: CiFailOn,
-  repo_intel: import_zod4.z.boolean(),
-  skills: import_zod4.z.array(import_zod4.z.string())
+  repo_intel: import_zod3.z.boolean(),
+  skills: import_zod3.z.array(import_zod3.z.string())
 });
-var AgentVersion = import_zod4.z.object({
-  agent_id: import_zod4.z.string(),
-  version: import_zod4.z.number().int(),
+var AgentVersion = import_zod3.z.object({
+  agent_id: import_zod3.z.string(),
+  version: import_zod3.z.number().int(),
   config: AgentVersionConfig,
-  created_at: import_zod4.z.string()
+  created_at: import_zod3.z.string()
 });
 
-// ../server/src/vendor/shared/contracts/skills.ts
-var import_zod5 = __toESM(require_zod(), 1);
-var SkillVersion = import_zod5.z.object({
-  version: import_zod5.z.number().int(),
-  body: import_zod5.z.string(),
-  created_at: import_zod5.z.string()
+// ../server/src/vendor/shared/contracts/platform.ts
+var FeatureModelId = import_zod4.z.enum([
+  "onboarding",
+  "review_intent",
+  "risk_brief",
+  "conformance",
+  "conventions",
+  "multi_agent_notes"
+]);
+var FeatureModelChoice = import_zod4.z.object({
+  provider: Provider,
+  model: import_zod4.z.string().min(1)
 });
-var SkillUsage = import_zod5.z.object({
+var SettingsKnown = import_zod4.z.object({
+  polling_interval_min: import_zod4.z.number().int().min(1).default(5),
+  theme: import_zod4.z.enum(["dark", "light"]).default("dark"),
+  density: import_zod4.z.enum(["regular", "compact"]).default("regular"),
+  sync_to_folder: import_zod4.z.boolean().default(true),
+  automatic_reviews: import_zod4.z.boolean().default(false),
+  /** Per-feature model overrides (provider+model), keyed by FeatureModelId. */
+  feature_models: import_zod4.z.record(FeatureModelId, FeatureModelChoice).default({})
+});
+var Settings = SettingsKnown.passthrough();
+var SettingsUpdate = Settings.partial();
+var ConnTestProvider = import_zod4.z.enum(["openai", "anthropic", "openrouter", "github"]);
+var ConnTestRequest = import_zod4.z.object({
+  provider: ConnTestProvider,
+  /** Optional API key/PAT to persist and then test (BYO key from the UI). */
+  key: import_zod4.z.string().min(1).optional()
+});
+var ConnTestResult = import_zod4.z.object({
+  provider: ConnTestProvider,
+  ok: import_zod4.z.boolean(),
+  message: import_zod4.z.string(),
+  detail: import_zod4.z.unknown().optional()
+});
+var SecretsStatus = import_zod4.z.object({
+  openai: import_zod4.z.boolean(),
+  anthropic: import_zod4.z.boolean(),
+  openrouter: import_zod4.z.boolean(),
+  github: import_zod4.z.boolean()
+});
+var RepoInput = import_zod4.z.object({
+  url: import_zod4.z.string().url()
+});
+var Repo = import_zod4.z.object({
+  id: import_zod4.z.string(),
+  workspace_id: import_zod4.z.string(),
+  owner: import_zod4.z.string(),
+  name: import_zod4.z.string(),
+  full_name: import_zod4.z.string(),
+  default_branch: import_zod4.z.string(),
+  clone_path: import_zod4.z.string().nullable(),
+  last_polled_at: import_zod4.z.string().nullable(),
+  created_by: import_zod4.z.string().nullable()
+});
+var PrStatus = import_zod4.z.enum(["needs_review", "reviewed", "stale", "open", "closed", "merged"]);
+var PrMeta = import_zod4.z.object({
+  id: import_zod4.z.string().nullish(),
+  number: import_zod4.z.number().int(),
+  title: import_zod4.z.string(),
+  author: import_zod4.z.string(),
+  branch: import_zod4.z.string(),
+  base: import_zod4.z.string(),
+  head_sha: import_zod4.z.string(),
+  additions: import_zod4.z.number().int(),
+  deletions: import_zod4.z.number().int(),
+  files_count: import_zod4.z.number().int(),
+  status: PrStatus,
+  opened_at: import_zod4.z.string().nullish(),
+  updated_at: import_zod4.z.string().nullish(),
+  // LOWEST score across the agents that reviewed this PR — a review fans out over
+  // N agents, and the worst verdict gates the PR (list endpoint only; null/absent
+  // until reviewed).
+  score: import_zod4.z.number().int().nullish(),
+  // TOTAL USD spent reviewing this PR: the sum over agents of each agent's latest
+  // completed run (list endpoint only; null/absent until a run finishes, and null
+  // when no price is known for any of the models).
+  cost_usd: import_zod4.z.number().nullish(),
+  // FINDINGS per severity, SUMMED OVER EVERY PERSISTED REVIEW RUN of this PR —
+  // deliberately NOT the latest-run-per-agent basis `score`/`cost_usd` use above,
+  // so re-running the same agent 3x triples these numbers. That is on purpose:
+  // the list column has to equal the "Agent runs" tab badge on the PR detail
+  // page, which is `reviews.flatMap(r => r.findings).length`. List endpoint only
+  // (absent from every other PrMeta producer); all-zero for a never-reviewed PR,
+  // which the UI renders the same as absent.
+  findings_by_severity: FindingsBySeverity.nullish()
+});
+var PrFile = import_zod4.z.object({
+  path: import_zod4.z.string(),
+  additions: import_zod4.z.number().int(),
+  deletions: import_zod4.z.number().int(),
+  patch: import_zod4.z.string().nullish()
+});
+var PrCommit = import_zod4.z.object({
+  sha: import_zod4.z.string(),
+  message: import_zod4.z.string(),
+  author: import_zod4.z.string(),
+  committed_at: import_zod4.z.string().nullish()
+});
+var IssueMeta = import_zod4.z.object({
+  number: import_zod4.z.number().int(),
+  title: import_zod4.z.string(),
+  body: import_zod4.z.string().nullish(),
+  state: import_zod4.z.string()
+});
+var PrDetail = PrMeta.extend({
+  body: import_zod4.z.string().nullish(),
+  files: import_zod4.z.array(PrFile),
+  commits: import_zod4.z.array(PrCommit),
+  linked_issue: IssueMeta.nullish()
+});
+var PrReviewComment = import_zod4.z.object({
+  id: import_zod4.z.number().int(),
+  path: import_zod4.z.string(),
+  line: import_zod4.z.number().int().nullable(),
+  original_line: import_zod4.z.number().int().nullable(),
+  side: import_zod4.z.enum(["LEFT", "RIGHT"]),
+  body: import_zod4.z.string(),
+  user: import_zod4.z.string(),
+  created_at: import_zod4.z.string(),
+  html_url: import_zod4.z.string(),
+  in_reply_to_id: import_zod4.z.number().int().nullable(),
+  /** GitHub couldn't anchor it to the current diff (line == null). */
+  is_outdated: import_zod4.z.boolean()
+});
+var PrCommentInput = import_zod4.z.object({
+  path: import_zod4.z.string().min(1),
+  line: import_zod4.z.number().int().positive(),
+  side: import_zod4.z.enum(["LEFT", "RIGHT"]).optional(),
+  body: import_zod4.z.string().min(1),
+  /** Reply to an existing review comment thread (its comment id). */
+  in_reply_to: import_zod4.z.number().int().optional()
+});
+var SpecFile = import_zod4.z.object({
+  path: import_zod4.z.string(),
+  content: import_zod4.z.string().nullish(),
+  size: import_zod4.z.number().int().nullish(),
+  updated_at: import_zod4.z.string().nullish()
+});
+var IndexStatus = import_zod4.z.object({
+  status: import_zod4.z.enum(["idle", "cloning", "parsing", "embedding", "done", "error"]),
+  pct: import_zod4.z.number().min(0).max(100),
+  message: import_zod4.z.string().nullish(),
+  chunks_indexed: import_zod4.z.number().int().nullish()
+});
+var RunRequest = import_zod4.z.object({
+  agentId: import_zod4.z.string().optional(),
+  all: import_zod4.z.boolean().optional()
+});
+var ApiErrorBody = import_zod4.z.object({
+  error: import_zod4.z.object({
+    code: import_zod4.z.string(),
+    message: import_zod4.z.string(),
+    details: import_zod4.z.unknown().optional()
+  })
+});
+
+// ../server/src/vendor/shared/contracts/review-api.ts
+var FindingRecord = Finding.extend({
+  review_id: import_zod5.z.string(),
+  accepted_at: import_zod5.z.string().nullable(),
+  dismissed_at: import_zod5.z.string().nullable()
+});
+var ReviewRecord = import_zod5.z.object({
+  id: import_zod5.z.string(),
+  pr_id: import_zod5.z.string(),
+  agent_id: import_zod5.z.string().nullable(),
+  run_id: import_zod5.z.string().nullable(),
+  agent_name: import_zod5.z.string().nullish(),
+  kind: import_zod5.z.enum(["summary", "review"]),
+  verdict: Verdict.nullable(),
+  summary: import_zod5.z.string().nullable(),
+  score: import_zod5.z.number().int().nullable(),
+  model: import_zod5.z.string().nullable(),
+  grounding: import_zod5.z.string().nullish(),
+  created_at: import_zod5.z.string(),
+  findings: import_zod5.z.array(FindingRecord)
+});
+var ReviewRunRequest = RunRequest.extend({
+  agentIds: import_zod5.z.array(import_zod5.z.string()).optional()
+});
+var ReviewRunTarget = import_zod5.z.object({
+  run_id: import_zod5.z.string(),
+  agent_id: import_zod5.z.string(),
+  agent_name: import_zod5.z.string()
+});
+var ReviewRunResponse = import_zod5.z.object({
+  pr_id: import_zod5.z.string(),
+  runs: import_zod5.z.array(ReviewRunTarget),
+  reviews: import_zod5.z.array(ReviewRecord)
+});
+var PrIntentRecord = Intent.extend({ pr_id: import_zod5.z.string() });
+
+// ../server/src/vendor/shared/contracts/skills.ts
+var import_zod6 = __toESM(require_zod(), 1);
+var SkillVersion = import_zod6.z.object({
+  version: import_zod6.z.number().int(),
+  body: import_zod6.z.string(),
+  created_at: import_zod6.z.string()
+});
+var SkillUsage = import_zod6.z.object({
   /** Agents this skill is linked to right now. */
-  used_by: import_zod5.z.number().int(),
+  used_by: import_zod6.z.number().int(),
   /**
    * Share of runs by linked agents that actually carried this skill, 0..1.
    * null when those agents have no completed runs at all.
    */
-  pull_rate: import_zod5.z.number().min(0).max(1).nullable(),
+  pull_rate: import_zod6.z.number().min(0).max(1).nullable(),
   /**
    * accepted / (accepted + dismissed) over findings from runs that carried this
    * skill, 0..1. null when nothing has been triaged yet.
    */
-  accept_rate: import_zod5.z.number().min(0).max(1).nullable(),
+  accept_rate: import_zod6.z.number().min(0).max(1).nullable(),
   /** Findings produced by runs that carried this skill, last 30 days. */
-  findings_30d: import_zod5.z.number().int()
+  findings_30d: import_zod6.z.number().int()
 });
 var SkillWithUsage = Skill.extend({ usage: SkillUsage });
-var SkillStats = import_zod5.z.object({
+var SkillStats = import_zod6.z.object({
   usage: SkillUsage,
-  agents: import_zod5.z.array(import_zod5.z.object({ id: import_zod5.z.string(), name: import_zod5.z.string() })),
-  findings_by_category: import_zod5.z.array(
-    import_zod5.z.object({ category: import_zod5.z.string(), count: import_zod5.z.number().int() })
+  agents: import_zod6.z.array(import_zod6.z.object({ id: import_zod6.z.string(), name: import_zod6.z.string() })),
+  findings_by_category: import_zod6.z.array(
+    import_zod6.z.object({ category: import_zod6.z.string(), count: import_zod6.z.number().int() })
   )
 });
-var SkillImportPayload = import_zod5.z.object({
-  body: import_zod5.z.string().min(1),
-  name: import_zod5.z.string().optional(),
+var SkillImportPayload = import_zod6.z.object({
+  body: import_zod6.z.string().min(1),
+  name: import_zod6.z.string().optional(),
   type: SkillType.optional()
 });
 
 // ../server/src/vendor/shared/contracts/conventions.ts
-var import_zod6 = __toESM(require_zod(), 1);
-var ConventionCategory = import_zod6.z.enum([
+var import_zod7 = __toESM(require_zod(), 1);
+var ConventionCategory = import_zod7.z.enum([
   "naming",
   "structure",
   "error-handling",
@@ -29274,138 +29438,138 @@ var ConventionCategory = import_zod6.z.enum([
   "typing",
   "security"
 ]);
-var ConventionEvidenceMatch = import_zod6.z.enum(["exact", "shifted", "moved"]);
-var ConventionEvidence = import_zod6.z.object({
+var ConventionEvidenceMatch = import_zod7.z.enum(["exact", "shifted", "moved"]);
+var ConventionEvidence = import_zod7.z.object({
   /** Repo-relative, forward-slash separated. Always inside the clone root. */
-  path: import_zod6.z.string(),
+  path: import_zod7.z.string(),
   /** 1-based, and CORRECTED to where the snippet was actually found. */
-  start_line: import_zod6.z.number().int().positive(),
-  end_line: import_zod6.z.number().int().positive(),
+  start_line: import_zod7.z.number().int().positive(),
+  end_line: import_zod7.z.number().int().positive(),
   /** The lines as they appear in the file, not as the model re-typed them. */
-  snippet: import_zod6.z.string(),
+  snippet: import_zod7.z.string(),
   match: ConventionEvidenceMatch
 });
-var ConventionAdherence = import_zod6.z.object({
-  conforming: import_zod6.z.number().int().nonnegative(),
-  violating: import_zod6.z.number().int().nonnegative()
+var ConventionAdherence = import_zod7.z.object({
+  conforming: import_zod7.z.number().int().nonnegative(),
+  violating: import_zod7.z.number().int().nonnegative()
 });
-var ConventionStatus = import_zod6.z.enum(["pending", "accepted", "rejected"]);
-var ExtractedConvention = import_zod6.z.object({
-  id: import_zod6.z.string(),
+var ConventionStatus = import_zod7.z.enum(["pending", "accepted", "rejected"]);
+var ExtractedConvention = import_zod7.z.object({
+  id: import_zod7.z.string(),
   category: ConventionCategory,
   /** The rule as a checkable statement, e.g. "Route handlers never call fetch directly". */
-  rule: import_zod6.z.string(),
+  rule: import_zod7.z.string(),
   /** Why this is a rule here — one or two sentences, shown under the rule. */
-  rationale: import_zod6.z.string(),
+  rationale: import_zod7.z.string(),
   /** At least one: a candidate with no surviving evidence is never persisted. */
-  evidence: import_zod6.z.array(ConventionEvidence).min(1),
+  evidence: import_zod7.z.array(ConventionEvidence).min(1),
   /** 0..1. Derived from `adherence` when it is present. */
-  confidence: import_zod6.z.number().min(0).max(1),
+  confidence: import_zod7.z.number().min(0).max(1),
   adherence: ConventionAdherence.nullable(),
   status: ConventionStatus,
   /** True once a human has edited the rule text, so a re-scan leaves it alone. */
-  edited: import_zod6.z.boolean(),
+  edited: import_zod7.z.boolean(),
   /** The skill this candidate was folded into, if one has been generated. */
-  skill_id: import_zod6.z.string().nullable(),
-  created_at: import_zod6.z.string()
+  skill_id: import_zod7.z.string().nullable(),
+  created_at: import_zod7.z.string()
 });
-var ConventionScanStatus = import_zod6.z.enum([
+var ConventionScanStatus = import_zod7.z.enum([
   "queued",
   "running",
   "done",
   "partial",
   "failed"
 ]);
-var ConventionScan = import_zod6.z.object({
-  id: import_zod6.z.string(),
+var ConventionScan = import_zod7.z.object({
+  id: import_zod7.z.string(),
   status: ConventionScanStatus,
   /** The commit the clone sat at. Evidence line numbers and GitHub links pin to it. */
-  commit_sha: import_zod6.z.string().nullable(),
+  commit_sha: import_zod7.z.string().nullable(),
   /** Files in the repo that were eligible before the budget capped anything. */
-  eligible_files: import_zod6.z.number().int().nonnegative(),
+  eligible_files: import_zod7.z.number().int().nonnegative(),
   /** Files actually read into the prompt. Equals `eligible_files` unless capped. */
-  sampled_files: import_zod6.z.number().int().nonnegative(),
-  proposed: import_zod6.z.number().int().nonnegative(),
-  dropped_unverified: import_zod6.z.number().int().nonnegative(),
-  dropped_low_adherence: import_zod6.z.number().int().nonnegative(),
-  kept: import_zod6.z.number().int().nonnegative(),
+  sampled_files: import_zod7.z.number().int().nonnegative(),
+  proposed: import_zod7.z.number().int().nonnegative(),
+  dropped_unverified: import_zod7.z.number().int().nonnegative(),
+  dropped_low_adherence: import_zod7.z.number().int().nonnegative(),
+  kept: import_zod7.z.number().int().nonnegative(),
   /** null until the run finishes, and when the provider reports no usage. */
-  cost_usd: import_zod6.z.number().nullable(),
-  started_at: import_zod6.z.string(),
-  finished_at: import_zod6.z.string().nullable(),
-  error: import_zod6.z.string().nullable()
+  cost_usd: import_zod7.z.number().nullable(),
+  started_at: import_zod7.z.string(),
+  finished_at: import_zod7.z.string().nullable(),
+  error: import_zod7.z.string().nullable()
 });
-var ConventionScanBlocker = import_zod6.z.enum([
+var ConventionScanBlocker = import_zod7.z.enum([
   "not_cloned",
   "not_indexed",
   "scan_running"
 ]);
-var ConventionBudgetCap = import_zod6.z.enum(["files", "tokens"]);
-var ConventionScanBudget = import_zod6.z.object({
+var ConventionBudgetCap = import_zod7.z.enum(["files", "tokens"]);
+var ConventionScanBudget = import_zod7.z.object({
   /** Files the indexer indexed for this repo. */
-  indexed_files: import_zod6.z.number().int().nonnegative(),
+  indexed_files: import_zod7.z.number().int().nonnegative(),
   /** Of those, the ones this extractor would consider. */
-  eligible_files: import_zod6.z.number().int().nonnegative(),
-  planned_sample: import_zod6.z.number().int().nonnegative(),
-  planned_tokens: import_zod6.z.number().int().nonnegative(),
+  eligible_files: import_zod7.z.number().int().nonnegative(),
+  planned_sample: import_zod7.z.number().int().nonnegative(),
+  planned_tokens: import_zod7.z.number().int().nonnegative(),
   /** One model call per selected category. */
-  planned_calls: import_zod6.z.number().int().nonnegative(),
+  planned_calls: import_zod7.z.number().int().nonnegative(),
   /** null when no price is known for the resolved model. */
-  estimated_cost_usd: import_zod6.z.number().nullable(),
+  estimated_cost_usd: import_zod7.z.number().nullable(),
   capped_by: ConventionBudgetCap.nullable(),
-  can_scan: import_zod6.z.boolean(),
+  can_scan: import_zod7.z.boolean(),
   blocked_reason: ConventionScanBlocker.nullable()
 });
-var ConventionsPayload = import_zod6.z.object({
+var ConventionsPayload = import_zod7.z.object({
   /** null before the first scan of this repo. */
   scan: ConventionScan.nullable(),
   budget: ConventionScanBudget,
-  candidates: import_zod6.z.array(ExtractedConvention),
+  candidates: import_zod7.z.array(ExtractedConvention),
   /** For the "open on GitHub" links; `sha` mirrors `scan.commit_sha`. */
-  repo: import_zod6.z.object({
-    full_name: import_zod6.z.string(),
-    sha: import_zod6.z.string().nullable()
+  repo: import_zod7.z.object({
+    full_name: import_zod7.z.string(),
+    sha: import_zod7.z.string().nullable()
   })
 });
-var ConventionScanOptions = import_zod6.z.object({
+var ConventionScanOptions = import_zod7.z.object({
   /** Omitted = every category. */
-  categories: import_zod6.z.array(ConventionCategory).min(1).optional(),
+  categories: import_zod7.z.array(ConventionCategory).min(1).optional(),
   /** Repo-relative subtree prefixes, e.g. ["src/modules"]. Omitted = whole repo. */
-  paths: import_zod6.z.array(import_zod6.z.string()).min(1).optional(),
+  paths: import_zod7.z.array(import_zod7.z.string()).min(1).optional(),
   /** Floor a candidate's measured adherence must clear, 0..1. */
-  min_adherence: import_zod6.z.number().min(0).max(1).optional(),
+  min_adherence: import_zod7.z.number().min(0).max(1).optional(),
   /** Fewest occurrences a rule needs before it counts as a convention. */
-  min_occurrences: import_zod6.z.number().int().positive().optional(),
+  min_occurrences: import_zod7.z.number().int().positive().optional(),
   /** Lower the file ceiling for a cheaper run; can never raise it past the cap. */
-  max_files: import_zod6.z.number().int().positive().optional()
+  max_files: import_zod7.z.number().int().positive().optional()
 });
-var UpdateConventionPayload = import_zod6.z.object({
+var UpdateConventionPayload = import_zod7.z.object({
   status: ConventionStatus.optional(),
-  rule: import_zod6.z.string().min(1).optional(),
-  rationale: import_zod6.z.string().min(1).optional(),
+  rule: import_zod7.z.string().min(1).optional(),
+  rationale: import_zod7.z.string().min(1).optional(),
   category: ConventionCategory.optional()
 });
-var ComposedConventionSkill = import_zod6.z.object({
-  name: import_zod6.z.string(),
-  description: import_zod6.z.string(),
-  body: import_zod6.z.string(),
-  evidence_files: import_zod6.z.array(import_zod6.z.string()),
+var ComposedConventionSkill = import_zod7.z.object({
+  name: import_zod7.z.string(),
+  description: import_zod7.z.string(),
+  body: import_zod7.z.string(),
+  evidence_files: import_zod7.z.array(import_zod7.z.string()),
   /** Which accepted candidates went into this one. */
-  candidate_ids: import_zod6.z.array(import_zod6.z.string())
+  candidate_ids: import_zod7.z.array(import_zod7.z.string())
 });
-var CreateConventionSkillPayload = import_zod6.z.object({
-  candidate_ids: import_zod6.z.array(import_zod6.z.string()).min(1),
+var CreateConventionSkillPayload = import_zod7.z.object({
+  candidate_ids: import_zod7.z.array(import_zod7.z.string()).min(1),
   /** Defaults to `<repo-slug>-conventions`. */
-  name: import_zod6.z.string().min(1).optional(),
-  description: import_zod6.z.string().optional(),
+  name: import_zod7.z.string().min(1).optional(),
+  description: import_zod7.z.string().optional(),
   /** Defaults to `convention`, which is what an extracted skill is. */
   type: SkillType.optional(),
-  enabled: import_zod6.z.boolean().optional()
+  enabled: import_zod7.z.boolean().optional()
 });
 
 // ../server/src/vendor/shared/contracts/intent.ts
-var import_zod7 = __toESM(require_zod(), 1);
-var IntentSourceKind = import_zod7.z.enum([
+var import_zod8 = __toESM(require_zod(), 1);
+var IntentSourceKind = import_zod8.z.enum([
   "pr_title",
   "pr_body",
   "file_list",
@@ -29414,24 +29578,24 @@ var IntentSourceKind = import_zod7.z.enum([
   "repo_doc",
   "unfetched_link"
 ]);
-var IntentSourceStatus = import_zod7.z.enum(["used", "unfetched"]);
-var IntentSource = import_zod7.z.object({
+var IntentSourceStatus = import_zod8.z.enum(["used", "unfetched"]);
+var IntentSource = import_zod8.z.object({
   kind: IntentSourceKind,
   /** Identifier of the source: a path, an issue reference, or an origin+path. */
-  ref: import_zod7.z.string(),
+  ref: import_zod8.z.string(),
   status: IntentSourceStatus,
-  chars: import_zod7.z.number().int().nullable(),
-  note: import_zod7.z.string().nullable()
+  chars: import_zod8.z.number().int().nullable(),
+  note: import_zod8.z.string().nullable()
 });
-var IntentStatus = import_zod7.z.enum(["running", "ok", "partial", "failed"]);
+var IntentStatus = import_zod8.z.enum(["running", "ok", "partial", "failed"]);
 var PrIntent = PrIntentRecord.extend({
-  intent: import_zod7.z.string().nullable(),
+  intent: import_zod8.z.string().nullable(),
   /** Head commit the derivation was made against; drives staleness. */
-  head_sha: import_zod7.z.string().nullable(),
-  confidence: import_zod7.z.number(),
-  sources: import_zod7.z.array(IntentSource),
+  head_sha: import_zod8.z.string().nullable(),
+  confidence: import_zod8.z.number(),
+  sources: import_zod8.z.array(IntentSource),
   /** What we could not read, stated plainly — never filled in by guessing. */
-  missing_context: import_zod7.z.array(import_zod7.z.string()),
+  missing_context: import_zod8.z.array(import_zod8.z.string()),
   /**
    * Where this change is most likely to hurt (L03).
    *
@@ -29448,27 +29612,27 @@ var PrIntent = PrIntentRecord.extend({
    * Every `file_refs` entry has been checked against the PR's real changed-file
    * list before it reaches this field; invented paths are dropped, not stored.
    */
-  risk_areas: import_zod7.z.array(Risk),
+  risk_areas: import_zod8.z.array(Risk),
   status: IntentStatus,
-  provider: import_zod7.z.string().nullable(),
-  model: import_zod7.z.string().nullable(),
-  tokens_in: import_zod7.z.number().int().nullable(),
-  tokens_out: import_zod7.z.number().int().nullable(),
+  provider: import_zod8.z.string().nullable(),
+  model: import_zod8.z.string().nullable(),
+  tokens_in: import_zod8.z.number().int().nullable(),
+  tokens_out: import_zod8.z.number().int().nullable(),
   // USD cost of the derivation. null = no price is known for the model — NOT the
   // same as a free call (which is 0).
-  cost_usd: import_zod7.z.number().nullable(),
-  derived_at: import_zod7.z.string().nullable(),
+  cost_usd: import_zod8.z.number().nullable(),
+  derived_at: import_zod8.z.string().nullable(),
   /** Failure message when `status` is 'failed'; null otherwise. */
-  error: import_zod7.z.string().nullable()
+  error: import_zod8.z.string().nullable()
 });
-var DeriveIntentPayload = import_zod7.z.object({
-  force: import_zod7.z.boolean().optional()
+var DeriveIntentPayload = import_zod8.z.object({
+  force: import_zod8.z.boolean().optional()
 });
 
 // ../server/src/vendor/shared/contracts/blast.ts
-var import_zod8 = __toESM(require_zod(), 1);
-var BlastStatus = import_zod8.z.enum(["ok", "partial", "degraded"]);
-var BlastReason = import_zod8.z.enum([
+var import_zod9 = __toESM(require_zod(), 1);
+var BlastStatus = import_zod9.z.enum(["ok", "partial", "degraded"]);
+var BlastReason = import_zod9.z.enum([
   "flag_off",
   "index_missing",
   "index_partial",
@@ -29476,12 +29640,12 @@ var BlastReason = import_zod8.z.enum([
   "repo_too_large",
   "no_changed_files"
 ]);
-var BlastEndpoint = import_zod8.z.object({
+var BlastEndpoint = import_zod9.z.object({
   /** "METHOD /path" for an endpoint, or the job's name for a cron. */
-  label: import_zod8.z.string(),
-  kind: import_zod8.z.enum(["endpoint", "cron"]),
+  label: import_zod9.z.string(),
+  kind: import_zod9.z.enum(["endpoint", "cron"]),
   /** Repo-relative file that declares it. */
-  file: import_zod8.z.string(),
+  file: import_zod9.z.string(),
   /**
    * Reverse-import hops from the changed file, bounded by the walk.
    *
@@ -29490,30 +29654,30 @@ var BlastEndpoint = import_zod8.z.object({
    * edits the file holding `GET /pulls/:id`, that endpoint is affected directly
    * rather than through a dependency.
    */
-  depth: import_zod8.z.number().int()
+  depth: import_zod9.z.number().int()
 });
 var BlastDownstream = DownstreamImpact.extend({
   /** The changed symbol's own declaring file, for the row's file:line link. */
-  file: import_zod8.z.string(),
-  kind: import_zod8.z.string(),
+  file: import_zod9.z.string(),
+  kind: import_zod9.z.string(),
   /** Total resolved callers before the per-symbol cap. */
-  caller_count: import_zod8.z.number().int(),
-  truncated: import_zod8.z.boolean(),
+  caller_count: import_zod9.z.number().int(),
+  truncated: import_zod9.z.boolean(),
   /** Per-caller line numbers travel in `callers`; this is the endpoint detail. */
-  impacted: import_zod8.z.array(BlastEndpoint)
+  impacted: import_zod9.z.array(BlastEndpoint)
 });
-var BlastCounts = import_zod8.z.object({
-  symbols: import_zod8.z.number().int(),
-  callers: import_zod8.z.number().int(),
-  endpoints: import_zod8.z.number().int(),
-  crons: import_zod8.z.number().int()
+var BlastCounts = import_zod9.z.object({
+  symbols: import_zod9.z.number().int(),
+  callers: import_zod9.z.number().int(),
+  endpoints: import_zod9.z.number().int(),
+  crons: import_zod9.z.number().int()
 });
-var PrBlastRadius = import_zod8.z.object({
-  pr_id: import_zod8.z.string(),
+var PrBlastRadius = import_zod9.z.object({
+  pr_id: import_zod9.z.string(),
   /** Repo-relative paths this PR changes, as `pr_files` recorded them. */
-  changed_files: import_zod8.z.array(import_zod8.z.string()),
-  changed_symbols: import_zod8.z.array(ChangedSymbol),
-  downstream: import_zod8.z.array(BlastDownstream),
+  changed_files: import_zod9.z.array(import_zod9.z.string()),
+  changed_symbols: import_zod9.z.array(ChangedSymbol),
+  downstream: import_zod9.z.array(BlastDownstream),
   /**
    * Every endpoint and cron in the blast radius, whatever reached it — the union the
    * stat row counts.
@@ -29525,79 +29689,79 @@ var PrBlastRadius = import_zod8.z.object({
    * declares no symbols at all. Both were invisible when the map only carried
    * per-symbol attribution, measured on a real PR that edited a `routes.ts`.
    */
-  impacted: import_zod8.z.array(BlastEndpoint),
+  impacted: import_zod9.z.array(BlastEndpoint),
   counts: BlastCounts,
   status: BlastStatus,
   reason: BlastReason.nullable(),
   /** Head commit the index was built at, for pinning file:line links. null if unknown. */
-  indexed_sha: import_zod8.z.string().nullable()
+  indexed_sha: import_zod9.z.string().nullable()
 });
 
 // ../server/src/vendor/shared/contracts/prior-prs.ts
-var import_zod9 = __toESM(require_zod(), 1);
-var PriorPrsStatus = import_zod9.z.enum(["ok", "partial", "degraded"]);
-var PriorPrsReason = import_zod9.z.enum([
+var import_zod10 = __toESM(require_zod(), 1);
+var PriorPrsStatus = import_zod10.z.enum(["ok", "partial", "degraded"]);
+var PriorPrsReason = import_zod10.z.enum([
   "no_changed_files",
   "no_file_lists",
   "incomplete_file_lists"
 ]);
-var PriorPr = import_zod9.z.object({
-  id: import_zod9.z.string(),
+var PriorPr = import_zod10.z.object({
+  id: import_zod10.z.string(),
   /** GitHub pull request number, which is also how the studio addresses it. */
-  number: import_zod9.z.number().int(),
-  title: import_zod9.z.string(),
-  author: import_zod9.z.string(),
+  number: import_zod10.z.number().int(),
+  title: import_zod10.z.string(),
+  author: import_zod10.z.string(),
   /** ISO. Null when the import never recorded one. */
-  updated_at: import_zod9.z.string().nullable(),
-  opened_at: import_zod9.z.string().nullable(),
+  updated_at: import_zod10.z.string().nullable(),
+  opened_at: import_zod10.z.string().nullable(),
   /** The overlapping paths, capped; ordered as the changed-file list orders them. */
-  shared_files: import_zod9.z.array(import_zod9.z.string()),
+  shared_files: import_zod10.z.array(import_zod10.z.string()),
   /** Size of the overlap BEFORE the cap, so a short list is never read as the whole. */
-  shared_file_count: import_zod9.z.number().int()
+  shared_file_count: import_zod10.z.number().int()
 });
-var PriorPrsCoverage = import_zod9.z.object({
+var PriorPrsCoverage = import_zod10.z.object({
   /** Pull requests in this repository whose file list has been imported. */
-  with_file_lists: import_zod9.z.number().int(),
+  with_file_lists: import_zod10.z.number().int(),
   /** Pull requests in this repository, imported file list or not. */
-  total: import_zod9.z.number().int()
+  total: import_zod10.z.number().int()
 });
-var PrPriorPrs = import_zod9.z.object({
-  pr_id: import_zod9.z.string(),
+var PrPriorPrs = import_zod10.z.object({
+  pr_id: import_zod10.z.string(),
   /** Newest first. See `total` / `truncated` for what is not shown. */
-  prs: import_zod9.z.array(PriorPr),
-  total: import_zod9.z.number().int(),
-  truncated: import_zod9.z.boolean(),
+  prs: import_zod10.z.array(PriorPr),
+  total: import_zod10.z.number().int(),
+  truncated: import_zod10.z.boolean(),
   coverage: PriorPrsCoverage,
   status: PriorPrsStatus,
   reason: PriorPrsReason.nullable()
 });
 
 // ../server/src/vendor/shared/contracts/project-context.ts
-var import_zod10 = __toESM(require_zod(), 1);
-var ProjectDocType = import_zod10.z.enum(["spec", "doc", "insight", "other"]);
-var ProjectDocListStatus = import_zod10.z.enum(["ok", "partial", "unavailable"]);
-var ProjectDoc = import_zod10.z.object({
+var import_zod11 = __toESM(require_zod(), 1);
+var ProjectDocType = import_zod11.z.enum(["spec", "doc", "insight", "other"]);
+var ProjectDocListStatus = import_zod11.z.enum(["ok", "partial", "unavailable"]);
+var ProjectDoc = import_zod11.z.object({
   /** Repo-relative, e.g. `specs/project-context.md`. Unique within a clone. */
-  path: import_zod10.z.string(),
+  path: import_zod11.z.string(),
   doc_type: ProjectDocType,
   /** The searched root it was found under, e.g. `specs/`; the grouping key. */
-  root: import_zod10.z.string(),
+  root: import_zod11.z.string(),
   /** Bytes on disk. */
-  size: import_zod10.z.number().int(),
+  size: import_zod11.z.number().int(),
   /** Approximate: `ceil(characters / 4)`. */
-  tokens: import_zod10.z.number().int(),
+  tokens: import_zod11.z.number().int(),
   /** ISO. Null when the filesystem reported no modification time. */
-  updated_at: import_zod10.z.string().nullable(),
-  used_by_agents: import_zod10.z.number().int()
+  updated_at: import_zod11.z.string().nullable(),
+  used_by_agents: import_zod11.z.number().int()
 });
-var ProjectDocList = import_zod10.z.object({
+var ProjectDocList = import_zod11.z.object({
   /** Ordered by path ascending, which is already a total order within a clone. */
-  docs: import_zod10.z.array(ProjectDoc),
+  docs: import_zod11.z.array(ProjectDoc),
   /** The roots actually searched, in the order they were searched. */
-  roots: import_zod10.z.array(import_zod10.z.string()),
+  roots: import_zod11.z.array(import_zod11.z.string()),
   /** Matching documents found before `docs` was capped. */
-  total: import_zod10.z.number().int(),
-  truncated: import_zod10.z.boolean(),
+  total: import_zod11.z.number().int(),
+  truncated: import_zod11.z.boolean(),
   status: ProjectDocListStatus,
   /**
    * Why the status is not `ok`, in words — null exactly when it is. Free text
@@ -29605,47 +29769,47 @@ var ProjectDocList = import_zod10.z.object({
    * "the repository has no local clone", where the value of the field is that
    * it names the missing thing.
    */
-  reason: import_zod10.z.string().nullable()
+  reason: import_zod11.z.string().nullable()
 });
-var ContextAttachment = import_zod10.z.object({
-  repo_id: import_zod10.z.string(),
+var ContextAttachment = import_zod11.z.object({
+  repo_id: import_zod11.z.string(),
   /** Repo-relative to that repository's clone root. */
-  path: import_zod10.z.string(),
-  order: import_zod10.z.number().int()
+  path: import_zod11.z.string(),
+  order: import_zod11.z.number().int()
 });
-var ContextAttachmentInput = import_zod10.z.object({
+var ContextAttachmentInput = import_zod11.z.object({
   /** The repository whose attachment rows this array replaces, in full. */
-  repo_id: import_zod10.z.string().uuid(),
+  repo_id: import_zod11.z.string().uuid(),
   /** Ordered, repo-relative. Empty detaches everything for that repository. */
-  paths: import_zod10.z.array(import_zod10.z.string().min(1))
+  paths: import_zod11.z.array(import_zod11.z.string().min(1))
 });
-var ContextDocSource = import_zod10.z.discriminatedUnion("kind", [
+var ContextDocSource = import_zod11.z.discriminatedUnion("kind", [
   /** Attached to the agent directly. */
-  import_zod10.z.object({ kind: import_zod10.z.literal("agent") }),
-  import_zod10.z.object({
-    kind: import_zod10.z.literal("skill"),
-    skill_id: import_zod10.z.string(),
+  import_zod11.z.object({ kind: import_zod11.z.literal("agent") }),
+  import_zod11.z.object({
+    kind: import_zod11.z.literal("skill"),
+    skill_id: import_zod11.z.string(),
     /** Carried so the row can name its skill without a second lookup. */
-    skill_name: import_zod10.z.string()
+    skill_name: import_zod11.z.string()
   })
 ]);
-var EffectiveContextDoc = import_zod10.z.object({
-  path: import_zod10.z.string(),
+var EffectiveContextDoc = import_zod11.z.object({
+  path: import_zod11.z.string(),
   source: ContextDocSource,
-  order: import_zod10.z.number().int()
+  order: import_zod11.z.number().int()
 });
 
 // ../server/src/vendor/shared/contracts/onboarding.ts
-var import_zod11 = __toESM(require_zod(), 1);
-var OnboardingSectionKind = import_zod11.z.enum([
+var import_zod12 = __toESM(require_zod(), 1);
+var OnboardingSectionKind = import_zod12.z.enum([
   "architecture",
   "critical_paths",
   "run_locally",
   "reading_path",
   "first_tasks"
 ]);
-var OnboardingStatus = import_zod11.z.enum(["ok", "partial", "degraded"]);
-var OnboardingReason = import_zod11.z.enum([
+var OnboardingStatus = import_zod12.z.enum(["ok", "partial", "degraded"]);
+var OnboardingReason = import_zod12.z.enum([
   "flag_off",
   "index_failed",
   "index_partial",
@@ -29656,31 +29820,31 @@ var OnboardingReason = import_zod11.z.enum([
   "model_invalid",
   "no_commands_declared"
 ]);
-var OnboardingCommand = import_zod11.z.object({
+var OnboardingCommand = import_zod12.z.object({
   /** The invocation verbatim: `npm run dev`, `make test`, `docker compose up api`. */
-  command: import_zod11.z.string(),
+  command: import_zod12.z.string(),
   /** Repo-relative file it was read from — a `package.json`, a `Makefile`, a compose file. */
-  file: import_zod11.z.string(),
+  file: import_zod12.z.string(),
   /** Position in the section's command list, 0-based, so the order is stable across reads. */
-  order: import_zod11.z.number().int()
+  order: import_zod12.z.number().int()
 });
-var OnboardingPathNote = import_zod11.z.object({
+var OnboardingPathNote = import_zod12.z.object({
   /** Repo-relative path. Every one is confirmed against the repository's index before it is stored. */
-  path: import_zod11.z.string(),
+  path: import_zod12.z.string(),
   /** One line saying why this path is on the list. */
-  reason: import_zod11.z.string()
+  reason: import_zod12.z.string()
 });
-var OnboardingTask = import_zod11.z.object({
-  title: import_zod11.z.string(),
+var OnboardingTask = import_zod12.z.object({
+  title: import_zod12.z.string(),
   /** Repo-relative file or directory the task starts in. Confirmed against the index before storage. */
-  path: import_zod11.z.string(),
-  complexity: import_zod11.z.enum(["low", "medium", "high"])
+  path: import_zod12.z.string(),
+  complexity: import_zod12.z.enum(["low", "medium", "high"])
 });
-var OnboardingTourSection = import_zod11.z.object({
+var OnboardingTourSection = import_zod12.z.object({
   kind: OnboardingSectionKind,
-  title: import_zod11.z.string(),
+  title: import_zod12.z.string(),
   /** Markdown, rendered with headings, lists and fenced code. */
-  body: import_zod11.z.string(),
+  body: import_zod12.z.string(),
   /**
    * Mermaid source, or `null` when this section has no diagram.
    *
@@ -29688,14 +29852,14 @@ var OnboardingTourSection = import_zod11.z.object({
    * has to tell "absent" from "null" — a distinction a jsonb column read back by a
    * cast silently loses.
    */
-  diagram: import_zod11.z.string().nullable(),
+  diagram: import_zod12.z.string().nullable(),
   /** Reused from ./knowledge.js. Capped where the tour is assembled, not here. */
-  links: import_zod11.z.array(OnboardingLink),
-  commands: import_zod11.z.array(OnboardingCommand),
-  paths: import_zod11.z.array(OnboardingPathNote),
-  tasks: import_zod11.z.array(OnboardingTask)
+  links: import_zod12.z.array(OnboardingLink),
+  commands: import_zod12.z.array(OnboardingCommand),
+  paths: import_zod12.z.array(OnboardingPathNote),
+  tasks: import_zod12.z.array(OnboardingTask)
 });
-var OnboardingTour = import_zod11.z.object({
+var OnboardingTour = import_zod12.z.object({
   /**
    * The sections, in `OnboardingSectionKind` order.
    *
@@ -29703,7 +29867,7 @@ var OnboardingTour = import_zod11.z.object({
    * all five, because the contract fixes them and the screen renders a labelled
    * skeleton rather than an empty page.
    */
-  sections: import_zod11.z.array(OnboardingTourSection),
+  sections: import_zod12.z.array(OnboardingTourSection),
   status: OnboardingStatus,
   reason: OnboardingReason.nullable(),
   /**
@@ -29716,9 +29880,9 @@ var OnboardingTour = import_zod11.z.object({
    *    previously stored tour, if there is one.
    *  - `ready` — a stored tour, whatever its `status`.
    */
-  generation_state: import_zod11.z.enum(["never_generated", "running", "ready"]),
+  generation_state: import_zod12.z.enum(["never_generated", "running", "ready"]),
   /** ISO timestamp the stored tour was written. Null when none has been. */
-  generated_at: import_zod11.z.string().nullable(),
+  generated_at: import_zod12.z.string().nullable(),
   /**
    * Head commit the repository's index was at when this tour was generated.
    *
@@ -29726,31 +29890,31 @@ var OnboardingTour = import_zod11.z.object({
    * links out to files only when this is set: a link pinned to a branch would
    * point at code the tour never saw.
    */
-  indexed_sha: import_zod11.z.string().nullable(),
+  indexed_sha: import_zod12.z.string().nullable(),
   /** True when the index's SHA has advanced past `indexed_sha`. Computed on read; nothing is regenerated. */
-  stale: import_zod11.z.boolean(),
+  stale: import_zod12.z.boolean(),
   /**
    * What the index had covered when this tour was generated — this tour's own
    * figures, never the current index state's, so an old tour cannot claim today's
    * coverage.
    */
-  files_indexed: import_zod11.z.number().int(),
-  files_skipped: import_zod11.z.number().int(),
+  files_indexed: import_zod12.z.number().int(),
+  files_skipped: import_zod12.z.number().int(),
   /** Model identifier the generation used. Null when no model call was made. */
-  model: import_zod11.z.string().nullable(),
+  model: import_zod12.z.string().nullable(),
   /** Provider round-trips the generation cost: one call plus at most one repair reprompt. */
-  attempts: import_zod11.z.number().int().nullable(),
-  tokens_in: import_zod11.z.number().int().nullable(),
-  tokens_out: import_zod11.z.number().int().nullable(),
+  attempts: import_zod12.z.number().int().nullable(),
+  tokens_in: import_zod12.z.number().int().nullable(),
+  tokens_out: import_zod12.z.number().int().nullable(),
   /** Null means no price is known for the model, which is NOT the same as a free call (`0`). */
-  cost_usd: import_zod11.z.number().nullable()
+  cost_usd: import_zod12.z.number().nullable()
 });
 
 // ../server/src/vendor/shared/contracts/pr-brief.ts
-var import_zod12 = __toESM(require_zod(), 1);
-var RiskLevel = import_zod12.z.enum(RiskSeverity.options);
-var BriefStatus = import_zod12.z.enum(["ok", "partial", "degraded"]);
-var BriefReason = import_zod12.z.enum([
+var import_zod13 = __toESM(require_zod(), 1);
+var RiskLevel = import_zod13.z.enum(RiskSeverity.options);
+var BriefStatus = import_zod13.z.enum(["ok", "partial", "degraded"]);
+var BriefReason = import_zod13.z.enum([
   "index_missing",
   "index_partial",
   "index_failed",
@@ -29763,7 +29927,7 @@ var BriefReason = import_zod12.z.enum([
   "model_invalid",
   "restates_title"
 ]);
-var BriefSourceKind = import_zod12.z.enum([
+var BriefSourceKind = import_zod13.z.enum([
   "pr_title",
   "pr_body",
   "file_list",
@@ -29773,49 +29937,49 @@ var BriefSourceKind = import_zod12.z.enum([
   "prior_prs",
   "repo_doc"
 ]);
-var BriefSourceStatus = import_zod12.z.enum(["used", "unfetched", "dropped_over_budget"]);
-var BriefSource = import_zod12.z.object({
+var BriefSourceStatus = import_zod13.z.enum(["used", "unfetched", "dropped_over_budget"]);
+var BriefSource = import_zod13.z.object({
   kind: BriefSourceKind,
   /** Identifier of the source: a path, an issue reference, or a pull-request number. */
-  ref: import_zod12.z.string(),
+  ref: import_zod13.z.string(),
   status: BriefSourceStatus,
-  chars: import_zod12.z.number().int().nullable(),
-  note: import_zod12.z.string().nullable()
+  chars: import_zod13.z.number().int().nullable(),
+  note: import_zod13.z.string().nullable()
 });
-var ReviewFocusItem = import_zod12.z.object({
+var ReviewFocusItem = import_zod13.z.object({
   /** Repo-relative path, as `pr_files` recorded it. Never a `path:line` display form. */
-  path: import_zod12.z.string(),
-  line: import_zod12.z.number().int().nullable(),
+  path: import_zod13.z.string(),
+  line: import_zod13.z.number().int().nullable(),
   /** One line saying why this file is worth reading first. */
-  reason: import_zod12.z.string()
+  reason: import_zod13.z.string()
 });
-var BriefDiffStats = import_zod12.z.object({
+var BriefDiffStats = import_zod13.z.object({
   /** Changed files recorded for the pull request. */
-  files_changed: import_zod12.z.number().int(),
+  files_changed: import_zod13.z.number().int(),
   /** Of those, how many paths the model input carried. */
-  files_listed: import_zod12.z.number().int(),
-  additions: import_zod12.z.number().int(),
-  deletions: import_zod12.z.number().int(),
+  files_listed: import_zod13.z.number().int(),
+  additions: import_zod13.z.number().int(),
+  deletions: import_zod13.z.number().int(),
   /** Changed symbols the blast map resolved — `BlastCounts.symbols` verbatim. */
-  symbols: import_zod12.z.number().int(),
+  symbols: import_zod13.z.number().int(),
   /**
    * Endpoints in the blast radius, counted distinct by label —
    * `BlastCounts.endpoints` verbatim. Scheduled jobs are a separate figure there
    * (`crons`) and are deliberately not folded into this one.
    */
-  endpoints: import_zod12.z.number().int()
+  endpoints: import_zod13.z.number().int()
 });
-var BriefGenerationState = import_zod12.z.enum(["never_generated", "running", "done"]);
-var PrRiskBrief = import_zod12.z.object({
-  pr_id: import_zod12.z.string(),
+var BriefGenerationState = import_zod13.z.enum(["never_generated", "running", "done"]);
+var PrRiskBrief = import_zod13.z.object({
+  pr_id: import_zod13.z.string(),
   /**
    * What the change does, in the reviewer's own terms. Null when no model call
    * produced one, and also when the one it produced only restated the title —
    * see `restates_title`.
    */
-  what: import_zod12.z.string().nullable(),
+  what: import_zod13.z.string().nullable(),
   /** Why it is being made. Null when no model call produced one. */
-  why: import_zod12.z.string().nullable(),
+  why: import_zod13.z.string().nullable(),
   /**
    * The whole pull request's risk level. Null only when no brief was written;
    * a brief with no surviving risks stores `low`, which is a claim rather than
@@ -29835,20 +29999,20 @@ var PrRiskBrief = import_zod12.z.object({
    * is kept — "the auth surface is touched" is a legitimate whole-pull-request
    * observation.
    */
-  risks: import_zod12.z.array(Risk),
+  risks: import_zod13.z.array(Risk),
   /** Empty on a degraded brief: a review-focus row is advice plus a reason, and the reason is the part only a model writes. */
-  review_focus: import_zod12.z.array(ReviewFocusItem),
+  review_focus: import_zod13.z.array(ReviewFocusItem),
   diff_stats: BriefDiffStats,
   status: BriefStatus,
   reason: BriefReason.nullable(),
   /** One entry per input the generation was offered, whatever became of it. */
-  sources: import_zod12.z.array(BriefSource),
+  sources: import_zod13.z.array(BriefSource),
   /**
    * Head commit this brief was generated against. Null when none has been
    * generated, which is also why the card links out to files only when it is set:
    * a link pinned to a branch would point at code the brief never saw.
    */
-  head_sha: import_zod12.z.string().nullable(),
+  head_sha: import_zod13.z.string().nullable(),
   /**
    * The cache key this brief was generated against — a digest over the nine values
    * the pull request's state is made of, not the head SHA alone. `head_sha` is
@@ -29857,283 +30021,125 @@ var PrRiskBrief = import_zod12.z.object({
    * title-only answer forever (`server/INSIGHTS.md`, 2026-08-11, measured at 15 of
    * 21 rows). Null when no brief has been generated.
    */
-  cache_key: import_zod12.z.string().nullable(),
+  cache_key: import_zod13.z.string().nullable(),
   /**
    * True when the key computed from the pull request's current state differs from
    * `cache_key`. Computed on read; nothing is regenerated and nothing is written.
    */
-  stale: import_zod12.z.boolean(),
+  stale: import_zod13.z.boolean(),
   generation_state: BriefGenerationState,
   /** ISO timestamp the stored brief was written. Null when none has been. */
-  generated_at: import_zod12.z.string().nullable(),
+  generated_at: import_zod13.z.string().nullable(),
   /** Provider that answered. Null when no model call was made. */
-  provider: import_zod12.z.string().nullable(),
+  provider: import_zod13.z.string().nullable(),
   /** Model identifier the generation used. Null when no model call was made. */
-  model: import_zod12.z.string().nullable(),
+  model: import_zod13.z.string().nullable(),
   /** Provider round-trips the generation cost: at most one, and never a repair reprompt. */
-  attempts: import_zod12.z.number().int().nullable(),
-  tokens_in: import_zod12.z.number().int().nullable(),
-  tokens_out: import_zod12.z.number().int().nullable(),
+  attempts: import_zod13.z.number().int().nullable(),
+  tokens_in: import_zod13.z.number().int().nullable(),
+  tokens_out: import_zod13.z.number().int().nullable(),
   /** Null means no price is known for the model, which is NOT the same as a free call (`0`). */
-  cost_usd: import_zod12.z.number().nullable(),
+  cost_usd: import_zod13.z.number().nullable(),
   /** Failure message when the generation degraded; null otherwise. */
-  error: import_zod12.z.string().nullable()
+  error: import_zod13.z.string().nullable()
 });
-var GenerateBriefPayload = import_zod12.z.object({
-  force: import_zod12.z.boolean().optional()
+var GenerateBriefPayload = import_zod13.z.object({
+  force: import_zod13.z.boolean().optional()
 });
 
 // ../server/src/vendor/shared/contracts/trace.ts
-var import_zod13 = __toESM(require_zod(), 1);
-var RunEventKind = import_zod13.z.enum(["info", "tool", "result", "error"]);
-var RunLogLine = import_zod13.z.object({
-  t: import_zod13.z.string(),
+var import_zod14 = __toESM(require_zod(), 1);
+var RunEventKind = import_zod14.z.enum(["info", "tool", "result", "error"]);
+var RunLogLine = import_zod14.z.object({
+  t: import_zod14.z.string(),
   kind: RunEventKind,
-  msg: import_zod13.z.string()
+  msg: import_zod14.z.string()
 });
-var RunEvent = import_zod13.z.object({
-  runId: import_zod13.z.string(),
-  seq: import_zod13.z.number().int(),
+var RunEvent = import_zod14.z.object({
+  runId: import_zod14.z.string(),
+  seq: import_zod14.z.number().int(),
   kind: RunEventKind,
-  msg: import_zod13.z.string(),
-  t: import_zod13.z.string(),
-  data: import_zod13.z.unknown().optional()
+  msg: import_zod14.z.string(),
+  t: import_zod14.z.string(),
+  data: import_zod14.z.unknown().optional()
 });
-var ToolCall = import_zod13.z.object({
-  tool: import_zod13.z.string(),
-  args: import_zod13.z.string(),
-  meta: import_zod13.z.string().nullish(),
-  ms: import_zod13.z.number().int()
+var ToolCall = import_zod14.z.object({
+  tool: import_zod14.z.string(),
+  args: import_zod14.z.string(),
+  meta: import_zod14.z.string().nullish(),
+  ms: import_zod14.z.number().int()
 });
-var PromptAssembly = import_zod13.z.object({
-  system: import_zod13.z.string(),
-  skills: import_zod13.z.string().nullish(),
-  memory: import_zod13.z.string().nullish(),
-  specs: import_zod13.z.string().nullish(),
+var PromptAssembly = import_zod14.z.object({
+  system: import_zod14.z.string(),
+  skills: import_zod14.z.string().nullish(),
+  memory: import_zod14.z.string().nullish(),
+  specs: import_zod14.z.string().nullish(),
   /** Callers-of-changed-symbols digest (T1.3); null when absent. */
-  callers: import_zod13.z.string().nullish(),
+  callers: import_zod14.z.string().nullish(),
   /** Repo skeleton / map (T3); null when absent. Enables per-slot token
       attribution in the run trace. */
-  repo_map: import_zod13.z.string().nullish(),
+  repo_map: import_zod14.z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
-  pr_description: import_zod13.z.string().nullish(),
+  pr_description: import_zod14.z.string().nullish(),
   /** Pre-rendered "Stated intent and scope" block (L03); null when absent.
       Traces written before L03 carry the key ABSENT, not null — read it as
       `undefined`-tolerant, exactly like the other optional slots here. */
-  intent: import_zod13.z.string().nullish(),
-  user: import_zod13.z.string()
+  intent: import_zod14.z.string().nullish(),
+  user: import_zod14.z.string()
 });
-var MemoryPulled = import_zod13.z.object({
-  pr: import_zod13.z.number().int().nullish(),
-  text: import_zod13.z.string()
+var MemoryPulled = import_zod14.z.object({
+  pr: import_zod14.z.number().int().nullish(),
+  text: import_zod14.z.string()
 });
-var RunStats = import_zod13.z.object({
-  duration_ms: import_zod13.z.number().int(),
-  tokens_in: import_zod13.z.number().int(),
-  tokens_out: import_zod13.z.number().int(),
+var RunStats = import_zod14.z.object({
+  duration_ms: import_zod14.z.number().int(),
+  tokens_in: import_zod14.z.number().int(),
+  tokens_out: import_zod14.z.number().int(),
   // USD cost of the run. null = the provider reported none and no price is known
   // for the model — NOT the same as a free run (which is 0).
-  cost_usd: import_zod13.z.number().nullable(),
-  findings: import_zod13.z.number().int(),
-  grounding: import_zod13.z.string()
+  cost_usd: import_zod14.z.number().nullable(),
+  findings: import_zod14.z.number().int(),
+  grounding: import_zod14.z.string()
 });
-var RunTrace = import_zod13.z.object({
-  config: import_zod13.z.object({
-    agent: import_zod13.z.string(),
-    version: import_zod13.z.string().nullish(),
-    provider: import_zod13.z.string().nullish(),
-    model: import_zod13.z.string(),
-    pr: import_zod13.z.number().int().nullish(),
-    source: import_zod13.z.enum(["local", "ci"]).default("local")
+var RunTrace = import_zod14.z.object({
+  config: import_zod14.z.object({
+    agent: import_zod14.z.string(),
+    version: import_zod14.z.string().nullish(),
+    provider: import_zod14.z.string().nullish(),
+    model: import_zod14.z.string(),
+    pr: import_zod14.z.number().int().nullish(),
+    source: import_zod14.z.enum(["local", "ci"]).default("local")
   }),
   stats: RunStats,
   prompt_assembly: PromptAssembly,
-  tool_calls: import_zod13.z.array(ToolCall),
-  raw_output: import_zod13.z.string(),
-  memory_pulled: import_zod13.z.array(MemoryPulled),
-  specs_read: import_zod13.z.array(import_zod13.z.string()),
-  log: import_zod13.z.array(RunLogLine)
+  tool_calls: import_zod14.z.array(ToolCall),
+  raw_output: import_zod14.z.string(),
+  memory_pulled: import_zod14.z.array(MemoryPulled),
+  specs_read: import_zod14.z.array(import_zod14.z.string()),
+  log: import_zod14.z.array(RunLogLine)
 });
-var RunSummary = import_zod13.z.object({
-  run_id: import_zod13.z.string(),
-  agent_id: import_zod13.z.string().nullable(),
-  agent_name: import_zod13.z.string().nullable(),
-  provider: import_zod13.z.string().nullable(),
-  model: import_zod13.z.string().nullable(),
-  status: import_zod13.z.string().nullable(),
+var RunSummary = import_zod14.z.object({
+  run_id: import_zod14.z.string(),
+  agent_id: import_zod14.z.string().nullable(),
+  agent_name: import_zod14.z.string().nullable(),
+  provider: import_zod14.z.string().nullable(),
+  model: import_zod14.z.string().nullable(),
+  status: import_zod14.z.string().nullable(),
   // running | done | failed | cancelled
-  error: import_zod13.z.string().nullable(),
-  duration_ms: import_zod13.z.number().int().nullable(),
-  tokens_in: import_zod13.z.number().int().nullable(),
-  tokens_out: import_zod13.z.number().int().nullable(),
+  error: import_zod14.z.string().nullable(),
+  duration_ms: import_zod14.z.number().int().nullable(),
+  tokens_in: import_zod14.z.number().int().nullable(),
+  tokens_out: import_zod14.z.number().int().nullable(),
   // USD cost of the run. null = no cost data (unpriced model, or a failed run).
-  cost_usd: import_zod13.z.number().nullable(),
-  findings_count: import_zod13.z.number().int().nullable(),
-  grounding: import_zod13.z.string().nullable(),
-  ran_at: import_zod13.z.string().nullable(),
+  cost_usd: import_zod14.z.number().nullable(),
+  findings_count: import_zod14.z.number().int().nullable(),
+  grounding: import_zod14.z.string().nullable(),
+  ran_at: import_zod14.z.string().nullable(),
   // Review outcome, denormalized onto the run row at completion (the timeline
   // has no FK to the review). score = the review's 0-100 score; blockers =
   // findings that trip the agent's gate. Null on failed/cancelled runs.
-  score: import_zod13.z.number().int().nullable(),
-  blockers: import_zod13.z.number().int().nullable()
-});
-
-// ../server/src/vendor/shared/contracts/platform.ts
-var import_zod14 = __toESM(require_zod(), 1);
-var FeatureModelId = import_zod14.z.enum([
-  "onboarding",
-  "review_intent",
-  "risk_brief",
-  "conformance",
-  "conventions"
-]);
-var FeatureModelChoice = import_zod14.z.object({
-  provider: Provider,
-  model: import_zod14.z.string().min(1)
-});
-var SettingsKnown = import_zod14.z.object({
-  polling_interval_min: import_zod14.z.number().int().min(1).default(5),
-  theme: import_zod14.z.enum(["dark", "light"]).default("dark"),
-  density: import_zod14.z.enum(["regular", "compact"]).default("regular"),
-  sync_to_folder: import_zod14.z.boolean().default(true),
-  automatic_reviews: import_zod14.z.boolean().default(false),
-  /** Per-feature model overrides (provider+model), keyed by FeatureModelId. */
-  feature_models: import_zod14.z.record(FeatureModelId, FeatureModelChoice).default({})
-});
-var Settings = SettingsKnown.passthrough();
-var SettingsUpdate = Settings.partial();
-var ConnTestProvider = import_zod14.z.enum(["openai", "anthropic", "openrouter", "github"]);
-var ConnTestRequest = import_zod14.z.object({
-  provider: ConnTestProvider,
-  /** Optional API key/PAT to persist and then test (BYO key from the UI). */
-  key: import_zod14.z.string().min(1).optional()
-});
-var ConnTestResult = import_zod14.z.object({
-  provider: ConnTestProvider,
-  ok: import_zod14.z.boolean(),
-  message: import_zod14.z.string(),
-  detail: import_zod14.z.unknown().optional()
-});
-var SecretsStatus = import_zod14.z.object({
-  openai: import_zod14.z.boolean(),
-  anthropic: import_zod14.z.boolean(),
-  openrouter: import_zod14.z.boolean(),
-  github: import_zod14.z.boolean()
-});
-var RepoInput = import_zod14.z.object({
-  url: import_zod14.z.string().url()
-});
-var Repo = import_zod14.z.object({
-  id: import_zod14.z.string(),
-  workspace_id: import_zod14.z.string(),
-  owner: import_zod14.z.string(),
-  name: import_zod14.z.string(),
-  full_name: import_zod14.z.string(),
-  default_branch: import_zod14.z.string(),
-  clone_path: import_zod14.z.string().nullable(),
-  last_polled_at: import_zod14.z.string().nullable(),
-  created_by: import_zod14.z.string().nullable()
-});
-var PrStatus = import_zod14.z.enum(["needs_review", "reviewed", "stale", "open", "closed", "merged"]);
-var PrMeta = import_zod14.z.object({
-  id: import_zod14.z.string().nullish(),
-  number: import_zod14.z.number().int(),
-  title: import_zod14.z.string(),
-  author: import_zod14.z.string(),
-  branch: import_zod14.z.string(),
-  base: import_zod14.z.string(),
-  head_sha: import_zod14.z.string(),
-  additions: import_zod14.z.number().int(),
-  deletions: import_zod14.z.number().int(),
-  files_count: import_zod14.z.number().int(),
-  status: PrStatus,
-  opened_at: import_zod14.z.string().nullish(),
-  updated_at: import_zod14.z.string().nullish(),
-  // LOWEST score across the agents that reviewed this PR — a review fans out over
-  // N agents, and the worst verdict gates the PR (list endpoint only; null/absent
-  // until reviewed).
-  score: import_zod14.z.number().int().nullish(),
-  // TOTAL USD spent reviewing this PR: the sum over agents of each agent's latest
-  // completed run (list endpoint only; null/absent until a run finishes, and null
-  // when no price is known for any of the models).
-  cost_usd: import_zod14.z.number().nullish(),
-  // FINDINGS per severity, SUMMED OVER EVERY PERSISTED REVIEW RUN of this PR —
-  // deliberately NOT the latest-run-per-agent basis `score`/`cost_usd` use above,
-  // so re-running the same agent 3x triples these numbers. That is on purpose:
-  // the list column has to equal the "Agent runs" tab badge on the PR detail
-  // page, which is `reviews.flatMap(r => r.findings).length`. List endpoint only
-  // (absent from every other PrMeta producer); all-zero for a never-reviewed PR,
-  // which the UI renders the same as absent.
-  findings_by_severity: FindingsBySeverity.nullish()
-});
-var PrFile = import_zod14.z.object({
-  path: import_zod14.z.string(),
-  additions: import_zod14.z.number().int(),
-  deletions: import_zod14.z.number().int(),
-  patch: import_zod14.z.string().nullish()
-});
-var PrCommit = import_zod14.z.object({
-  sha: import_zod14.z.string(),
-  message: import_zod14.z.string(),
-  author: import_zod14.z.string(),
-  committed_at: import_zod14.z.string().nullish()
-});
-var IssueMeta = import_zod14.z.object({
-  number: import_zod14.z.number().int(),
-  title: import_zod14.z.string(),
-  body: import_zod14.z.string().nullish(),
-  state: import_zod14.z.string()
-});
-var PrDetail = PrMeta.extend({
-  body: import_zod14.z.string().nullish(),
-  files: import_zod14.z.array(PrFile),
-  commits: import_zod14.z.array(PrCommit),
-  linked_issue: IssueMeta.nullish()
-});
-var PrReviewComment = import_zod14.z.object({
-  id: import_zod14.z.number().int(),
-  path: import_zod14.z.string(),
-  line: import_zod14.z.number().int().nullable(),
-  original_line: import_zod14.z.number().int().nullable(),
-  side: import_zod14.z.enum(["LEFT", "RIGHT"]),
-  body: import_zod14.z.string(),
-  user: import_zod14.z.string(),
-  created_at: import_zod14.z.string(),
-  html_url: import_zod14.z.string(),
-  in_reply_to_id: import_zod14.z.number().int().nullable(),
-  /** GitHub couldn't anchor it to the current diff (line == null). */
-  is_outdated: import_zod14.z.boolean()
-});
-var PrCommentInput = import_zod14.z.object({
-  path: import_zod14.z.string().min(1),
-  line: import_zod14.z.number().int().positive(),
-  side: import_zod14.z.enum(["LEFT", "RIGHT"]).optional(),
-  body: import_zod14.z.string().min(1),
-  /** Reply to an existing review comment thread (its comment id). */
-  in_reply_to: import_zod14.z.number().int().optional()
-});
-var SpecFile = import_zod14.z.object({
-  path: import_zod14.z.string(),
-  content: import_zod14.z.string().nullish(),
-  size: import_zod14.z.number().int().nullish(),
-  updated_at: import_zod14.z.string().nullish()
-});
-var IndexStatus = import_zod14.z.object({
-  status: import_zod14.z.enum(["idle", "cloning", "parsing", "embedding", "done", "error"]),
-  pct: import_zod14.z.number().min(0).max(100),
-  message: import_zod14.z.string().nullish(),
-  chunks_indexed: import_zod14.z.number().int().nullish()
-});
-var RunRequest = import_zod14.z.object({
-  agentId: import_zod14.z.string().optional(),
-  all: import_zod14.z.boolean().optional()
-});
-var ApiErrorBody = import_zod14.z.object({
-  error: import_zod14.z.object({
-    code: import_zod14.z.string(),
-    message: import_zod14.z.string(),
-    details: import_zod14.z.unknown().optional()
-  })
+  score: import_zod14.z.number().int().nullable(),
+  blockers: import_zod14.z.number().int().nullable()
 });
 
 // ../server/src/vendor/shared/contracts/why.ts
@@ -30558,244 +30564,330 @@ var EvalRunAllResult = import_zod18.z.object({
   )
 });
 
-// ../server/src/vendor/shared/contracts/observability.ts
+// ../server/src/vendor/shared/contracts/eval-draft.ts
 var import_zod19 = __toESM(require_zod(), 1);
-var AgentColumnFinding = import_zod19.z.object({
-  id: import_zod19.z.string(),
-  severity: Severity,
-  category: import_zod19.z.string(),
+var EvalDraftDecision = import_zod19.z.enum(["accepted", "dismissed"]);
+var EvalDraftSource = import_zod19.z.object({
+  finding_id: import_zod19.z.string(),
   title: import_zod19.z.string(),
   file: import_zod19.z.string(),
-  start_line: import_zod19.z.number().int(),
-  kind: import_zod19.z.string().nullish()
+  low_line: import_zod19.z.number().int(),
+  high_line: import_zod19.z.number().int(),
+  severity: import_zod19.z.string(),
+  category: import_zod19.z.string(),
+  decision: EvalDraftDecision
 });
-var AgentColumn = import_zod19.z.object({
-  run_id: import_zod19.z.string(),
+var EvalCaseDraft = import_zod19.z.object({
   agent_id: import_zod19.z.string(),
   agent_name: import_zod19.z.string(),
-  provider: import_zod19.z.string().nullable(),
-  model: import_zod19.z.string().nullable(),
-  status: import_zod19.z.enum(["done", "failed", "running"]),
-  verdict: import_zod19.z.string().nullable(),
-  score: import_zod19.z.number().int().nullable(),
-  summary: import_zod19.z.string().nullable(),
+  name: import_zod19.z.string(),
+  input_diff: import_zod19.z.string(),
+  input_files: import_zod19.z.unknown(),
+  input_meta: import_zod19.z.unknown(),
+  expectation: EvalExpectation,
+  expected_anchors: import_zod19.z.array(EvalAnchor),
+  expected_output: import_zod19.z.unknown(),
+  source: EvalDraftSource
+});
+var EvalCaseCreate = import_zod19.z.object({
+  finding_id: import_zod19.z.string(),
+  name: import_zod19.z.string().optional(),
+  input_diff: import_zod19.z.string().optional(),
+  expected_output: import_zod19.z.unknown().optional()
+});
+var EvalTrialRunRequest = import_zod19.z.object({
+  name: import_zod19.z.string(),
+  input_diff: import_zod19.z.string(),
+  expectation: EvalExpectation,
+  expected_anchors: import_zod19.z.array(EvalAnchor)
+});
+var EvalTrialRunResult = import_zod19.z.object({
+  outcome: EvalCaseOutcome,
+  not_run_reason: EvalNotRunReason.nullable(),
+  expected_count: import_zod19.z.number().int().nullable(),
+  actual_count: import_zod19.z.number().int().nullable(),
+  kept_count: import_zod19.z.number().int().nullable(),
+  dropped_count: import_zod19.z.number().int().nullable(),
   duration_ms: import_zod19.z.number().int().nullable(),
   cost_usd: import_zod19.z.number().nullable(),
-  findings: import_zod19.z.array(AgentColumnFinding)
-});
-var ConflictTake = import_zod19.z.object({
-  agent_id: import_zod19.z.string(),
-  persona: import_zod19.z.string(),
-  /** Severity if the agent flagged it, or 'ignored' when it did not. */
-  verdict: import_zod19.z.union([Severity, import_zod19.z.literal("ignored")]),
-  note: import_zod19.z.string()
-});
-var Conflict = import_zod19.z.object({
-  file: import_zod19.z.string(),
-  line: import_zod19.z.number().int(),
-  title: import_zod19.z.string(),
-  takes: import_zod19.z.array(ConflictTake)
-});
-var MultiAgentRun = import_zod19.z.object({
-  id: import_zod19.z.string(),
-  pr_id: import_zod19.z.string(),
-  pr_number: import_zod19.z.number().int().nullish(),
-  ran_at: import_zod19.z.string(),
-  agent_count: import_zod19.z.number().int(),
-  total_duration_ms: import_zod19.z.number().int(),
-  total_cost_usd: import_zod19.z.number().nullable(),
-  columns: import_zod19.z.array(AgentColumn),
-  conflicts: import_zod19.z.array(Conflict)
-});
-var StatPoint = import_zod19.z.object({ label: import_zod19.z.string(), value: import_zod19.z.number() });
-var AgentStats = import_zod19.z.object({
-  agent_id: import_zod19.z.string(),
-  agent_name: import_zod19.z.string(),
-  runs: import_zod19.z.number().int(),
-  findings_total: import_zod19.z.number().int(),
-  /** accept-rate is the headline quality signal. 0..1 over acted findings. */
-  accepted: import_zod19.z.number().int(),
-  dismissed: import_zod19.z.number().int(),
-  pending: import_zod19.z.number().int(),
-  accept_rate: import_zod19.z.number().nullable(),
-  dismiss_rate: import_zod19.z.number().nullable(),
-  avg_findings_per_run: import_zod19.z.number().nullable(),
-  total_cost_usd: import_zod19.z.number().nullable(),
-  avg_cost_usd: import_zod19.z.number().nullable(),
-  avg_latency_ms: import_zod19.z.number().nullable(),
-  findings_by_severity: import_zod19.z.object({
-    CRITICAL: import_zod19.z.number().int(),
-    WARNING: import_zod19.z.number().int(),
-    SUGGESTION: import_zod19.z.number().int()
-  }),
-  /** recent runs for a small trend chart (oldest→newest). */
-  trend: import_zod19.z.array(StatPoint)
-});
-var CuratorMerge = import_zod19.z.object({
-  kept_id: import_zod19.z.string(),
-  merged_ids: import_zod19.z.array(import_zod19.z.string()),
-  content: import_zod19.z.string(),
-  similarity: import_zod19.z.number()
-});
-var CuratorResult = import_zod19.z.object({
-  scanned: import_zod19.z.number().int(),
-  merges: import_zod19.z.array(CuratorMerge),
-  removed: import_zod19.z.number().int(),
-  dry_run: import_zod19.z.boolean()
+  /** `{ findings: [...] }` when the agent answered, null when it never did. */
+  actual_output: import_zod19.z.unknown()
 });
 
-// ../server/src/vendor/shared/contracts/productionize.ts
+// ../server/src/vendor/shared/contracts/observability.ts
 var import_zod20 = __toESM(require_zod(), 1);
-var PluginSkill = import_zod20.z.object({
-  name: import_zod20.z.string(),
-  description: import_zod20.z.string(),
-  type: import_zod20.z.enum(["rubric", "convention", "security", "custom"]),
-  source: import_zod20.z.enum(["manual", "imported_url", "extracted", "community"]),
-  body: import_zod20.z.string(),
-  enabled: import_zod20.z.boolean(),
-  evidence_files: import_zod20.z.array(import_zod20.z.string()).nullish()
-});
-var PluginAgent = import_zod20.z.object({
-  name: import_zod20.z.string(),
-  description: import_zod20.z.string(),
-  provider: import_zod20.z.enum(["openai", "anthropic", "openrouter"]),
-  model: import_zod20.z.string(),
-  system_prompt: import_zod20.z.string(),
-  output_schema: import_zod20.z.unknown().nullish(),
-  enabled: import_zod20.z.boolean(),
-  /** Names of skills (in this bundle) linked to the agent, in order. */
-  skills: import_zod20.z.array(import_zod20.z.string())
-});
-var PluginEvalCase = import_zod20.z.object({
-  name: import_zod20.z.string(),
-  owner_kind: import_zod20.z.enum(["skill", "agent"]),
-  owner_ref: import_zod20.z.string(),
-  input_diff: import_zod20.z.string().nullish(),
-  input_files: import_zod20.z.unknown().nullish(),
-  input_meta: import_zod20.z.unknown().nullish(),
-  expected_output: import_zod20.z.unknown().nullish(),
-  notes: import_zod20.z.string().nullish()
-});
-var PluginConvention = import_zod20.z.object({
-  rule: import_zod20.z.string(),
-  evidence_path: import_zod20.z.string().nullish(),
-  evidence_snippet: import_zod20.z.string().nullish(),
-  confidence: import_zod20.z.number().nullish(),
-  accepted: import_zod20.z.boolean()
-});
-var PluginManifest = import_zod20.z.object({
-  name: import_zod20.z.string(),
-  version: import_zod20.z.string(),
-  format: import_zod20.z.literal("devdigest-plugin/v1"),
-  exported_at: import_zod20.z.string(),
-  description: import_zod20.z.string().nullish(),
-  counts: import_zod20.z.object({
-    agents: import_zod20.z.number().int(),
-    skills: import_zod20.z.number().int(),
-    eval_cases: import_zod20.z.number().int(),
-    conventions: import_zod20.z.number().int()
-  })
-});
-var PluginBundle = import_zod20.z.object({
-  manifest: PluginManifest,
-  agents: import_zod20.z.array(PluginAgent),
-  skills: import_zod20.z.array(PluginSkill),
-  eval_cases: import_zod20.z.array(PluginEvalCase),
-  conventions: import_zod20.z.array(PluginConvention)
-});
-var PluginExportRequest = import_zod20.z.object({
-  name: import_zod20.z.string().min(1).optional(),
-  description: import_zod20.z.string().optional(),
-  /** Limit export to a subset of agent ids (default: all). */
-  agent_ids: import_zod20.z.array(import_zod20.z.string()).optional()
-});
-var PluginImportRequest = import_zod20.z.object({
-  bundle: PluginBundle,
-  /** 'merge' keeps existing items; 'replace' is reserved (merge is the default). */
-  mode: import_zod20.z.enum(["merge", "replace"]).default("merge").optional()
-});
-var InstalledPlugin = import_zod20.z.object({
+var AgentColumnFinding = import_zod20.z.object({
   id: import_zod20.z.string(),
-  name: import_zod20.z.string(),
-  version: import_zod20.z.string().nullable(),
-  source: import_zod20.z.string().nullable(),
-  installed_at: import_zod20.z.string(),
-  enabled: import_zod20.z.boolean()
+  severity: Severity,
+  category: import_zod20.z.string(),
+  title: import_zod20.z.string(),
+  file: import_zod20.z.string(),
+  start_line: import_zod20.z.number().int(),
+  end_line: import_zod20.z.number().int(),
+  rationale: import_zod20.z.string(),
+  // markdown
+  suggestion: import_zod20.z.string().nullish(),
+  // markdown; absent when the agent proposed no fix
+  confidence: import_zod20.z.number().min(0).max(1),
+  kind: import_zod20.z.string().nullish(),
+  accepted_at: import_zod20.z.string().nullable(),
+  dismissed_at: import_zod20.z.string().nullable()
 });
-var PluginImportResult = import_zod20.z.object({
-  installed: InstalledPlugin,
-  created: import_zod20.z.object({
-    agents: import_zod20.z.number().int(),
-    skills: import_zod20.z.number().int(),
-    eval_cases: import_zod20.z.number().int(),
-    conventions: import_zod20.z.number().int()
-  })
-});
-var AgentPerfRow = import_zod20.z.object({
+var AgentColumn = import_zod20.z.object({
+  run_id: import_zod20.z.string(),
   agent_id: import_zod20.z.string(),
   agent_name: import_zod20.z.string(),
   provider: import_zod20.z.string().nullable(),
   model: import_zod20.z.string().nullable(),
+  /**
+   * The run's OWN status, straight from `agent_runs.status`. `cancelled` is one
+   * of the four values that column writes (`POST /runs/:id/cancel` produces it),
+   * and it is distinct from `failed`: reporting a cancelled run as failed is
+   * untrue.
+   */
+  status: import_zod20.z.enum(["done", "failed", "running", "cancelled"]),
+  /**
+   * The reason the RUN itself recorded — `agent_runs.error` — and `null` on a
+   * run that did not fail.
+   *
+   * Distinct from `summary`, which is the `reviews` row's summary and is `null`
+   * for a run that failed before it wrote one. AC-68 asks for the outcome AND
+   * the reason the run recorded, so without this field a failed column can only
+   * show the status word: the reason exists in the database and stops at the
+   * mapper. A cancelled run puts its cancellation note here too, which is the
+   * same column and the same rendering.
+   */
+  error: import_zod20.z.string().nullable(),
+  verdict: import_zod20.z.string().nullable(),
+  score: import_zod20.z.number().int().nullable(),
+  summary: import_zod20.z.string().nullable(),
+  duration_ms: import_zod20.z.number().int().nullable(),
+  cost_usd: import_zod20.z.number().nullable(),
+  findings: import_zod20.z.array(AgentColumnFinding)
+});
+var ConflictTake = import_zod20.z.object({
+  agent_id: import_zod20.z.string(),
+  persona: import_zod20.z.string(),
+  /** Severity if the agent flagged it, or 'ignored' when it did not. */
+  verdict: import_zod20.z.union([Severity, import_zod20.z.literal("ignored")]),
+  note: import_zod20.z.string()
+});
+var Conflict = import_zod20.z.object({
+  file: import_zod20.z.string(),
+  line: import_zod20.z.number().int(),
+  title: import_zod20.z.string(),
+  takes: import_zod20.z.array(ConflictTake)
+});
+var MultiAgentRun = import_zod20.z.object({
+  id: import_zod20.z.string(),
+  pr_id: import_zod20.z.string(),
+  pr_number: import_zod20.z.number().int().nullish(),
+  ran_at: import_zod20.z.string(),
+  agent_count: import_zod20.z.number().int(),
+  total_duration_ms: import_zod20.z.number().int(),
+  total_cost_usd: import_zod20.z.number().nullable(),
+  columns: import_zod20.z.array(AgentColumn),
+  conflicts: import_zod20.z.array(Conflict)
+});
+var MultiAgentRunRequest = import_zod20.z.object({
+  agentIds: import_zod20.z.array(import_zod20.z.string()).min(1)
+});
+var AgentRunEstimate = import_zod20.z.object({
+  agent_id: import_zod20.z.string(),
+  mean_duration_ms: import_zod20.z.number().nullable(),
+  mean_cost_usd: import_zod20.z.number().nullable(),
+  /** How many runs both means were computed from. 0 ⇒ both means are null. */
+  sample_size: import_zod20.z.number().int()
+});
+var StatPoint = import_zod20.z.object({ label: import_zod20.z.string(), value: import_zod20.z.number() });
+var AgentStats = import_zod20.z.object({
+  agent_id: import_zod20.z.string(),
+  agent_name: import_zod20.z.string(),
   runs: import_zod20.z.number().int(),
   findings_total: import_zod20.z.number().int(),
+  /** accept-rate is the headline quality signal. 0..1 over acted findings. */
   accepted: import_zod20.z.number().int(),
   dismissed: import_zod20.z.number().int(),
-  /** headline quality signal: accepted / (accepted + dismissed), 0..1 or null. */
+  pending: import_zod20.z.number().int(),
   accept_rate: import_zod20.z.number().nullable(),
   dismiss_rate: import_zod20.z.number().nullable(),
   avg_findings_per_run: import_zod20.z.number().nullable(),
   total_cost_usd: import_zod20.z.number().nullable(),
   avg_cost_usd: import_zod20.z.number().nullable(),
   avg_latency_ms: import_zod20.z.number().nullable(),
-  last_run_at: import_zod20.z.string().nullable(),
   findings_by_severity: import_zod20.z.object({
     CRITICAL: import_zod20.z.number().int(),
     WARNING: import_zod20.z.number().int(),
     SUGGESTION: import_zod20.z.number().int()
   }),
-  /** recent findings-per-run trend (oldest→newest) for the sparkline. */
-  trend: import_zod20.z.array(import_zod20.z.number())
+  /** recent runs for a small trend chart (oldest→newest). */
+  trend: import_zod20.z.array(StatPoint)
 });
-var PerfCostSegment = import_zod20.z.object({
-  label: import_zod20.z.string(),
-  value: import_zod20.z.number()
+var CuratorMerge = import_zod20.z.object({
+  kept_id: import_zod20.z.string(),
+  merged_ids: import_zod20.z.array(import_zod20.z.string()),
+  content: import_zod20.z.string(),
+  similarity: import_zod20.z.number()
 });
-var AgentPerf = import_zod20.z.object({
-  summary: import_zod20.z.object({
-    runs: import_zod20.z.number().int(),
-    total_cost_usd: import_zod20.z.number().nullable(),
-    avg_accept_rate: import_zod20.z.number().nullable(),
-    most_active_agent: import_zod20.z.string().nullable()
+var CuratorResult = import_zod20.z.object({
+  scanned: import_zod20.z.number().int(),
+  merges: import_zod20.z.array(CuratorMerge),
+  removed: import_zod20.z.number().int(),
+  dry_run: import_zod20.z.boolean()
+});
+
+// ../server/src/vendor/shared/contracts/productionize.ts
+var import_zod21 = __toESM(require_zod(), 1);
+var PluginSkill = import_zod21.z.object({
+  name: import_zod21.z.string(),
+  description: import_zod21.z.string(),
+  type: import_zod21.z.enum(["rubric", "convention", "security", "custom"]),
+  source: import_zod21.z.enum(["manual", "imported_url", "extracted", "community"]),
+  body: import_zod21.z.string(),
+  enabled: import_zod21.z.boolean(),
+  evidence_files: import_zod21.z.array(import_zod21.z.string()).nullish()
+});
+var PluginAgent = import_zod21.z.object({
+  name: import_zod21.z.string(),
+  description: import_zod21.z.string(),
+  provider: import_zod21.z.enum(["openai", "anthropic", "openrouter"]),
+  model: import_zod21.z.string(),
+  system_prompt: import_zod21.z.string(),
+  output_schema: import_zod21.z.unknown().nullish(),
+  enabled: import_zod21.z.boolean(),
+  /** Names of skills (in this bundle) linked to the agent, in order. */
+  skills: import_zod21.z.array(import_zod21.z.string())
+});
+var PluginEvalCase = import_zod21.z.object({
+  name: import_zod21.z.string(),
+  owner_kind: import_zod21.z.enum(["skill", "agent"]),
+  owner_ref: import_zod21.z.string(),
+  input_diff: import_zod21.z.string().nullish(),
+  input_files: import_zod21.z.unknown().nullish(),
+  input_meta: import_zod21.z.unknown().nullish(),
+  expected_output: import_zod21.z.unknown().nullish(),
+  notes: import_zod21.z.string().nullish()
+});
+var PluginConvention = import_zod21.z.object({
+  rule: import_zod21.z.string(),
+  evidence_path: import_zod21.z.string().nullish(),
+  evidence_snippet: import_zod21.z.string().nullish(),
+  confidence: import_zod21.z.number().nullish(),
+  accepted: import_zod21.z.boolean()
+});
+var PluginManifest = import_zod21.z.object({
+  name: import_zod21.z.string(),
+  version: import_zod21.z.string(),
+  format: import_zod21.z.literal("devdigest-plugin/v1"),
+  exported_at: import_zod21.z.string(),
+  description: import_zod21.z.string().nullish(),
+  counts: import_zod21.z.object({
+    agents: import_zod21.z.number().int(),
+    skills: import_zod21.z.number().int(),
+    eval_cases: import_zod21.z.number().int(),
+    conventions: import_zod21.z.number().int()
+  })
+});
+var PluginBundle = import_zod21.z.object({
+  manifest: PluginManifest,
+  agents: import_zod21.z.array(PluginAgent),
+  skills: import_zod21.z.array(PluginSkill),
+  eval_cases: import_zod21.z.array(PluginEvalCase),
+  conventions: import_zod21.z.array(PluginConvention)
+});
+var PluginExportRequest = import_zod21.z.object({
+  name: import_zod21.z.string().min(1).optional(),
+  description: import_zod21.z.string().optional(),
+  /** Limit export to a subset of agent ids (default: all). */
+  agent_ids: import_zod21.z.array(import_zod21.z.string()).optional()
+});
+var PluginImportRequest = import_zod21.z.object({
+  bundle: PluginBundle,
+  /** 'merge' keeps existing items; 'replace' is reserved (merge is the default). */
+  mode: import_zod21.z.enum(["merge", "replace"]).default("merge").optional()
+});
+var InstalledPlugin = import_zod21.z.object({
+  id: import_zod21.z.string(),
+  name: import_zod21.z.string(),
+  version: import_zod21.z.string().nullable(),
+  source: import_zod21.z.string().nullable(),
+  installed_at: import_zod21.z.string(),
+  enabled: import_zod21.z.boolean()
+});
+var PluginImportResult = import_zod21.z.object({
+  installed: InstalledPlugin,
+  created: import_zod21.z.object({
+    agents: import_zod21.z.number().int(),
+    skills: import_zod21.z.number().int(),
+    eval_cases: import_zod21.z.number().int(),
+    conventions: import_zod21.z.number().int()
+  })
+});
+var AgentPerfRow = import_zod21.z.object({
+  agent_id: import_zod21.z.string(),
+  agent_name: import_zod21.z.string(),
+  provider: import_zod21.z.string().nullable(),
+  model: import_zod21.z.string().nullable(),
+  runs: import_zod21.z.number().int(),
+  findings_total: import_zod21.z.number().int(),
+  accepted: import_zod21.z.number().int(),
+  dismissed: import_zod21.z.number().int(),
+  /** headline quality signal: accepted / (accepted + dismissed), 0..1 or null. */
+  accept_rate: import_zod21.z.number().nullable(),
+  dismiss_rate: import_zod21.z.number().nullable(),
+  avg_findings_per_run: import_zod21.z.number().nullable(),
+  total_cost_usd: import_zod21.z.number().nullable(),
+  avg_cost_usd: import_zod21.z.number().nullable(),
+  avg_latency_ms: import_zod21.z.number().nullable(),
+  last_run_at: import_zod21.z.string().nullable(),
+  findings_by_severity: import_zod21.z.object({
+    CRITICAL: import_zod21.z.number().int(),
+    WARNING: import_zod21.z.number().int(),
+    SUGGESTION: import_zod21.z.number().int()
   }),
-  agents: import_zod20.z.array(AgentPerfRow),
+  /** recent findings-per-run trend (oldest→newest) for the sparkline. */
+  trend: import_zod21.z.array(import_zod21.z.number())
+});
+var PerfCostSegment = import_zod21.z.object({
+  label: import_zod21.z.string(),
+  value: import_zod21.z.number()
+});
+var AgentPerf = import_zod21.z.object({
+  summary: import_zod21.z.object({
+    runs: import_zod21.z.number().int(),
+    total_cost_usd: import_zod21.z.number().nullable(),
+    avg_accept_rate: import_zod21.z.number().nullable(),
+    most_active_agent: import_zod21.z.string().nullable()
+  }),
+  agents: import_zod21.z.array(AgentPerfRow),
   /** cost split by agent and by model (for the two cost-breakdown donuts). */
-  cost_by_agent: import_zod20.z.array(PerfCostSegment),
-  cost_by_model: import_zod20.z.array(PerfCostSegment)
+  cost_by_agent: import_zod21.z.array(PerfCostSegment),
+  cost_by_model: import_zod21.z.array(PerfCostSegment)
 });
-var Digest = import_zod20.z.object({
-  id: import_zod20.z.string(),
-  period_start: import_zod20.z.string().nullable(),
-  period_end: import_zod20.z.string().nullable(),
-  body_md: import_zod20.z.string().nullable(),
-  delivered_to: import_zod20.z.string().nullable()
+var Digest = import_zod21.z.object({
+  id: import_zod21.z.string(),
+  period_start: import_zod21.z.string().nullable(),
+  period_end: import_zod21.z.string().nullable(),
+  body_md: import_zod21.z.string().nullable(),
+  delivered_to: import_zod21.z.string().nullable()
 });
-var DigestRunRequest = import_zod20.z.object({
+var DigestRunRequest = import_zod21.z.object({
   /** ISO range; defaults to the last 7 days. */
-  period_start: import_zod20.z.string().optional(),
-  period_end: import_zod20.z.string().optional()
+  period_start: import_zod21.z.string().optional(),
+  period_end: import_zod21.z.string().optional()
 });
 
 // ../server/src/vendor/shared/adapters.ts
-var import_zod21 = __toESM(require_zod(), 1);
-var ModelInfo = import_zod21.z.object({
-  id: import_zod21.z.string(),
-  provider: import_zod21.z.enum(["openai", "anthropic", "openrouter"]),
-  label: import_zod21.z.string().nullish(),
-  created: import_zod21.z.number().int().nullish(),
+var import_zod22 = __toESM(require_zod(), 1);
+var ModelInfo = import_zod22.z.object({
+  id: import_zod22.z.string(),
+  provider: import_zod22.z.enum(["openai", "anthropic", "openrouter"]),
+  label: import_zod22.z.string().nullish(),
+  created: import_zod22.z.number().int().nullish(),
   /** Pricing in USD per 1M tokens (when the provider exposes it, e.g. OpenRouter). */
-  pricing: import_zod21.z.object({ promptPerM: import_zod21.z.number(), completionPerM: import_zod21.z.number() }).nullish(),
+  pricing: import_zod22.z.object({ promptPerM: import_zod22.z.number(), completionPerM: import_zod22.z.number() }).nullish(),
   /** Max context window in tokens (when the provider exposes it). */
-  contextLength: import_zod21.z.number().int().nullish()
+  contextLength: import_zod22.z.number().int().nullish()
 });
 
 // ../reviewer-core/src/prompt.ts
@@ -30953,11 +31045,12 @@ function applyScopeGuard(findings) {
 }
 
 // ../reviewer-core/src/llm/structured.ts
-var import_zod22 = __toESM(require_zod2(), 1);
+var import_zod23 = __toESM(require_zod2(), 1);
 function toJsonSchema(schema, name) {
-  const rf = (0, import_zod22.zodResponseFormat)(schema, name);
+  const rf = (0, import_zod23.zodResponseFormat)(schema, name);
   const json = rf.json_schema.schema;
   stripNumericRangeKeywords(json);
+  inlineDefinitions(json);
   return { schema: json, name };
 }
 var NUMERIC_RANGE_KEYWORDS = [
@@ -30986,6 +31079,43 @@ function stripNumericRangeKeywords(node) {
     obj.description = typeof obj.description === "string" ? `${obj.description} ${hint}` : hint;
   }
   for (const value of Object.values(obj)) stripNumericRangeKeywords(value);
+}
+function inlineDefinitions(root) {
+  delete root.$schema;
+  const defsKey = "$defs" in root ? "$defs" : "definitions" in root ? "definitions" : null;
+  if (defsKey === null) return;
+  const defs = root[defsKey];
+  if (defs === null || typeof defs !== "object" || Array.isArray(defs)) return;
+  const table = defs;
+  const prefix = `#/${defsKey}/`;
+  let unresolved = false;
+  const resolve = (node, seen) => {
+    if (Array.isArray(node)) return node.map((item) => resolve(item, seen));
+    if (node === null || typeof node !== "object") return node;
+    const obj = node;
+    const ref = obj.$ref;
+    if (typeof ref === "string") {
+      const target = ref.startsWith(prefix) ? table[ref.slice(prefix.length)] : void 0;
+      if (target === void 0 || seen.includes(ref)) {
+        unresolved = true;
+        return obj;
+      }
+      const { $ref: _ref, ...siblings } = obj;
+      const expanded = resolve(target, [...seen, ref]);
+      if (expanded === null || typeof expanded !== "object" || Array.isArray(expanded)) {
+        return expanded;
+      }
+      return { ...expanded, ...siblings };
+    }
+    const out = {};
+    for (const [key, value] of Object.entries(obj)) out[key] = resolve(value, seen);
+    return out;
+  };
+  for (const key of Object.keys(root)) {
+    if (key === defsKey) continue;
+    root[key] = resolve(root[key], []);
+  }
+  if (!unresolved) delete root[defsKey];
 }
 function extractJson(text) {
   const trimmed = text.trim();
@@ -31275,6 +31405,23 @@ function toReviewPayload(review, opts = {}) {
 // ../reviewer-core/src/llm/openrouter.ts
 var import_openai = __toESM(require_openai(), 1);
 var NOT_SUPPORTED = "OpenRouterProvider only implements completeStructured";
+async function withProviderDetail(call) {
+  try {
+    return await call();
+  } catch (err) {
+    const meta = err?.error?.metadata;
+    if (meta && typeof err === "object" && err !== null && "message" in err) {
+      const raw = typeof meta.raw === "string" ? meta.raw : meta.raw == null ? "" : JSON.stringify(meta.raw);
+      const provider = typeof meta.provider_name === "string" ? meta.provider_name : "";
+      const detail = [provider, raw].filter(Boolean).join(": ").replace(/\s+/g, " ").trim();
+      if (detail !== "") {
+        const e = err;
+        e.message = `${e.message} \u2014 ${detail.slice(0, 600)}`;
+      }
+    }
+    throw err;
+  }
+}
 var OpenRouterProvider = class {
   id;
   client;
@@ -31304,7 +31451,7 @@ var OpenRouterProvider = class {
     let costFromApi = null;
     let lastRaw = "";
     for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
-      const res = await this.client.chat.completions.create({
+      const res = await withProviderDetail(() => this.client.chat.completions.create({
         model: req.model,
         messages,
         temperature: req.temperature ?? 0,
@@ -31319,7 +31466,7 @@ var OpenRouterProvider = class {
         // OpenRouter usage accounting — ask it to return the REAL generation
         // cost (USD) in `usage.cost`, instead of estimating from a price book.
         ...this.id === "openrouter" ? { usage: { include: true } } : {}
-      });
+      }));
       const choice = res.choices?.[0];
       if (!choice) {
         const errMsg = res.error?.message;
@@ -31440,7 +31587,7 @@ ${body.trim()}`));
 }
 
 // src/github.ts
-var import_zod23 = __toESM(require_zod(), 1);
+var import_zod24 = __toESM(require_zod(), 1);
 var API = "https://api.github.com";
 var PER_PAGE = 100;
 var MAX_PAGES = 10;
@@ -31451,13 +31598,13 @@ var GitHubHttpError = class extends Error {
     this.name = "GitHubHttpError";
   }
 };
-var ApiFiles = import_zod23.z.array(
-  import_zod23.z.object({
-    filename: import_zod23.z.string(),
-    patch: import_zod23.z.string().nullish()
+var ApiFiles = import_zod24.z.array(
+  import_zod24.z.object({
+    filename: import_zod24.z.string(),
+    patch: import_zod24.z.string().nullish()
   })
 );
-var ApiCreated = import_zod23.z.object({ id: import_zod23.z.union([import_zod23.z.number(), import_zod23.z.string()]).nullish() });
+var ApiCreated = import_zod24.z.object({ id: import_zod24.z.union([import_zod24.z.number(), import_zod24.z.string()]).nullish() });
 var FetchRunnerGitHub = class {
   constructor(token, fetchImpl = globalThis.fetch.bind(globalThis)) {
     this.token = token;
@@ -31768,9 +31915,9 @@ function buildResult(parts) {
     missing_skills: parts.missingSkills
   };
 }
-var EventPayload = import_zod24.z.object({
-  pull_request: import_zod24.z.object({ number: import_zod24.z.number().int().nullish(), body: import_zod24.z.string().nullish() }).nullish(),
-  number: import_zod24.z.number().int().nullish()
+var EventPayload = import_zod25.z.object({
+  pull_request: import_zod25.z.object({ number: import_zod25.z.number().int().nullish(), body: import_zod25.z.string().nullish() }).nullish(),
+  number: import_zod25.z.number().int().nullish()
 });
 async function prFromEvent(env) {
   const path = env.GITHUB_EVENT_PATH;
