@@ -70,7 +70,25 @@ valuable one — the code does not record what was tried and abandoned.
 
 <!-- append below -->
 
-_No entries yet._
+- **2026-08-29** — **This journal recorded the SAME fix twice, three days apart, and neither
+  entry knew about the other — because an append-only journal is per-branch, so it cannot
+  warn a concurrent worktree that the work is already done.** The 2026-08-25 and 2026-08-28
+  entries under Tool & Library Notes both describe finding the Gemini `$ref` 400 and both
+  say they added `inlineDefinitions` to `toJsonSchema`. They are two independent
+  implementations written in two parallel worktrees off one base, and the L07 fan-out merge
+  had to pick one. What survived is the later one — it handles `$defs` as well as
+  `definitions`, guards a cycle with a `seen` list instead of recursing forever, keeps a
+  `$ref` node's own `description` over the target's, and RETAINS the block when anything
+  failed to resolve. The earlier one's `delete root.$schema` had to be folded into it by
+  hand, because that behaviour existed nowhere else and the test pinning it
+  (`expect(wire).not.toHaveProperty('$schema')`) came from the other branch — i.e. merging
+  two fixes for one bug is not "pick the better file", it is "pick one and re-derive what
+  the other alone was doing". Both test suites are kept deliberately, at 8 tests, as the
+  record that two of them existed. Before starting a provider-portability pass, check the
+  other live worktrees rather than only this file:
+  `git worktree list`, then `git log --oneline <branch> -- src/llm/`. Evidence:
+  `src/llm/structured.ts` (`inlineDefinitions`), `test/structured.test.ts` (two `describe`
+  blocks over one regression).
 
 ## Codebase Patterns
 

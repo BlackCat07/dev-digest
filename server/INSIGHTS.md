@@ -769,6 +769,24 @@ Dependency and tooling quirks.
 
 <!-- append below -->
 
+- **2026-08-29** — **Two branches developed in parallel each ran `drizzle-kit generate` and
+  both got `idx: 22`, and the collision is invisible until they meet — each `_journal.json`
+  is internally consistent and each `.sql` applies cleanly on its own branch.** Merging them
+  yields a journal with two `idx: 22` objects and two `meta/0022_snapshot.json` files each
+  claiming to be the same point in history. **Renaming the loser to `0023_*` does not fix
+  it:** its snapshot is a diff of `0021`'s and would then sit behind a `0022` that altered a
+  different table, so the journal applies while describing a schema nobody has. What works
+  is to regenerate rather than rename — keep one branch's `0022` and its snapshot, `git rm`
+  the other's `.sql` and drop its journal entry, then run
+  `./node_modules/.bin/drizzle-kit generate` against the MERGED schema: it diffs the
+  surviving `0022` snapshot and emits a correctly-based `0023`. The cheap check that nothing
+  was lost is `diff <(sort dropped.sql) <(sort generated.sql)` — byte-identical statements
+  here. Note this stayed non-interactive only because both migrations were pure
+  `ADD COLUMN`; if either side DROPS a column, the 2026-08-06 rename-prompt entry in this
+  section applies and the change needs the two-migration split it describes. Evidence:
+  `src/db/migrations/0023_sour_hobgoblin.sql`, `src/db/migrations/0022_petite_kylun.sql`,
+  `src/db/migrations/meta/_journal.json`.
+
 - **2026-08-29** — **GitHub empties `workflow_run.pull_requests` the moment the pull request
   is merged or closed, so re-reading an old run reports `prNumber: null` for a run that
   plainly had one.** The array is populated ONLY while the PR is open and originates in the
