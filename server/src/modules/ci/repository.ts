@@ -185,7 +185,24 @@ export class CiRepository implements CiStore {
         .onConflictDoUpdate({
           target: [t.ciRuns.ciInstallationId, t.ciRuns.workflowRunId],
           set: {
-            prNumber: row.prNumber,
+            /**
+             * `pr_number` is written only when GitHub still reports one.
+             *
+             * `workflow_run.pull_requests` is populated ONLY while the pull
+             * request is open and from this repository; the moment it is merged
+             * or closed GitHub returns an empty array, so the next refresh cycle
+             * carries `prNumber: null` for a run that plainly had one. Setting it
+             * unconditionally overwrote the stored number with null and blanked
+             * the CI Runs screen's "Pull request" column for exactly the runs a
+             * reader goes there to find — the historical, already-merged ones.
+             *
+             * Not a relaxation of AC-23. Provenance still comes from the workflow
+             * run and never from the artifact; this only declines to unlearn a
+             * value GitHub has stopped repeating. A run never changes which pull
+             * request it belongs to, so there is no case where null is the newer
+             * truth.
+             */
+            ...(row.prNumber === null ? {} : { prNumber: row.prNumber }),
             ranAt: row.ranAt,
             status: row.status,
             findingsCount: row.findingsCount,

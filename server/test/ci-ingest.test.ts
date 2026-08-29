@@ -299,6 +299,22 @@ describe('reading a run back', () => {
     expect(downloads).toEqual([{ runId: 90001, name: CI_RESULT_ARTIFACT_NAME }]);
   });
 
+  it('carries a skipped result through as skipped, distinct from no_findings', async () => {
+    // Both shapes report zero findings, and they mean opposite things: `skipped`
+    // is a run where every file was excluded so no model was called, while
+    // `no_findings` is the model having read the diff and reported nothing.
+    // Collapsing them put a green "No findings" on a pull request nobody looked
+    // at — which is what the export PR itself did, since it touches only
+    // `.devdigest/`.
+    const { service, recorded } = build({
+      artifacts: {
+        90001: resultZip(result({ findings_count: 0, blockers: 0, status: 'skipped' })),
+      },
+    });
+    await service.refresh(WS, 50);
+    expect(recorded[0]?.run.status).toBe('skipped');
+  });
+
   it('derives no_findings from a clean result that names no status', async () => {
     const { service, recorded } = build({
       artifacts: {

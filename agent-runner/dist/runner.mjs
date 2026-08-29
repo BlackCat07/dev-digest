@@ -30297,7 +30297,7 @@ var CiExport = import_zod16.z.object({
   files: import_zod16.z.array(CiFile),
   pr_url: import_zod16.z.string().nullable()
 });
-var CiRunStatus = import_zod16.z.enum(["succeeded", "failed", "no_findings", "running"]);
+var CiRunStatus = import_zod16.z.enum(["succeeded", "failed", "no_findings", "running", "skipped"]);
 var CiRun = import_zod16.z.object({
   id: import_zod16.z.string(),
   ci_installation_id: import_zod16.z.string().nullable(),
@@ -30338,8 +30338,18 @@ var CiResultArtifact = import_zod16.z.object({
   agent: import_zod16.z.string(),
   version: import_zod16.z.string().nullish(),
   pr_number: import_zod16.z.number().int().nullish(),
-  /** Outcome the runner reached; absent from results written by older runners. */
-  status: import_zod16.z.enum(["succeeded", "failed", "no_findings"]).nullish(),
+  /**
+   * Outcome the runner reached; absent from results written by older runners.
+   *
+   * `skipped` and `no_findings` are DIFFERENT answers and the distinction is the
+   * point: `no_findings` means the model read the diff and reported nothing,
+   * `skipped` means there was no reviewable diff to read — a pull request
+   * touching only excluded paths (DevDigest's own files, binaries), where the
+   * runner deliberately makes no model call because an approval on a diff nobody
+   * looked at is a lie. Collapsing them showed a green "No findings" on a pull
+   * request that was never reviewed.
+   */
+  status: import_zod16.z.enum(["succeeded", "failed", "no_findings", "skipped"]).nullish(),
   /** Failure reason when the runner terminated on an error rather than a review. */
   error: import_zod16.z.string().nullish(),
   /** Findings that tripped the manifest's `ci_fail_on` — the runner's exit code. */
@@ -31871,7 +31881,14 @@ async function run(io) {
       blockers,
       missingSkills,
       prNumber,
-      status: findings.length === 0 ? "no_findings" : "succeeded",
+      /**
+       * THREE outcomes, not two. `outcome === null` is `reviewPullRequest`
+       * never having been called — the diff was empty after exclusions, so no
+       * model call was made and no review was posted. Reporting that as
+       * `no_findings` put a green "the agent looked and was happy" on a pull
+       * request nobody looked at; `skipped` says what actually happened.
+       */
+      status: review.outcome === null ? "skipped" : findings.length === 0 ? "no_findings" : "succeeded",
       error: null
     });
     const resultPath = await writeResult(cwd, result, redact);

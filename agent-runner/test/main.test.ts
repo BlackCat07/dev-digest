@@ -199,6 +199,42 @@ describe('run — a full review', () => {
     expect(outcome.result.findings_count).toBe(0);
     expect(outcome.result.blockers).toBe(0);
   });
+
+  it('records skipped, not no_findings, when every file was excluded', async () => {
+    // The two zero-finding outcomes are opposites and must not share a word.
+    // A pull request touching only DevDigest's own files — which is exactly what
+    // the export PR is — leaves nothing reviewable, so `reviewPullRequest` is
+    // never called and no model is billed. Reporting that as `no_findings` put a
+    // green "the agent looked and was happy" on a diff nobody looked at.
+    //
+    // `MockLLMProvider` records every call it receives, so "no model was called"
+    // is asserted rather than assumed.
+    const llm = new MockLLMProvider(CLEAN_REVIEW);
+    const github = new MockRunnerGitHub([
+      { path: '.devdigest/agents/security-reviewer.yaml', patch: CONFIG_PATCH },
+      { path: '.github/workflows/devdigest-review.yml', patch: CONFIG_PATCH },
+    ]);
+    const outcome = await run({
+      env: envFor(workspace),
+      argv: ['review', '--agent', 'security-reviewer'],
+      cwd: workspace,
+      github,
+      llm,
+      log: () => {},
+      errorLog: () => {},
+    });
+
+    expect(outcome.result.status).toBe('skipped');
+    expect(outcome.result.findings_count).toBe(0);
+    // Green: nothing was reviewed, so nothing can have tripped the gate.
+    expect(outcome.exitCode).toBe(0);
+    // The distinguishing evidence — no model call, and therefore no cost.
+    expect(llm.calls).toHaveLength(0);
+    expect(outcome.result.cost_usd).toBeNull();
+    // …and no review was posted: an APPROVE here would be a verdict on a diff
+    // nobody looked at.
+    expect(github.posted).toHaveLength(0);
+  });
 });
 
 describe('run — the exit code is the ci_fail_on gate and nothing else', () => {

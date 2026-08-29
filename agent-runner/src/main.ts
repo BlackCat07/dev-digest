@@ -129,7 +129,7 @@ interface ResultParts {
   blockers: number;
   missingSkills: string[];
   prNumber: number | null;
-  status: 'succeeded' | 'failed' | 'no_findings';
+  status: 'succeeded' | 'failed' | 'no_findings' | 'skipped';
   error: string | null;
 }
 
@@ -307,7 +307,15 @@ export async function run(io: RunnerIO): Promise<RunnerOutcome> {
       blockers,
       missingSkills,
       prNumber,
-      status: findings.length === 0 ? 'no_findings' : 'succeeded',
+      /**
+       * THREE outcomes, not two. `outcome === null` is `reviewPullRequest`
+       * never having been called — the diff was empty after exclusions, so no
+       * model call was made and no review was posted. Reporting that as
+       * `no_findings` put a green "the agent looked and was happy" on a pull
+       * request nobody looked at; `skipped` says what actually happened.
+       */
+      status:
+        review.outcome === null ? 'skipped' : findings.length === 0 ? 'no_findings' : 'succeeded',
       error: null,
     });
     const resultPath = await writeResult(cwd, result, redact);

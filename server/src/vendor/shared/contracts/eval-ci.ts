@@ -213,7 +213,13 @@ export const CiExport = z.object({
 });
 export type CiExport = z.infer<typeof CiExport>;
 
-export const CiRunStatus = z.enum(['succeeded', 'failed', 'no_findings', 'running']);
+/**
+ * `skipped` is a run that HAPPENED and reviewed nothing — every file in the diff
+ * was excluded, so no model was called. It is not `no_findings`, which is the
+ * model having read the diff and reported nothing, and the two must not render
+ * as the same word.
+ */
+export const CiRunStatus = z.enum(['succeeded', 'failed', 'no_findings', 'running', 'skipped']);
 export type CiRunStatus = z.infer<typeof CiRunStatus>;
 
 /** A CI run row (mirrors `ci_runs`) — ingested from GitHub Actions artifacts. */
@@ -263,8 +269,18 @@ export const CiResultArtifact = z.object({
   agent: z.string(),
   version: z.string().nullish(),
   pr_number: z.number().int().nullish(),
-  /** Outcome the runner reached; absent from results written by older runners. */
-  status: z.enum(['succeeded', 'failed', 'no_findings']).nullish(),
+  /**
+   * Outcome the runner reached; absent from results written by older runners.
+   *
+   * `skipped` and `no_findings` are DIFFERENT answers and the distinction is the
+   * point: `no_findings` means the model read the diff and reported nothing,
+   * `skipped` means there was no reviewable diff to read — a pull request
+   * touching only excluded paths (DevDigest's own files, binaries), where the
+   * runner deliberately makes no model call because an approval on a diff nobody
+   * looked at is a lie. Collapsing them showed a green "No findings" on a pull
+   * request that was never reviewed.
+   */
+  status: z.enum(['succeeded', 'failed', 'no_findings', 'skipped']).nullish(),
   /** Failure reason when the runner terminated on an error rather than a review. */
   error: z.string().nullish(),
   /** Findings that tripped the manifest's `ci_fail_on` — the runner's exit code. */

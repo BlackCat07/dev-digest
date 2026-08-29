@@ -237,6 +237,55 @@ d('CI runs read order (Postgres)', () => {
     expect(all).toHaveLength(1);
   });
 
+  it('keeps the stored pr_number when a later read no longer carries one', async () => {
+    // The regression a real export hit. GitHub populates
+    // `workflow_run.pull_requests` ONLY while the pull request is open and from
+    // this repository; once it is merged the array is empty, so the next refresh
+    // cycle carries `prNumber: null` for a run that plainly had one. Setting the
+    // column unconditionally overwrote 17 with null and blanked the CI Runs
+    // screen's "Pull request" column for every already-merged run — which is most
+    // of the history a reader goes there to see.
+    //
+    // Against the real UPSERT, because the whole fix is the shape of the SET
+    // clause: a fake that stores what it is handed cannot fail this.
+    const write = {
+      ciInstallationId: INSTALLATION,
+      workflowRunId: 96_777,
+      prNumber: 17,
+      ranAt: TIED,
+      status: 'succeeded',
+      findingsCount: 5,
+      costUsd: 0.0015,
+      githubUrl: 'https://github.com/acme/payments-api/actions/runs/96777',
+      headSha: 'cafebabe',
+      repo: 'acme/payments-api',
+      source: 'gha',
+      agent: 'Security Reviewer',
+      blockers: 1,
+      durationS: 42,
+      reason: null,
+    };
+
+    const open = await repo.recordRun(write, null);
+    expect(open.prNumber).toBe(17);
+
+    // The same run, read again after the pull request was merged: everything
+    // else still arrives, the number no longer does.
+    const merged = await repo.recordRun({ ...write, prNumber: null, findingsCount: 6 }, null);
+
+    expect(merged.id).toBe(open.id);
+    expect(merged.prNumber).toBe(17);
+    // …and the read is not frozen: every other field still updates.
+    expect(merged.findingsCount).toBe(6);
+
+    const rows = await pg.handle.db
+      .select({ prNumber: t.ciRuns.prNumber })
+      .from(t.ciRuns)
+      .where(eq(t.ciRuns.workflowRunId, 96_777));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.prNumber).toBe(17);
+  });
+
   it('records a run and its agent_runs row once, however many times it is read', async () => {
     // AC-26 against the real `(ci_installation_id, workflow_run_id)` UNIQUE index.
     // The second read must UPDATE the `agent_runs` row it already points at, not

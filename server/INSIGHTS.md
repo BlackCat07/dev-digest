@@ -688,6 +688,36 @@ Dependency and tooling quirks.
 
 <!-- append below -->
 
+- **2026-08-29** — **GitHub empties `workflow_run.pull_requests` the moment the pull request
+  is merged or closed, so re-reading an old run reports `prNumber: null` for a run that
+  plainly had one.** The array is populated ONLY while the PR is open and originates in the
+  same repository. `OctokitGitHubClient.listWorkflowRuns` maps it as
+  `r.pull_requests?.[0]?.number ?? null`, which is correct at read time — the bug is what the
+  caller does with it. `recordRun`'s `onConflictDoUpdate` set `prNumber` unconditionally, so
+  the first refresh after a merge overwrote a stored `17` with null and blanked the CI Runs
+  screen's "Pull request" column for every already-merged run, i.e. for most of the history
+  that screen exists to show. Fixed by omitting the key from the SET when the incoming value
+  is null. Generalises to any GitHub field that is a *view of current state* rather than a
+  fact about the event: re-reading is not idempotent for those, and an upsert that treats the
+  newest read as the whole truth will unlearn things. Note the provenance rule (AC-23,
+  take repository/PR/SHA from the run and never from the artifact) is untouched — a run never
+  changes which PR it belongs to, so null is never the newer truth. Evidence:
+  `src/adapters/github/octokit.ts` (`listWorkflowRuns`),
+  `src/modules/ci/repository.ts` (`recordRun`), `test/ci-runs-order.it.test.ts`.
+
+- **2026-08-29** — **A fine-grained PAT cannot write anything under `.github/workflows/`
+  without the separate **Workflows** permission, and the refusal names no permission and
+  points at the wrong API.** Contents: read-and-write plus Pull requests: read-and-write is
+  not enough. GitHub rejects at **tree creation** — `POST /repos/{o}/{r}/git/trees`, because
+  the tree carries a workflow path — with `403 Resource not accessible by personal access
+  token` and a docs link to `create-a-tree`, so the message reads as a Contents problem and
+  sends you to check the wrong setting. Using the Git Data API rather than the Contents API
+  does **not** bypass it. Cost two failed real exports before the cause was found. Since
+  nothing in the error can be turned into a specific message, the answer is preventive: the
+  wizard's Install step now names all three permissions before the button is pressed
+  (SPEC-05 AC-59, EC-2a). Evidence: `src/adapters/github/octokit.ts` (`commitFiles`),
+  `../specs/export-to-ci.md` (EC-2a).
+
 - **2026-08-25** — **`yaml.stringify(obj, { nullStr: '' })` is the only formulation that
   writes a valueless YAML key (`skills:`) which reads back as `null`.** The default `nullStr`
   emits the literal string `null`, and a `.default([])` on the Zod contract does **not** catch
@@ -919,6 +949,47 @@ Dependency and tooling quirks.
 An error string, its real cause, and the fix.
 
 <!-- append below -->
+
+- **2026-08-29** — **`column ci_runs.workflow_run_id does not exist` at runtime, minutes after
+  `pnpm db:migrate` printed `✓ migrations applied` — because ANOTHER WORKTREE's migration is
+  sitting in the slot yours needed.** The Postgres container is shared by every worktree, and
+  Drizzle applies migrations by **journal position**, comparing counts rather than reconciling
+  tags: `drizzle.__drizzle_migrations` held 23 rows, so `0022` was considered done. Row 23's
+  hash was `69382f0b…` while `shasum -a 256 src/db/migrations/0022_petite_kylun.sql` is
+  `030bb922…` — a *different* branch's `0022`, applied first. Nothing warns; migrate exits 0.
+  **Diagnosis:** hash your migration file and compare it against
+  `select id, hash from drizzle.__drizzle_migrations order by id desc` — a mismatch at your
+  index is the whole story. **Two fixes, and pick deliberately:** point that worktree at its
+  own database (clean, but starts empty — the imported repos, PRs and repo-intel index all
+  live in the original one), or apply your `.sql` by hand with
+  `docker exec -i devdigest-postgres psql -U devdigest -d devdigest -v ON_ERROR_STOP=1 < …`
+  and leave the journal alone. Do **not** insert a journal row to "correct" it: that shifts
+  the count and makes the next branch's migration look applied instead. Two branches with a
+  conflicting `NNNN` on one database cannot both be right — this is a coordination problem
+  wearing a tooling error's clothes. Extends the 2026-08-19 triage in What Works (`500` =
+  migration unapplied) with the case where migrate *says* it applied them. Evidence:
+  `src/db/migrations/0022_petite_kylun.sql`, `src/db/migrations/meta/_journal.json`.
+
+- **2026-08-29** — **A real GitHub `403` reached the UI as `{"code":"internal_error",
+  "message":"Internal error"}`, because Octokit spells its status `status` and the error
+  handler reads `statusCode`.** `app.ts`'s handler does `const status = e.statusCode ?? 500`,
+  so an `HttpError` — which carries `status: 403` and no `statusCode` — is classified 5xx and
+  hits the branch that deliberately hides 5xx messages (a Postgres connection string or a
+  prompt fragment must not leave the process). The one sentence that said *which* permission
+  was missing was the sentence thrown away. Note `platform/resilience.ts`'s
+  `defaultIsRetryable` reads `status` **and** `statusCode`, so retries were always correct and
+  only the HTTP boundary was wrong — the two layers disagreed about the shape of the same
+  object. Fixed in the adapter, the ring that owns the SDK: `mapGitHubError` turns a 4xx into
+  an `AppError` (`github_permission` / `github_auth` / `github_not_found`) carrying GitHub's
+  own words, and 5xx and socket errors are deliberately left alone so they stay retryable and
+  stay hidden. **The testing lesson is the bigger one:** two green tests bracketed this defect
+  without covering it — a service test asserted the service *throws* with the right message,
+  and a client test asserted the wizard *renders* `error.message` from a hand-written
+  `{code:"github_permission"}` envelope the server never produced (that string appears nowhere
+  in `src/`). When a criterion is about what a caller SEES, one test has to cross the HTTP
+  boundary. Evidence: `src/app.ts` (`setErrorHandler`),
+  `src/adapters/github/octokit.ts` (`mapGitHubError`, `ghRetry`), `test/github-errors.test.ts`,
+  `test/ci-routes.test.ts`.
 
 - **2026-08-07** — **`Cannot read properties of undefined (reading 'skills')` on
   `trace.prompt_assembly`, CI-only, right after a run turns `done`.** The executor committed
