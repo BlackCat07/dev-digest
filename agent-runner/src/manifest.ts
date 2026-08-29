@@ -1,83 +1,87 @@
-import { readFileSync, readdirSync } from 'node:fs';
-import path from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { AgentManifest } from '@devdigest/shared';
-import { RunnerError } from './errors.js';
+import { wrapUntrusted } from '@devdigest/reviewer-core';
 
 /**
- * Loads and VALIDATES the checked-in `.devdigest/agents/<slug>.yaml` manifest
- * (AC-20). The manifest is written by the studio's export flow
- * (`server/src/modules/ci/manifest.ts`) and is otherwise untrusted on-disk
- * content by the time it reaches CI — it is schema-validated with the same
- * `AgentManifest` Zod contract before any of its fields (system prompt, model,
- * ci_fail_on) are used to build a review. Fail clearly (a descriptive
- * `RunnerError`) rather than silently defaulting or partially trusting it.
+ * Load an agent from the `.devdigest/` layout the studio exports: the manifest
+ * YAML (validated against the SHARED AgentManifest schema, so studio↔runner can
+ * never drift) plus its skill bodies resolved from `<skillsDir>/<slug>.md`.
+ * Skill-slug resolution is the runner's I/O job; the engine takes resolved
+ * bodies.
+ *
+ * Every body is wrapped as UNTRUSTED. The studio's own `SkillsService` exempts
+ * skills whose `source` is `manual`, because there a human in this workspace
+ * typed them; here there is no such column and no such claim — a skill body is
+ * a markdown file in a repository DevDigest does not control, sitting next to
+ * the pull request it is about to review. The exemption does not travel.
  */
-
-export type { AgentManifest } from '@devdigest/shared';
-
-export interface FsDeps {
-  readFile?: typeof readFileSync;
-  readDir?: typeof readdirSync;
+export interface LoadedAgent {
+  manifest: AgentManifest;
+  /** Resolved, untrusted-wrapped skill bodies, in manifest order. */
+  skillBodies: string[];
+  /** Manifest slugs that resolved to no file — surfaced, never silently dropped. */
+  missingSkills: string[];
 }
 
-/** Find the single agent manifest file under `<devdigestDir>/agents/`. */
-export function findManifestPath(devdigestDir: string, deps: FsDeps = {}): string {
-  const readDir = deps.readDir ?? readdirSync;
-  const agentsDir = path.join(devdigestDir, 'agents');
-  let entries: string[];
-  try {
-    entries = readDir(agentsDir) as unknown as string[];
-  } catch (err) {
-    throw new RunnerError(
-      `Agent manifest directory not found: ${agentsDir} (${(err as Error).message})`,
-    );
+/** A manifest that does not satisfy the shared contract, named down to the field. */
+export class ManifestError extends Error {
+  constructor(
+    readonly file: string,
+    readonly fields: string[],
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ManifestError';
   }
-  const yamlFiles = entries.filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'));
-  if (yamlFiles.length === 0) {
-    throw new RunnerError(`No agent manifest (*.yaml) found in ${agentsDir}`);
-  }
-  if (yamlFiles.length > 1) {
-    throw new RunnerError(
-      `Expected exactly one agent manifest in ${agentsDir}, found ${yamlFiles.length}: ${yamlFiles.join(', ')}`,
-    );
-  }
-  return path.join(agentsDir, yamlFiles[0]!);
 }
 
-/** Read, parse, and Zod-validate the manifest at `manifestPath` (AC-20). */
-export function loadAgentManifest(manifestPath: string, deps: FsDeps = {}): AgentManifest {
-  const readFile = deps.readFile ?? readFileSync;
+export async function loadAgent(agentYamlPath: string, skillsDir: string): Promise<LoadedAgent> {
   let raw: string;
   try {
-    raw = readFile(manifestPath, 'utf8') as unknown as string;
-  } catch (err) {
-    throw new RunnerError(
-      `Cannot read agent manifest at ${manifestPath}: ${(err as Error).message}`,
-    );
+    raw = await readFile(agentYamlPath, 'utf8');
+  } catch {
+    throw new ManifestError(agentYamlPath, [], `${agentYamlPath}: agent manifest not found`);
   }
 
-  let parsed: unknown;
+  let doc: unknown;
   try {
-    parsed = parseYaml(raw);
+    doc = parseYaml(raw);
   } catch (err) {
-    throw new RunnerError(
-      `Agent manifest at ${manifestPath} is not valid YAML: ${(err as Error).message}`,
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new ManifestError(agentYamlPath, [], `${agentYamlPath}: not valid YAML — ${detail}`);
+  }
+
+  // safeParse, not parse: an invalid manifest is a reported outcome of this run
+  // (named file, named field, written result), not a stack trace.
+  const parsed = AgentManifest.safeParse(doc);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((i) => ({
+      field: i.path.length > 0 ? i.path.join('.') : '(root)',
+      message: i.message,
+    }));
+    const fields = issues.map((i) => i.field);
+    const detail = issues.map((i) => `${i.field}: ${i.message}`).join('; ');
+    throw new ManifestError(
+      agentYamlPath,
+      fields,
+      `${agentYamlPath}: invalid agent manifest — ${detail}`,
     );
   }
+  const manifest = parsed.data;
 
-  const result = AgentManifest.safeParse(parsed);
-  if (!result.success) {
-    const issues = result.error.issues
-      .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
-      .join('; ');
-    throw new RunnerError(`Agent manifest at ${manifestPath} failed validation: ${issues}`);
+  const skillBodies: string[] = [];
+  const missingSkills: string[] = [];
+  for (const slug of manifest.skills) {
+    let body: string;
+    try {
+      body = await readFile(join(skillsDir, `${slug}.md`), 'utf8');
+    } catch {
+      missingSkills.push(slug); // surfaced by the caller — never silently dropped
+      continue;
+    }
+    skillBodies.push(wrapUntrusted(`skill:${slug}`, `### ${slug}\n${body.trim()}`));
   }
-  return result.data;
-}
-
-/** Convenience: locate + load + validate in one call. */
-export function loadManifest(devdigestDir: string, deps: FsDeps = {}): AgentManifest {
-  const manifestPath = findManifestPath(devdigestDir, deps);
-  return loadAgentManifest(manifestPath, deps);
+  return { manifest, skillBodies, missingSkills };
 }

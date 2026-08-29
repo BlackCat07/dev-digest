@@ -1,126 +1,93 @@
-# @devdigest/agent-runner
+# `agent-runner` — the DevDigest reviewer, running in someone else's CI
 
-The **DevDigest CI runner** — a standalone CLI that runs a DevDigest review agent
-inside a *target repository's own CI* (GitHub Actions), entirely outside this
-repo's server, its DI graph, and its Postgres instance.
-
-`src/index.ts` is `ncc`-bundled into a single self-contained `dist/index.js`,
-embedded as `.devdigest/runner/index.js` in the exported `devdigest/ci` PR, and
-executed by the target repo's workflow as `node .devdigest/runner/index.js`.
-
-## What it does
-
-1. **Loads + validates** the checked-in manifest `.devdigest/agents/<slug>.yaml`
-   and skill bodies `.devdigest/skills/*.md` from the target repo's working tree
-   (validated against `AgentManifest` before use).
-2. **Resolves the PR context** (owner / repo / number / title / body / fork flag)
-   from CI env vars + the `pull_request` event payload.
-3. **Fetches the PR diff** via the GitHub REST API (native `fetch`, no octokit)
-   and strips DevDigest's own exported files (`.devdigest/**`, the generated
-   workflow) before parsing.
-4. **Runs the exact same `reviewer-core` pipeline** a local studio review uses —
-   `assemblePrompt` / `wrapUntrusted` / `completeStructured` / mandatory
-   `groundFindings` gate — via `reviewPullRequest`, with an injected
-   `OpenRouterProvider`.
-5. **Computes a deterministic verdict** from the *grounded* findings + the
-   manifest's `ci_fail_on` (`countBlockers` / `gateTriggered`), never from the
-   model's self-reported verdict.
-6. **Writes `devdigest-result.json`** (`CiResultArtifact`) — the artifact the
-   studio ingests — then **posts** to the PR (`github_review` | `pr_comment` |
-   `none`) and **exits non-zero iff** the gate triggered `REQUEST_CHANGES`.
-
-All orchestration lives in `src/run.ts` (`runCi`), which takes every side effect
-(fs, `fetch`, LLM provider, clock, diff retrieval) as an injectable dependency so
-it can be unit-tested hermetically. `src/index.ts` only wires those to the real
-world and maps the result onto `process.exitCode`.
-
-## Requirements — sibling source packages
-
-This package is **not fully self-contained on its own**. It consumes
-`reviewer-core` and the shared Zod contracts **as raw TypeScript source** via
-`tsconfig.json` path aliases (exactly like the server does — this is intended,
-not a workaround; `reviewer-core` emits no JS). To typecheck, test, or build the
-runner, these folders **must exist as siblings** in the expected layout:
+The I/O wrapper around the `reviewer-core` engine. The studio exports it into a
+target repository as **one committed file**, and a generated GitHub Actions
+workflow runs it on every pull request:
 
 ```
-<repo-root>/
-├── agent-runner/                      # this package
-│   └── tsconfig.json                  # declares the aliases below
-├── reviewer-core/
-│   └── src/index.ts                   # → @devdigest/reviewer-core
-└── server/
-    └── src/vendor/shared/
-        └── index.ts                   # → @devdigest/shared
+node .devdigest/runner.mjs review --agent <slug>
 ```
 
-Path aliases declared in `agent-runner/tsconfig.json`:
+Same engine as the studio, same grounding gate, same `ci_fail_on` policy — only
+the I/O around it is different: the diff comes from the GitHub API instead of a
+local clone, the review is posted instead of streamed, and the result is written
+to a file the studio reads back later.
 
-| Alias | Resolves to |
-|-------|-------------|
-| `@devdigest/reviewer-core` | `../reviewer-core/src/index.ts` |
-| `@devdigest/reviewer-core/*` | `../reviewer-core/src/*` |
-| `@devdigest/shared` | `../server/src/vendor/shared/index.ts` |
-| `@devdigest/shared/*` | `../server/src/vendor/shared/*` |
+## What it does, in order
 
-If you lift this module onto a fresh branch or repo, bring `reviewer-core/` and
-`server/src/vendor/shared/` along (or re-point the aliases). `pnpm build` (`ncc`)
-inlines both packages plus their transitive deps into `dist/index.js`, so the
-**shipped bundle** has zero runtime imports from `node_modules/@devdigest/*` — the
-sibling requirement is a **build/dev-time** requirement only.
+```mermaid
+flowchart TD
+  START["node .devdigest/runner.mjs review --agent slug"] --> ENV["required env present?<br/>OPENROUTER_API_KEY · GITHUB_TOKEN · GITHUB_REPOSITORY"]
+  ENV -->|"no"| RESULT
+  ENV -->|"yes"| MANIFEST[".devdigest/agents/&lt;slug&gt;.yaml<br/>parsed with the SHARED AgentManifest"]
+  MANIFEST --> SKILLS[".devdigest/skills/&lt;slug&gt;.md<br/>missing slugs named, run continues"]
+  SKILLS --> DIFF["GitHub pulls/:n/files → unified diff<br/>.devdigest/** and the workflow excluded"]
+  DIFF --> ENGINE["@devdigest/reviewer-core<br/>prompt → LLM → GROUNDED findings"]
+  ENGINE --> POST["post_as: github_review | pr_comment | none"]
+  POST --> RESULT["devdigest-result.json<br/>written on EVERY terminating path"]
+  RESULT --> EXIT["exit code = gateTriggered(surviving findings, ci_fail_on)"]
+```
+
+## The rules it is built to
+
+- **It reads files; it never runs them.** No `spawn`, no `exec`, no import of
+  anything in the checked-out tree beyond the `.devdigest/` files the manifest
+  names. The diff, the pull request title and body, the branch name and every
+  skill body are data.
+- **Every skill body is wrapped as untrusted.** The studio exempts skills a human
+  in that workspace typed; here a skill body is a markdown file in a repository
+  DevDigest does not control, so the exemption does not travel.
+- **The review event is arithmetic, not opinion.** It comes from the surviving
+  findings' severities and the manifest's `ci_fail_on` — never from the model's
+  self-reported verdict.
+- **`ci_fail_on` is read from the manifest and never defaulted here.** The
+  contract already defaults it; a second default in the runner is a second
+  policy nobody can see.
+- **The fork gate is not here.** It is an `if:` on the generated workflow's job,
+  where a reviewer of the export pull request can read it. A promise in a header
+  comment is not a control.
+- **A result is always written.** The workflow uploads it with `if: always()`,
+  and a run with no artifact is a run the studio cannot report — so a thrown
+  model call still leaves a file that parses against `CiResultArtifact`.
+- **No secret reaches any output.** The token lives in one HTTP header, the model
+  key inside the provider, and everything the runner emits passes through a
+  redactor first.
+
+## Layout
+
+| File | What it owns |
+|---|---|
+| `src/main.ts` | the CLI, the env check, the result file and the exit code |
+| `src/review-pr.ts` | diff → engine → grounded review → publish (no process, no env) |
+| `src/manifest.ts` | the shared `AgentManifest` parse and skill-body resolution |
+| `src/diff.ts` | GitHub file patches → `UnifiedDiff`, and the DevDigest-owned exclusions |
+| `src/github.ts` | three REST calls over global `fetch`, plus the mocks |
+| `src/llm.ts` | re-exports the shared `OpenRouterProvider`, plus the test providers |
+| `src/redact.ts` | the last line of defence on secret values |
+
+## Why `dist/` is committed
+
+The runner lands in a repository that will never run a build: the generated
+workflow invokes `node .devdigest/runner.mjs` directly. So the bundle is the
+deliverable, and it is committed. `build.mjs` produces it with esbuild; the
+`agent-runner` workflow rebuilds it and runs `git diff --exit-code -- dist/`,
+which is the one check a committed artefact can be given. **After editing
+`src/`, run `npm run build` and commit `dist/` in the same change.**
+
+The bundle inlines everything — the shared contracts, the engine and the three
+npm dependencies. Its one concession is the `createRequire` banner `build.mjs`
+adds: the OpenAI SDK's CommonJS runtime shims call `require("stream")`, which an
+ESM bundle has no `require` for. Every specifier that reaches it is a Node
+builtin, so nothing is resolved from the host repository.
 
 ## Commands
 
-```bash
-pnpm install        # install deps (yaml, zod + dev tooling)
-pnpm typecheck      # tsc --noEmit -p tsconfig.json
-pnpm test           # vitest run (hermetic; LLM stubbed, no network)
-pnpm build          # ncc build src/index.ts -o dist  →  dist/index.js
+Run the binaries directly; `pnpm`/`npm run <script>` indirection is what the
+scripts wrap, and this package is plain npm.
+
+```sh
+npm install
+./node_modules/.bin/tsc --noEmit -p tsconfig.json
+./node_modules/.bin/vitest run
+node build.mjs && node --check dist/runner.mjs
 ```
-
-`dist/` and `node_modules/` are git-ignored — `dist/index.js` is a generated
-artifact, regenerate it with `pnpm build`.
-
-## Runtime environment (set by the target repo's workflow)
-
-The runner reads these directly from `process.env`. This is the **correct and
-only** channel for secrets here: the bundle runs in someone else's CI, where
-there is no `SecretsProvider` / DI graph to inject from (see `CLAUDE.md`).
-
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `OPENROUTER_API_KEY` | yes | LLM credential → `OpenRouterProvider` |
-| `GITHUB_TOKEN` | when `post_as` ≠ `none` | fetch the diff + post the review/comment |
-| `GITHUB_REPOSITORY` | yes | `owner/name` of the target repo |
-| `PR_NUMBER` | yes¹ | PR to review |
-| `GITHUB_EVENT_PATH` | auto (GHA) | `pull_request` event payload (title/body/fork) |
-| `DEVDIGEST_DIR` | no | override the `.devdigest` dir (default: `cwd/.devdigest`) |
-| `DEVDIGEST_RESULT_PATH` | no | override artifact path (default: `cwd/devdigest-result.json`) |
-| `DEVDIGEST_POST_AS` | no | `github_review` (default) \| `pr_comment` \| `none` |
-
-¹ Falls back to `pull_request.number` from the event payload if `PR_NUMBER` is unset.
-
-Secrets are never logged and never written to `devdigest-result.json` or any
-posted comment.
-
-## Exit codes
-
-- `0` — review completed; the deterministic gate did **not** request changes.
-- `1` — gate triggered `REQUEST_CHANGES`, **or** a hard failure anywhere in the
-  pipeline (invalid manifest, missing skill file, unresolvable CI context,
-  diff-fetch error, or an LLM/model-call error). On hard failure the runner posts
-  nothing and writes no artifact — a failure upstream of "we have a grounded
-  review" produces **nothing**, never a synthetic review.
-
-## Invariants (do not break)
-
-Because this package embeds `reviewer-core`'s pipeline into an artifact that
-leaves this repo, it must preserve every reviewer-core invariant:
-
-- The `groundFindings()` gate is mandatory — never skip or make it conditional.
-  An all-dropped result is a valid zero-finding APPROVE, not an error.
-- `wrapUntrusted()` + `INJECTION_GUARD` must wrap the diff and PR body before they
-  reach the prompt — reuse `assemblePrompt`; never hand-roll it.
-- The posted verdict and exit code come from the **deterministic** gate against
-  the manifest's `ci_fail_on`, never the model's self-reported verdict.
-
-See `CLAUDE.md` for the full rationale and `insights/INSIGHTS.md` for gotchas.

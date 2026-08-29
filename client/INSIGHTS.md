@@ -340,6 +340,20 @@ Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
 
+- **2026-08-25** — **The 2026-08-20 entry below says most `vendor/ui` primitives take a
+  `style` prop; `ExportWizardSteps` takes NONE, and it hard-codes a colour a criterion can
+  forbid.** It paints every step label after the current one `var(--text-muted)`
+  (`src/vendor/ui/ExportWizardSteps.tsx:33`) with no prop, no override and no slot — so a
+  wizard whose spec says *every* step label is `--text-primary` cannot use it, and the
+  do-not-touch rule forbids giving it the prop. The answer is neither a `vendor/ui` edit nor
+  a fork: compose the rail locally at the same sizes (~6 lines) and dim the not-yet-reached
+  steps by their **bullet** instead of by muting the label. Read with 2026-08-20 as a pair —
+  the escape hatch is per-component, so the first thing to check when a primitive fights a
+  visual requirement is whether it accepts anything at all. Evidence:
+  `src/vendor/ui/ExportWizardSteps.tsx:33`,
+  `src/app/agents/[id]/_components/AgentEditor/_components/CiTab/_components/ExportWizard/ExportWizard.tsx`
+  (`WizardSteps`).
+
 - **2026-08-20** — **`vendor/ui`'s "extend via a new file, don't restyle a primitive" rule
   has a third path it doesn't name: most primitives take a `style` prop, so trimming one
   for a single surface needs no `vendor/ui` edit and no fork.** `Badge` spreads
@@ -619,6 +633,18 @@ An error string, its real cause, and the fix.
   `client/.next/server/webpack-runtime.js` (the require stack in the 500 body), `package.json`
   (`dev`, `build`).
 
+- **2026-08-25** — **On a screen that renders its table frame in ALL THREE data states,
+  `await waitFor(() => screen.getByRole("region", …))` resolves while the read is still in
+  flight — so the assertions after it run against skeletons and fail with "unable to find the
+  text".** The frame is present during loading, empty and loaded alike, so waiting on it waits
+  for nothing; the handle that actually tracks the read is the skeleton count reaching zero,
+  `container.getElementsByClassName("skeleton")` — the same last-resort escape 2026-08-10 in
+  Tool & Library Notes prescribes for asserting a loading state at all, since the vendored
+  `Skeleton` is a bare `div.skeleton` with no role. The failure reads as a broken component
+  rather than a mis-timed wait, which is what makes it expensive. Rule: wait on something
+  that is **absent in the state you are leaving**, never on the container that survives every
+  state. Evidence: `src/app/ci-runs/_components/CiRunsView/CiRunsView.test.tsx` (the first
+  test), `src/vendor/ui/primitives/Skeleton.tsx`.
 
 - **2026-08-20** — **"Couldn't load this pull request" with the sidebar reading "No repo
   selected" is almost never the screen you just changed — it is the app talking to an API

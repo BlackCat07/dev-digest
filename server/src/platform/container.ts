@@ -50,6 +50,10 @@ import { EvalRepository } from '../modules/eval/repository.js';
 import { EvalRunner } from '../modules/eval/runner.js';
 import { EvalService } from '../modules/eval/service.js';
 import type { Evals } from '../modules/eval/types.js';
+import { CiRepository } from '../modules/ci/repository.js';
+import { CiService } from '../modules/ci/service.js';
+import type { Cis } from '../modules/ci/types.js';
+import { loadCiRunnerBundle } from './ci-runner.js';
 import { parseUnifiedDiff } from '../adapters/git/diff-parser.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
@@ -96,6 +100,11 @@ export interface ContainerOverrides {
    * exercised with no Postgres, no provider and no batch actually running.
    */
   eval?: Evals;
+  /**
+   * Export to CI (L06) — tests inject a fake service so a route can be exercised
+   * with no Postgres, no GitHub token and nothing committed anywhere.
+   */
+  ci?: Cis;
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
@@ -130,6 +139,7 @@ export class Container {
   private _onboarding?: OnboardingTours;
   private _brief?: PrBriefs;
   private _eval?: Evals;
+  private _ci?: Cis;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -384,6 +394,56 @@ export class Container {
       }),
     }));
   }
+
+  /**
+   * Export to CI (L06) — the generated bundle, the pull request that installs it,
+   * and the runs read back off GitHub Actions.
+   *
+   * The one place that names this module's concrete classes, as it is for
+   * `projectContext`, `onboarding`, `brief` and `eval`: `CiDeps` declares five
+   * ports and knows nothing about Drizzle, about `src/adapters/**` or about a
+   * sibling module, so the composition root is what binds them. Two of the five
+   * are wiring rather than plumbing — `agents` is the shared agents repository,
+   * which is how this module reads an agent and its linked skills while importing
+   * no sibling; and `runnerBundle` is the arrow property below, which is what
+   * keeps a feature module off `node:fs` while still shipping a file from disk.
+   *
+   * `secrets` is bound and deliberately never read: AC-7 requires that no secret
+   * value reaches a generated file, and a port in reach but unused is what makes
+   * the sentinel test that proves it mean something.
+   *
+   * Exposed as the `Cis` INTERFACE so `ContainerOverrides.ci` can carry a fake
+   * with no database behind it.
+   */
+  get ci(): Cis {
+    if (this.overrides.ci) return this.overrides.ci;
+    return (this._ci ??= new CiService({
+      store: new CiRepository(this.db),
+      agents: this.agentsRepo,
+      github: () => this.github(),
+      runnerBundle: this.ciRunnerBundle,
+      secrets: this.secrets,
+    }));
+  }
+
+  /**
+   * L06 — the committed `agent-runner` bundle, as one string.
+   *
+   * Wired here for the reason `diffParser` below gives, with one addition: the
+   * read is `node:fs`, and a feature module may import no `node:` specifier at
+   * all. `platform/ci-runner.ts` does it in the one ring allowed to and knows
+   * nothing about `modules/ci/` (`platform-not-module-aware` is a depcruise
+   * **error**), and the `ci` module declares the shape it needs
+   * (`CiRunnerBundle` — a bare call signature) which this property satisfies
+   * structurally.
+   *
+   * An arrow property rather than a method, as `featureModel`, `fileRole` and
+   * `diffParser` are: it satisfies the bare call signature directly and carries
+   * `this` with it wherever the container is destructured. The loader caches for
+   * the life of the process — the bundle is a build artefact and cannot change
+   * under a running server — so there is nothing to cache here.
+   */
+  readonly ciRunnerBundle = (): Promise<string> => loadCiRunnerBundle();
 
   /**
    * L06 — a raw unified diff parsed into files and hunks.

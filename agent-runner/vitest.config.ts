@@ -4,10 +4,10 @@ import path from 'node:path';
 export default defineConfig({
   resolve: {
     alias: {
-      // Mirror tsconfig.json path aliases — both packages are consumed as raw
-      // TypeScript source, never as built artifacts.
-      '@devdigest/reviewer-core': path.resolve(__dirname, '../reviewer-core/src/index.ts'),
-      '@devdigest/shared': path.resolve(__dirname, '../server/src/vendor/shared/index.ts'),
+      // Same aliases tsconfig.json declares. An alias added to one only and not
+      // the other type-checks and then fails at test runtime.
+      '@devdigest/shared': path.resolve(__dirname, '../server/src/vendor/shared'),
+      '@devdigest/reviewer-core': path.resolve(__dirname, '../reviewer-core/src'),
     },
   },
   test: {

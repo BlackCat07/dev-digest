@@ -1,76 +1,88 @@
 import type { UnifiedDiff, DiffHunk } from '@devdigest/shared';
+import {
+  CI_AGENTS_DIR,
+  CI_RUNNER_PATH,
+  CI_SKILLS_DIR,
+  CI_WORKFLOW_PATH,
+} from '@devdigest/shared';
 
-/**
- * Repo-relative path prefixes whose diff sections are dropped BEFORE review.
- * These are DevDigest's own exported artifacts, not the target repo's code:
- *
- *  - `.devdigest/` — the checked-in agent config AND the ncc runner bundle
- *    (`.devdigest/runner/index.js`), a single minified megafile. GitHub rejects
- *    an inline comment on such a file with 422 "diff too large" and — because a
- *    review is all-or-nothing — fails the ENTIRE review. This prefix is the fix
- *    for that 422; it only ever appears in the diff of the export/update PR
- *    itself, but that PR would otherwise never post a passing review.
- *  - `.github/workflows/` — the generated GHA workflow; reviewing our own
- *    generated CI YAML is pure noise.
- *
- * Stripping them from the RAW diff (not just the parsed file list) matters:
- * single-pass review feeds `diff.raw` straight to the model
- * (`reviewer-core/review/run.ts`), so filtering only `files` would still spend
- * tokens on — and let the model cite — the ignored paths.
- */
-export const IGNORED_DIFF_PREFIXES = ['.devdigest/', '.github/workflows/'] as const;
-
-function isIgnoredDiffPath(path: string): boolean {
-  return IGNORED_DIFF_PREFIXES.some((prefix) => path.startsWith(prefix));
+/** A changed file as returned by GitHub's `pulls/{n}/files` (path + hunk patch). */
+export interface ChangedFile {
+  path: string;
+  /** Unified-diff hunks for this file; absent for binary / too-large files. */
+  patch?: string | null;
 }
 
 /**
- * Remove whole `diff --git` sections for ignored paths from a raw unified diff,
- * keeping the raw text and the later-parsed file list consistent. GitHub's diff
- * media type emits exactly one `diff --git a/<path> b/<path>` header per file,
- * so splitting on that header and reading the new-side (`b/`) path is enough to
- * decide which sections to drop.
+ * The directory the export writes its own files into, derived from the runner's
+ * exported path rather than written out again — `.devdigest`. Deriving it is the
+ * point: the three `CI_*` paths below all live under it, and if one of them ever
+ * moves, this follows instead of silently keeping a stale literal.
  */
-export function stripIgnoredFiles(raw: string): string {
-  const kept: string[] = [];
-  let skipping = false;
-  for (const line of raw.split('\n')) {
-    if (line.startsWith('diff --git')) {
-      const match = line.match(/ b\/(.*)$/);
-      skipping = isIgnoredDiffPath(match?.[1]?.trim() ?? '');
-    }
-    if (!skipping) kept.push(line);
+const CI_BUNDLE_DIR = CI_RUNNER_PATH.slice(0, CI_RUNNER_PATH.lastIndexOf('/'));
+
+/**
+ * Files DevDigest itself installed, which the review must not read as somebody's
+ * change: the manifests, the skill bodies, the runner bundle and the generated
+ * workflow. A pull request that only touches those is not a code change and
+ * produces no review at all.
+ */
+export function isDevDigestOwnedPath(path: string): boolean {
+  return (
+    path === CI_WORKFLOW_PATH ||
+    path === CI_RUNNER_PATH ||
+    path.startsWith(`${CI_BUNDLE_DIR}/`) ||
+    path.startsWith(`${CI_AGENTS_DIR}/`) ||
+    path.startsWith(`${CI_SKILLS_DIR}/`)
+  );
+}
+
+/** Drop DevDigest's own generated files before the engine ever sees the diff. */
+export function excludeDevDigestFiles(files: ChangedFile[]): {
+  reviewable: ChangedFile[];
+  excluded: string[];
+} {
+  const reviewable: ChangedFile[] = [];
+  const excluded: string[] = [];
+  for (const f of files) {
+    if (isDevDigestOwnedPath(f.path)) excluded.push(f.path);
+    else reviewable.push(f);
   }
-  return kept.join('\n');
+  return { reviewable, excluded };
 }
 
 /**
- * Minimal unified-diff parser — a self-contained agent-runner copy of the
- * server's `git/diff-parser.ts` (not importable here: it lives outside this
- * package's owned paths and the bundle must stay self-contained, importing
- * nothing from `node_modules/@devdigest/*` or sibling packages at runtime).
- * Produces the exact `UnifiedDiff` shape the citation-grounding gate
- * (`groundFindings`, reviewer-core) needs: per-file hunks + the set of
- * new-side line numbers each hunk covers.
- *
- * Handles standard unified diff output as returned by GitHub's
- * `Accept: application/vnd.github.v3.diff` PR endpoint:
- *   diff --git a/path b/path
- *   --- a/path
- *   +++ b/path
- *   @@ -oldStart,oldLines +newStart,newLines @@
+ * Reconstruct a single UnifiedDiff from GitHub's `files` patches (the runner's
+ * diff source — no clone needed). Files without a `patch` (binary / truncated by
+ * the API) are reported in `skipped` so the caller can surface them — a silent
+ * skip would read as "clean" when grounding later drops anything citing them.
+ */
+export function filesToUnifiedDiff(files: ChangedFile[]): { diff: UnifiedDiff; skipped: string[] } {
+  const parts: string[] = [];
+  const skipped: string[] = [];
+  for (const f of files) {
+    if (!f.patch) {
+      skipped.push(f.path);
+      continue;
+    }
+    parts.push(`diff --git a/${f.path} b/${f.path}`);
+    parts.push(`--- a/${f.path}`);
+    parts.push(`+++ b/${f.path}`);
+    parts.push(f.patch);
+  }
+  return { diff: parseUnifiedDiff(parts.join('\n')), skipped };
+}
+
+/**
+ * Minimal unified-diff parser (vendored from the server's git adapter — pure,
+ * "copy & own"). The runner owns diff acquisition: it reconstructs a unified
+ * diff from the GitHub file patches, then parses it here into the UnifiedDiff
+ * shape the grounding gate needs (file:line must intersect a hunk's new-side
+ * line numbers).
  */
 export function parseUnifiedDiff(raw: string): UnifiedDiff {
   const files: UnifiedDiff['files'] = [];
   const lines = raw.split('\n');
-  // A diff string that ends with a trailing newline (the overwhelmingly common
-  // case — `git diff`/GitHub's diff endpoint always terminate the last line)
-  // produces one extra empty element from `split('\n')`. Without dropping it,
-  // that phantom "line" gets counted as a context line, over-extending the
-  // last hunk's new-side line coverage by one — which would make the
-  // citation-grounding gate too lenient (accepting a finding one line past
-  // the real hunk).
-  if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
 
   let current: UnifiedDiff['files'][number] | null = null;
   let hunk: DiffHunk | null = null;
@@ -99,7 +111,7 @@ export function parseUnifiedDiff(raw: string): UnifiedDiff {
       continue;
     }
     if (line.startsWith('--- ')) continue;
-    const hh = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+    const hh = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line);
     if (hh) {
       flushHunk();
       const newStart = Number(hh[3]);
@@ -122,9 +134,7 @@ export function parseUnifiedDiff(raw: string): UnifiedDiff {
       newLineCursor++;
     } else if (line.startsWith('-') && !line.startsWith('---')) {
       current.deletions++;
-      // deletion: no new-side line consumed
     } else {
-      // context line: advances new-side cursor and counts as covered
       hunk.newLineNumbers.push(newLineCursor);
       newLineCursor++;
     }

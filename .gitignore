@@ -1,7 +1,9 @@
 node_modules/
 dist/
-# agent-runner ships as a JS GitHub Action — its bundled dist/ MUST be committed
-# (GitHub runs action.yml `main: dist/index.js` as-is, with no build step).
+# agent-runner ships as ONE committed file — its bundled dist/runner.mjs MUST be
+# committed, because the export copies it verbatim into a target repository as
+# .devdigest/runner.mjs and the generated workflow runs it with `node` there,
+# with no install and no build step on the other side.
 !agent-runner/dist/
 !agent-runner/dist/**
 build/
@@ -65,3 +67,4 @@ test-results/
 /HOME-TASK06.md
 /ORDER-TASKS
 /HOME-TASK-SCREENSHOTS/
+.claude/settings.local.json

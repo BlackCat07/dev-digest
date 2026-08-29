@@ -32,12 +32,21 @@ measurement traps) and a long `README.md` that carries the rules, plus a thin `d
 design note. It has **no `CLAUDE.md`** and **no `specs/`**: what it must do is the README, and
 what it measures is the case files in `evals/{skills,agents,workflow}/`.
 
-**And one package that ships outward:** `agent-runner/` is the CI runner — ncc-bundled into a
-single `dist/index.js` and executed by a **target** repo's GitHub Actions, outside this server,
-its DI graph and its Postgres. It has `CLAUDE.md` and `README.md` like the rest, but **no
-`docs/`** and **no `specs/`**, and its journal lives at `agent-runner/insights/INSIGHTS.md` —
-**not** at the package root. It is the one package where the `INSIGHTS.md` path in the session
-protocol below is different, so look for it there before concluding the file is missing.
+**And one package that ships outward:** `agent-runner/` is the CI runner — bundled by
+`build.mjs` into a single committed `dist/runner.mjs`, copied verbatim into a **target**
+repository as `.devdigest/runner.mjs` and run there by a generated GitHub Actions workflow,
+outside this server, its DI graph and its Postgres. It carries `INSIGHTS.md` and `README.md`
+at the package root, but **no `docs/`**, **no `specs/`** and **no `CLAUDE.md`** — the rules it
+is built to are the "The rules it is built to" section of its README, because they are the same
+rules the exported workflow depends on and splitting them across two files is how the two drift.
+It is also the one package managed by **npm** (`package-lock.json`), not pnpm.
+
+Upstream carries **two incompatible packages both named `agent-runner`**, and this repository
+ships the `dist/runner.mjs` one described above. `upstream/lesson-7-lab/agent-runner` is the
+other: pnpm, entered through `src/run.ts`, ncc-bundled to `dist/index.js`, with its journal at
+`agent-runner/insights/INSIGHTS.md`. It was vendored here in `7ed4240` and superseded by the
+Export-to-CI feature's own runner at the L07 fan-out merge; a doc, a path or a script that
+names `dist/index.js` or `insights/INSIGHTS.md` is describing that dead variant.
 
 ## Session protocol (engineering-insights loop)
 
@@ -93,8 +102,8 @@ Never hand-edit:
 
 - Stack, commands, architecture, how to run → read `README.md`
 - Working inside a package → read that package's CLAUDE.md: `server/CLAUDE.md`,
-  `client/CLAUDE.md`, `reviewer-core/CLAUDE.md`, `e2e/CLAUDE.md`, `mcp-server/CLAUDE.md`,
-  `agent-runner/CLAUDE.md`
+  `client/CLAUDE.md`, `reviewer-core/CLAUDE.md`, `e2e/CLAUDE.md`, `mcp-server/CLAUDE.md`.
+  `agent-runner/` has none — read `agent-runner/README.md`
 - Agent prompt templates → read `docs/agent-prompts/`
 - Skill bodies meant to be **imported** rather than seeded → read `docs/skills/`
 - Writing a feature spec → read `docs/specs-convention.md`
