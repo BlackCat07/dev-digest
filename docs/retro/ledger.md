@@ -16,6 +16,7 @@ taken from what the orchestrator witnessed in context.
 | 2026-08-18 | Project Context spec (SPEC-01) | 4 — main + `spec-creator` → 2 × `researcher` | 3.06M | 130m (30m in agents) | yes | `specs/project-context.md`, 742 lines, 52 AC / 0 open questions | [report](./2026-08-18-project-context-spec.md) |
 | 2026-08-25 | **Export to CI (SPEC-05)** — spec → plan → build | 11 — main + `spec-creator` (4 dispatches, 1 nested `researcher`) + `implementation-planner` + 5 × `implementer` + `plan-verifier` + `architecture-reviewer` + `doc-writer` | not measured (in-context) — ~1.96M subagent tokens on opus, 642k on sonnet | 300m (≈150m in agents) | no | SPEC-05 `implemented`; 3 commits; 42 paths; 903/468/53 tests; verdict `comment`, 0 CRITICAL | [report](./2026-08-25-export-to-ci.md) |
 | 2026-08-25 | Multi-Agent Review (SPEC-06) — spec → plan → 16-task build → review → 2 fix rounds | 27 — main + `spec-creator` ×2 (→ 2 × `researcher`) + `implementation-planner` + 18 × `implementer` + `plan-verifier` + `architecture-reviewer` + `doc-writer` | 15.53M | 364m (350m summed in agents) | yes | SPEC-05 `implemented`, 105 AC; 126 files, +16.9k/−206; server 842→933 tests, client 455→491; depcruise unchanged at 22 warnings | [report](./2026-08-25-multi-agent-review.md) |
+| 2026-08-29 | **L07 fan-out integration** — two worktrees → one branch | 1 — main only, no dispatches | not measured (in-context, single participant) | 17m | no | 3 merges, 21 conflicted files, 1 clean-merge break; 235 paths on the branch; server 1153/1153, client 534/534, core 63/63, runner 54/54, `verify:l06` 15/15 | this row |
 
 ## Insights by module
 
@@ -132,6 +133,51 @@ taken from what the orchestrator witnessed in context.
   all three, returned `partial`/`not checked`, and named the command that would settle them
   rather than agreeing with the parent's own green figures. Evidence:
   [2026-08-25 report](./2026-08-25-export-to-ci.md).
+
+### Fan-out & integration
+
+- **2026-08-29** — **Two worktrees held their boundaries and it did not stop them
+  colliding: 11 shared files out of 234, and every one of the three decisions that
+  cost real thought was in that 11.** Export to CI touched 105 paths, Multi-Agent
+  Review 140, and the intersection was 4.7% — `.gitignore`, the nav strip, the hooks
+  barrel, `platform/container.ts`, `modules/index.ts`, the migration journal and its
+  snapshot, `specs/README.md`, and the three append-only journals. Seven of the nine
+  file-level conflicts were "both features added their row to a shared list" and
+  resolve by keeping both, which is what a good boundary buys. The other two were
+  not resolvable by keeping both: two branches had each generated migration **idx
+  22** against different tables, so the journal disagreed with itself about what 22
+  is; and both had specified a feature and called it **SPEC-05**. Neither is visible
+  to a per-worktree gate — each branch's journal is internally consistent and each
+  spec is unique in its own tree — so a shared, monotonically-numbered namespace is
+  the thing to allocate BEFORE a fan-out, not after. Evidence: `merge(l07)` commits
+  `839ea3a` and `30ea28b`.
+
+- **2026-08-29** — **The expensive defect of a fan-out is the one git merges cleanly,
+  and no gate run inside either worktree can see it.** `FindingDetail.tsx` called
+  `useCreateEvalCase(finding.id)`; the mutation had been widened to an
+  `EvalCaseCreate` body by L06's `c3e1930`, one commit after the Multi-Agent worktree
+  branched. Caller on one branch, callee on the other, no overlapping line, no
+  conflict — and both worktrees green in isolation at 1043/1043 and 1064/1064. It
+  surfaced in the first `tsc` after the merge and nowhere earlier. Two things follow.
+  A worktree branched at a point that is not the integration target's tip is
+  carrying a silent contract debt for the whole run, so branch fan-out worktrees from
+  what they will merge INTO. And the fan-out's definition of done is a typecheck of
+  the merged tree — not two green worktrees, which is precisely the evidence that
+  does not generalise. Evidence: `72ab2dd`.
+
+- **2026-08-29** — **A colliding generated migration is regenerated, never renamed.**
+  Renaming `0022_mature_ego.sql` to `0023_*` would have left its snapshot a diff of
+  `0021`'s while sitting behind a `0022` that changed a different table — a journal
+  that applies but describes a schema nobody has. What works: keep one branch's 0022
+  and its snapshot, delete the other's `.sql` and its journal entry, then
+  `drizzle-kit generate` off the MERGED schema, which diffs against the surviving
+  0022 and emits a correctly-based `0023`. The check that it lost nothing is cheap
+  and worth stating: `diff <(sort dropped.sql) <(sort generated.sql)` came back
+  identical. Note this only stayed non-interactive because both migrations were
+  pure `ADD COLUMN`; a collision where either side drops a column meets the
+  interactive rename prompt of `server/INSIGHTS.md` 2026-08-06 and needs the
+  two-migration split described there. Evidence:
+  `server/src/db/migrations/0023_sour_hobgoblin.sql`.
 
 ### Applied
 

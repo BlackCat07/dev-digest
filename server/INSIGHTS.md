@@ -404,6 +404,23 @@ Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
 
+- **2026-08-26** — **`agents.version` can be moved BACKWARDS by hand, but the higher
+  `agent_versions` rows have to go in the same statement — `snapshotVersion` inserts with
+  `.onConflictDoNothing()`, so a stale row wins over the config that replaces it, silently.**
+  Setting an agent from v5 to v1 for a demo and leaving snapshots 2–5 in place means the next
+  config edit computes `nextVersion = 2`, writes `agents.version = 2`, and the v2 snapshot stays
+  the config from whenever v2 was first taken — a version number pointing at somebody else's
+  config, with no error and nothing to notice. Related and separately surprising: **the seed
+  writes `agents` directly with `version: 1` and takes no snapshot at all**, so four of the five
+  seeded agents have zero `agent_versions` rows and `promoteAgentVersion` answers `404` for
+  their v1 (`getVersion` returns undefined; the route maps it to "Agent version not found"). So
+  a hand-set v1 wants a v1 snapshot written alongside it, built FROM the live row — including
+  the ordered skill ids in `agent_skills."order" ASC, skills.name ASC`, the order
+  `linkedSkills` imposes, or the restored config differs from the one recorded. Evidence:
+  `src/modules/agents/repository.ts` (`snapshotVersion`, `linkedSkills`),
+  `src/modules/agents/service.ts` (`promoteAgentVersion`), `src/db/seed.ts` (the five agent
+  `.values({ … version: 1 })` blocks).
+
 - **2026-08-25** — **This module has one deliberately SYNCHRONOUS long-ish route, and the rule
   that makes it different from every fire-and-forget one is worth stating: a route may await
   the work when the work is one model call AND there is no row the answer could be read back
@@ -1111,6 +1128,42 @@ An error string, its real cause, and the fix.
   today" and a broken existing route. The shape that works is
   `z.preprocess((body) => body ?? {}, Schema)`. Evidence:
   `src/modules/reviews/routes.ts` (the `POST /pulls/:id/review` body schema).
+- **2026-08-26** — **"A new pull request is on GitHub but the app never shows it" is an expired
+  `GITHUB_TOKEN`, and NOTHING in the product says so — the route swallows the 401 and answers
+  `200` with the stale list.** `GET /repos/:id/pulls` is local-first by design: it wraps both
+  `container.github()` and `gh.listPullRequests` in `try`/`catch` and downgrades each failure to
+  `app.log.warn(… 'serving persisted PRs')`, so a dead credential is indistinguishable from
+  "there is nothing new" at every layer a user or an HTTP probe can see. Diagnose it in one call
+  rather than by reading code — `curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer
+  $TOKEN" https://api.github.com/user`; `401` with `Bad credentials` is the whole answer. The
+  token lives in `~/.devdigest/secrets.json` (`LocalSecretsProvider`), **not** in `server/.env` —
+  `.env` here has `GITHUB_TOKEN=` empty and always has, so grepping `.env` to check "is a token
+  configured" reports the wrong thing. **The second half is what wastes the next hour:
+  `Container.invalidateSecretCaches()` has ZERO callers in `src/` (`grep -rn invalidateSecretCaches
+  src/` → one hit, its own definition), while `github()` memoises `this._github` on first
+  resolve. So replacing the token — through the Settings UI or by hand — leaves the running
+  process holding an `OctokitGitHubClient` built from the dead one, and the symptom does not
+  change.** `LocalSecretsProvider.load` re-reads on an `mtime` change and is not the problem; the
+  provider cache is fresh and the *client* cache is stale. Restart the API after changing a PAT
+  until something calls that method. Evidence: `src/modules/pulls/routes.ts` (the two `catch`
+  blocks), `src/platform/container.ts` (`github`, `invalidateSecretCaches`),
+  `src/adapters/secrets/local.ts` (`get`, the `GITHUB_PAT` fallback).
+
+
+
+- **2026-08-25** — **`docker exec` without `-i` does not forward stdin, so a heredoc'd
+  multi-statement `psql` script runs NOTHING and exits `0`.** `docker exec devdigest-postgres
+  psql -U devdigest -d devdigest <<'SQL' … SQL` prints no output, returns success, and leaves
+  the database untouched — psql simply read EOF. There is no error string to search for; the
+  only symptom is that the data did not change, which on a destructive script reads as "the
+  DELETEs matched no rows" rather than "the script never ran". It cost one silent no-op on a
+  demo-reset transaction here, caught only because the run was followed by a verification
+  query. Two rules: pass `-i` whenever the SQL arrives on stdin (`docker exec -i …`), and
+  ALWAYS follow a write with a counting `SELECT` rather than trusting the exit code — a real
+  `psql -v ON_ERROR_STOP=1` run echoes `BEGIN`, one `UPDATE n` / `DELETE n` per statement and
+  `COMMIT`, so an empty stdout IS the tell. Multiple `-c` flags need no `-i` and are the safer
+  shape for a one-liner. Evidence: `docker-compose.yml` (`devdigest-postgres`),
+  `INSIGHTS.md` 2026-08-24 (the four-statement repo reset this was running).
 
 - **2026-08-07** — **`Cannot read properties of undefined (reading 'skills')` on
   `trace.prompt_assembly`, CI-only, right after a run turns `done`.** The executor committed
