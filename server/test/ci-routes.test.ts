@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { AuthProvider, CiExport, CiInstallation, CiRun } from '@devdigest/shared';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
-import { NotFoundError } from '../src/platform/errors.js';
+import { AppError, NotFoundError } from '../src/platform/errors.js';
 import type { Cis } from '../src/modules/ci/types.js';
 
 /**
@@ -216,6 +216,34 @@ describe('CI routes', () => {
     expect(res.json()).toMatchObject({
       error: { code: 'not_found', message: `Agent ${AGENT} not found` },
     });
+    await a.close();
+  });
+
+  it('forwards a GitHub permission refusal with its code, status and message intact', async () => {
+    // AC-18 + AC-61, at the layer that used to lose them. `commitFiles` refused
+    // for want of `contents: write` reaches the handler as the AppError the
+    // GitHub adapter mapped it to; the reviewer has to read WHICH permission is
+    // missing, so both the 403 and GitHub's own sentence must survive the
+    // envelope. Before the adapter mapped it, Octokit's `status` went unread by
+    // `app.ts` (which looks at `statusCode`), the error was classified 5xx, and
+    // the deliberately opaque `internal_error` / "Internal error" body replaced
+    // the only sentence that told the user what to fix.
+    const message =
+      'Resource not accessible by personal access token - https://docs.github.com/rest/git/trees#create-a-tree';
+    const a = await app({
+      exportToCi: async () => {
+        throw new AppError('github_permission', message, 403);
+      },
+    });
+    const res = await a.inject({
+      method: 'POST',
+      url: `/agents/${AGENT}/export-ci`,
+      payload: body(),
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ error: { code: 'github_permission', message } });
+    // The 5xx branch's fixed string must NOT be what came back.
+    expect(res.json().error.message).not.toBe('Internal error');
     await a.close();
   });
 

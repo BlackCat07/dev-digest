@@ -14,9 +14,61 @@ import type {
   ListWorkflowRunsOptions,
   IssueMeta,
 } from '@devdigest/shared';
+import { AppError } from '../../platform/errors.js';
 import { withRetry, withTimeout } from '../../platform/resilience.js';
 
 const TIMEOUT = 30_000;
+
+/**
+ * GitHub's own 4xx, as an `AppError` the API layer will pass through verbatim.
+ *
+ * WHY THIS EXISTS. Octokit's `HttpError` carries its code in **`status`**;
+ * `app.ts`'s error handler reads **`statusCode`** and treats a missing one as
+ * 500. A 403 "Resource not accessible by personal access token" was therefore
+ * classified as a server fault and answered with the deliberately opaque
+ * `{"code":"internal_error","message":"Internal error"}` — the branch that
+ * exists so a Postgres connection string or a prompt fragment never leaves the
+ * process. GitHub's message is none of those things, and AC-18 requires it to
+ * reach the caller "naming the missing permission". `platform/resilience.ts`
+ * already reads `status`, which is why retries always behaved correctly and only
+ * the HTTP boundary was wrong.
+ *
+ * ONLY 4xx is mapped. A 5xx or a socket error keeps its original shape so it
+ * stays retryable, stays logged as unhandled, and stays hidden behind the
+ * generic message — an upstream 500's body is not ours to forward.
+ *
+ * The `code` is what the client branches on; the `message` is GitHub's own
+ * words, never a rewrite (`test/ci-export.test.ts`, AC-18).
+ *
+ * Exported for `test/github-errors.test.ts` only — nothing outside this adapter
+ * should be handling a raw Octokit error in the first place.
+ */
+export function mapGitHubError(err: unknown): unknown {
+  const e = err as { status?: number; message?: string };
+  const status = e?.status;
+  if (typeof status !== 'number' || status < 400 || status >= 500) return err;
+  const code =
+    status === 401
+      ? 'github_auth'
+      : status === 403
+        ? 'github_permission'
+        : status === 404
+          ? 'github_not_found'
+          : 'github_error';
+  return new AppError(code, e.message ?? 'GitHub request failed', status);
+}
+
+/**
+ * `withRetry`, then the mapping — in that order, and the order matters.
+ *
+ * Mapping first would hand `defaultIsRetryable` an `AppError` whose `status` it
+ * cannot see, and every 429 and 502 would stop being retried.
+ */
+function ghRetry<T>(fn: () => Promise<T>): Promise<T> {
+  return withRetry(fn).catch((err: unknown) => {
+    throw mapGitHubError(err);
+  });
+}
 
 function mapStatus(state: string, merged: boolean | undefined): PrStatus {
   if (merged) return 'merged';
@@ -36,7 +88,7 @@ export class OctokitGitHubClient implements GitHubClient {
   }
 
   async listPullRequests(repo: RepoRef): Promise<PrMeta[]> {
-    return withRetry(() =>
+    return ghRetry(() =>
       withTimeout(
         (async () => {
           // Fetch open + recently merged/closed (most-recently-updated first) so
@@ -70,7 +122,7 @@ export class OctokitGitHubClient implements GitHubClient {
   }
 
   async getPullRequest(repo: RepoRef, n: number): Promise<PrDetail> {
-    return withRetry(() =>
+    return ghRetry(() =>
       withTimeout(
         (async () => {
           const { data: pr } = await this.octokit.rest.pulls.get({
@@ -141,7 +193,7 @@ export class OctokitGitHubClient implements GitHubClient {
     n: number,
     review: GitHubReviewPayload,
   ): Promise<{ id: string }> {
-    return withRetry(() =>
+    return ghRetry(() =>
       withTimeout(
         (async () => {
           const res = await this.octokit.rest.pulls.createReview({
@@ -193,7 +245,7 @@ export class OctokitGitHubClient implements GitHubClient {
   }
 
   async listReviewComments(repo: RepoRef, n: number): Promise<PrReviewComment[]> {
-    return withRetry(() =>
+    return ghRetry(() =>
       withTimeout(
         (async () => {
           const res = await this.octokit.rest.pulls.listReviewComments({
@@ -214,7 +266,7 @@ export class OctokitGitHubClient implements GitHubClient {
     n: number,
     input: CreateReviewCommentInput,
   ): Promise<PrReviewComment> {
-    return withRetry(() =>
+    return ghRetry(() =>
       withTimeout(
         (async () => {
           if (input.inReplyTo != null) {
@@ -245,7 +297,7 @@ export class OctokitGitHubClient implements GitHubClient {
   }
 
   async openPullRequest(repo: RepoRef, payload: OpenPrPayload): Promise<{ url: string }> {
-    return withRetry(() =>
+    return ghRetry(() =>
       withTimeout(
         (async () => {
           const res = await this.octokit.rest.pulls.create({
@@ -267,7 +319,7 @@ export class OctokitGitHubClient implements GitHubClient {
     repo: RepoRef,
     payload: CommitFilesPayload,
   ): Promise<{ branch: string }> {
-    return withRetry(() =>
+    return ghRetry(() =>
       withTimeout(
         (async () => {
           const owner = repo.owner;
@@ -332,7 +384,7 @@ export class OctokitGitHubClient implements GitHubClient {
   }
 
   async findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string } | null> {
-    return withRetry(() =>
+    return ghRetry(() =>
       withTimeout(
         (async () => {
           const res = await this.octokit.rest.pulls.list({
@@ -357,7 +409,7 @@ export class OctokitGitHubClient implements GitHubClient {
     // The Actions API keys on the workflow's file NAME (or its numeric id); the
     // caller holds `CI_WORKFLOW_PATH`, so accept either and take the last segment.
     const workflowId = opts.workflowFile.split('/').pop() ?? opts.workflowFile;
-    return withRetry(() =>
+    return ghRetry(() =>
       withTimeout(
         (async () => {
           const res = await this.octokit.rest.actions.listWorkflowRuns({
@@ -388,7 +440,7 @@ export class OctokitGitHubClient implements GitHubClient {
     runId: number,
     artifactName: string,
   ): Promise<Uint8Array | null> {
-    return withRetry(() =>
+    return ghRetry(() =>
       withTimeout(
         (async () => {
           const list = await this.octokit.rest.actions.listWorkflowRunArtifacts({
@@ -424,7 +476,7 @@ export class OctokitGitHubClient implements GitHubClient {
   }
 
   async getIssue(repo: RepoRef, n: number): Promise<IssueMeta> {
-    const res = await withRetry(() =>
+    const res = await ghRetry(() =>
       withTimeout(
         this.octokit.rest.issues.get({ owner: repo.owner, repo: repo.name, issue_number: n }),
         TIMEOUT,
@@ -439,7 +491,7 @@ export class OctokitGitHubClient implements GitHubClient {
   }
 
   async currentLogin(): Promise<string> {
-    const res = await withRetry(() =>
+    const res = await ghRetry(() =>
       withTimeout(this.octokit.rest.users.getAuthenticated(), TIMEOUT),
     );
     return res.data.login;
