@@ -122,6 +122,12 @@ export async function createAgentRun(
     prId: string;
     provider: string | null;
     model: string | null;
+    /**
+     * The multi-agent run this run belongs to, or null/absent for a
+     * single-agent run. Nullable in the table for exactly that reason, so
+     * omitting it is the ordinary case and not a degraded one.
+     */
+    multiAgentRunId?: string | null;
   },
 ): Promise<string> {
   const [row] = await db
@@ -132,11 +138,48 @@ export async function createAgentRun(
       prId: values.prId,
       provider: values.provider,
       model: values.model,
+      multiAgentRunId: values.multiAgentRunId ?? null,
       status: 'running',
       source: 'local',
     })
     .returning({ id: t.agentRuns.id });
   return row!.id;
+}
+
+/**
+ * Does this multi-agent run still have a run in flight?
+ *
+ * The create path's `409` refusal — "this pull request's most recent fan-out has
+ * not finished" — asks two questions, and they belong to two different modules.
+ * WHICH multi-run is the most recent one is the multi-agent module's, and
+ * arrives through the record-writer port. Whether any of ITS runs is still going
+ * is this one: `agent_runs` is the reviews module's own table, so the query
+ * lives here rather than widening that port with a read the create path could
+ * make itself.
+ *
+ * `running` is the whole of "non-terminal", deliberately. The column is plain
+ * `text` with no CHECK constraint, and the read side maps an unrecognised value
+ * to `failed` (a TERMINAL status, so the client's poll stops rather than
+ * spinning forever). Matching that here means a row with a status nobody
+ * recognises cannot wedge the pull request into refusing every future fan-out.
+ */
+export async function hasRunningRunForMultiRun(
+  db: Db,
+  workspaceId: string,
+  multiAgentRunId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: t.agentRuns.id })
+    .from(t.agentRuns)
+    .where(
+      and(
+        eq(t.agentRuns.workspaceId, workspaceId),
+        eq(t.agentRuns.multiAgentRunId, multiAgentRunId),
+        eq(t.agentRuns.status, 'running'),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
 export async function completeAgentRun(

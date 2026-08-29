@@ -175,8 +175,15 @@ export class ReviewRepository {
     prId: string;
     provider: string | null;
     model: string | null;
+    /** The multi-agent run this run belongs to; absent for a single-agent run. */
+    multiAgentRunId?: string | null;
   }): Promise<string> {
     return runRepo.createAgentRun(this.db, values);
+  }
+
+  /** Whether any run of one multi-agent run is still `running`. */
+  hasRunningRunForMultiRun(workspaceId: string, multiAgentRunId: string): Promise<boolean> {
+    return runRepo.hasRunningRunForMultiRun(this.db, workspaceId, multiAgentRunId);
   }
 
   completeAgentRun(

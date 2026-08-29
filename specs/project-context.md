@@ -881,7 +881,7 @@ time, never persisted (AC-14). Neither table nor its write path touches `agents.
 - `client/src/app/skills/_components/SkillEditor/_components/ContextTab/**` — the skill
   editor's `Context` tab, headed `Project context to use`; reorders with `moveUp` / `moveDown`
   buttons only (no drag handle for this surface).
-- `client/src/app/repos/[repoId]/pulls/[number]/_components/RunTraceDrawer/_components/TraceBody/TraceBody.tsx`
+- `client/src/components/run-trace-drawer/_components/TraceBody/TraceBody.tsx`
   — the `trace.specs_read ?? []` guard for a legacy trace (EC-19).
 - `client/messages/en/context.json`, `agents.json`, `skills.json` — the screen's and both
   tabs' copy, including the reworded empty-state sentence (AC-30) and the corrected

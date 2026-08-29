@@ -15,6 +15,7 @@ taken from what the orchestrator witnessed in context.
 |---|---|---|---|---|---|---|---|
 | 2026-08-18 | Project Context spec (SPEC-01) | 4 — main + `spec-creator` → 2 × `researcher` | 3.06M | 130m (30m in agents) | yes | `specs/project-context.md`, 742 lines, 52 AC / 0 open questions | [report](./2026-08-18-project-context-spec.md) |
 | 2026-08-25 | **Export to CI (SPEC-05)** — spec → plan → build | 11 — main + `spec-creator` (4 dispatches, 1 nested `researcher`) + `implementation-planner` + 5 × `implementer` + `plan-verifier` + `architecture-reviewer` + `doc-writer` | not measured (in-context) — ~1.96M subagent tokens on opus, 642k on sonnet | 300m (≈150m in agents) | no | SPEC-05 `implemented`; 3 commits; 42 paths; 903/468/53 tests; verdict `comment`, 0 CRITICAL | [report](./2026-08-25-export-to-ci.md) |
+| 2026-08-25 | Multi-Agent Review (SPEC-06) — spec → plan → 16-task build → review → 2 fix rounds | 27 — main + `spec-creator` ×2 (→ 2 × `researcher`) + `implementation-planner` + 18 × `implementer` + `plan-verifier` + `architecture-reviewer` + `doc-writer` | 15.53M | 364m (350m summed in agents) | yes | SPEC-05 `implemented`, 105 AC; 126 files, +16.9k/−206; server 842→933 tests, client 455→491; depcruise unchanged at 22 warnings | [report](./2026-08-25-multi-agent-review.md) |
 
 ## Insights by module
 
@@ -35,8 +36,55 @@ taken from what the orchestrator witnessed in context.
   distinction before implementing, and assert the reasons are pairwise different. Evidence:
   `server/src/modules/ci/artifact.ts`, `server/test/ci-ingest.test.ts`,
   [2026-08-25 report](./2026-08-25-export-to-ci.md).
+- **2026-08-25** — **The 2026-08-18 fix above was applied in full and did not hold at
+  scale.** The plan carried ~35 `INSIGHTS.md` entries quoted verbatim with their dates,
+  and every one of 18 implementer briefs repeated the entries relevant to its paths and
+  said "take as read, do not open the journals". Measured anyway: **84 opens of
+  `server/INSIGHTS.md` and 75 of `client/INSIGHTS.md`, across 12 participants.** The
+  cause is not disobedience — root `CLAUDE.md`'s session protocol *requires* reading a
+  package's journal before answering about it, so a dispatch instruction was asking
+  agents to break a standing rule, and the rule correctly won. Carrying the entries is
+  necessary and not sufficient: **the exemption has to be written into the protocol
+  itself**, not into the brief. Supersedes 2026-08-18 on the sufficiency claim only; the
+  advice to carry the entries stands. Evidence:
+  `docs/retro/2026-08-25-multi-agent-review.md` (Duplicated reading).
 
 ### Agents & dispatch
+
+- **2026-08-25** — **Cache creation, not generation, is what a multi-agent run costs.**
+  Measured over 27 participants: 13.47M of 15.53M uncached tokens (**87%**) were
+  cache *writes*; output was 2.05M (13%). The practical consequences are the opposite
+  of the intuitive ones — trimming a prompt matters less than reducing the number of
+  turns that re-write a growing prefix, and the model tier multiplies the whole bill
+  rather than just the generated part. Concretely: the three `sonnet` roles did **20.6%
+  of the uncached work for 4.6% of the money**. Evidence:
+  `docs/retro/2026-08-25-multi-agent-review.md` (Where the cost went).
+
+- **2026-08-25** — **The orchestrating main loop was the largest single participant
+  after the implementer pool** — 2.76M uncached, 17.8% of the run, over 398 turns. Every
+  subagent report returns into the parent's context *in full*, and the parent then
+  re-states it; with 26 dispatches that is unavoidable in kind but not in degree. Batch
+  the per-wave bookkeeping (save reports, update the ledger, dispatch the next wave)
+  into as few turns as the dependencies allow, and never re-narrate a report the reader
+  can open. Evidence: `docs/retro/2026-08-25-multi-agent-review.md`.
+
+- **2026-08-25** — **Subagents do not inherit chat images, and describing a design in
+  prose instead is a third source of truth that will diverge.** `spec-creator` wrote
+  SPEC-05 from a textual description of six screenshots; comparing the shipped spec to
+  the actual images afterwards found the grouping rule's entry condition inverted badly
+  enough that the design's own reference screen would have rendered empty. The
+  correction cost a second full `spec-creator` run (357k uncached, opus) plus two
+  fix-round items created by the parent's incomplete manual sync. `Read` accepts image
+  files: **write the images to disk and put the paths in the dispatch.** Evidence:
+  `docs/retro/2026-08-25-multi-agent-review.md` (What was missed).
+
+- **2026-08-25** — **A plan handed to N implementers is read N times in full.**
+  `plan.md` (947 lines) was opened **122 times by 18 participants**, and four separate
+  implementers ran the identical `sed -n '411,700p'` to reach the shared constraints
+  block. Emitting `tasks/T<n>.md` beside the plan — that task's section plus the shared
+  constraints — would give each implementer ~150 lines instead of 947 without losing
+  anything, since the plan stays the record. Evidence:
+  `docs/retro/2026-08-25-multi-agent-review.md` (Duplicated reading).
 
 - **2026-08-18** — A subagent cannot call `AskUserQuestion`, so any question it
   would have asked becomes a silent default. `spec-creator` had four blocking

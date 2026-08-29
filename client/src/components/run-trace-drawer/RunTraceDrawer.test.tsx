@@ -3,7 +3,7 @@ import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { RunTrace } from "@devdigest/shared";
 import { estimateTokens } from "@/lib/skill";
-import messages from "../../../../../../../../messages/en/runs.json"; // apps/web/messages/en/runs.json
+import messages from "../../../messages/en/runs.json"; // apps/web/messages/en/runs.json
 
 // Mock the trace hooks so the drawer renders without a query client / SSE.
 const TRACE: RunTrace = {
@@ -44,10 +44,10 @@ const LEGACY_TRACE = (() => {
 /** What `useRunTrace` returns for the test currently running. */
 let current: RunTrace = TRACE;
 
-vi.mock("../../../../../../../lib/hooks/trace", () => ({
+vi.mock("../../lib/hooks/trace", () => ({
   useRunTrace: () => ({ data: current, isLoading: false }),
 }));
-vi.mock("../../../../../../../lib/hooks/reviews", () => ({
+vi.mock("../../lib/hooks/reviews", () => ({
   useRunEvents: () => ({ events: [], running: false }),
 }));
 

@@ -1,6 +1,6 @@
 /* PR Detail screen — /repos/:repoId/pulls/:number. F2 shell extended by A2 with:
    - Findings panel (VerdictBanner + FindingCards)
-   - RunReviewDropdown (run all / a specific agent) + live SSE RunStatus
+   - AgentPicker (choose agents, then fan the pull request out) + live SSE RunStatus
    - Basic file-by-file diff viewer in the Files tab
    Tab and open-trace state live in the URL (?tab, ?trace, ?finding, ?order, and
    ?file/?line for the file a review-focus row sent the reader to).
@@ -34,7 +34,7 @@ import { OverviewTab } from "../OverviewTab";
 import { FindingsTab } from "../FindingsTab";
 import { DiffTab } from "../DiffTab";
 import type { DiffOrder } from "../SmartDiffViewer";
-import RunTraceDrawer from "../RunTraceDrawer";
+import RunTraceDrawer from "@/components/run-trace-drawer";
 import { s } from "./styles";
 
 export function PrDetailView({ repoId, number }: { repoId: string; number: string }) {

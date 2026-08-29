@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
@@ -48,6 +48,21 @@ export interface LinkedSkillRow {
   order: number;
 }
 
+/**
+ * One sampled `done` run, carrying only what a run estimate is computed from.
+ *
+ * Both figures stay nullable all the way to the reduction: `duration_ms` and
+ * `cost_usd` are nullable columns, and `cost_usd`'s own doc-comment on the table
+ * says what the two values mean — `null` = no cost data at all, `0` = a
+ * genuinely free model. Defaulting either to zero here would erase that
+ * distinction before anything could read it.
+ */
+export interface AgentRunSampleRow {
+  agentId: string;
+  durationMs: number | null;
+  costUsd: number | null;
+}
+
 export class AgentsRepository {
   constructor(private db: Db) {}
 
@@ -60,6 +75,86 @@ export class AgentsRepository {
       .select()
       .from(t.agents)
       .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.enabled, true)));
+  }
+
+  /**
+   * Every agent id in the workspace, ascending — a TOTAL order, so two reads of
+   * an unchanged workspace return the rows in the same sequence.
+   *
+   * Narrower than `list()` on purpose: the estimates read needs the id and
+   * nothing else, and `agents` carries a system prompt per row.
+   */
+  async listAgentIds(workspaceId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ id: t.agents.id })
+      .from(t.agents)
+      .where(eq(t.agents.workspaceId, workspaceId))
+      .orderBy(asc(t.agents.id));
+    return rows.map((r) => r.id);
+  }
+
+  /**
+   * The `perAgent` most recent `done` runs of every agent in the workspace,
+   * newest first within each agent — the sample a run estimate is computed over.
+   *
+   * **Across the whole workspace and every pull request**, deliberately: the
+   * estimate answers "what does this agent usually take", not "what did it take
+   * here", so it is scoped by workspace and by nothing else. Failed and
+   * cancelled runs are excluded, so they move no mean.
+   *
+   * Raw SQL rather than the query builder because there is no portable per-group
+   * `LIMIT 1..N` in Drizzle's builder — the same reason `pulls/latest.ts`
+   * over-fetches and collapses in JS. The window function is the cheaper half of
+   * that trade: it bounds what crosses the wire to `agents × perAgent` rows
+   * instead of every `done` run the workspace has ever made. The reduction that
+   * turns these rows into means still applies its own `perAgent` cut — the SQL
+   * bound is a transfer budget, `AGENT_ESTIMATE_SAMPLE_SIZE` in the service is
+   * the rule of record, and both read that one constant.
+   *
+   * `agent_id IS NOT NULL` is load-bearing, not tidiness: the column is
+   * `ON DELETE SET NULL`, so a run whose agent was deleted survives with a null
+   * `agent_id`, and `PARTITION BY agent_id` would collapse every such row across
+   * every deleted agent into one partition (`server/INSIGHTS.md`, 2026-08-03).
+   * Those runs belong to no agent this read reports on, so they are dropped
+   * before the partition exists.
+   *
+   * Fully parameterised, and no `Date` is interpolated — postgres-js rejects one
+   * inside a raw template at runtime, swallowed into a generic 500
+   * (`server/INSIGHTS.md`, 2026-08-05).
+   */
+  async recentDoneRunSamples(
+    workspaceId: string,
+    perAgent: number,
+  ): Promise<AgentRunSampleRow[]> {
+    const rows = await this.db.execute<{
+      agent_id: string;
+      duration_ms: number | null;
+      cost_usd: number | null;
+    }>(sql`
+      SELECT r.agent_id AS agent_id, r.duration_ms AS duration_ms, r.cost_usd AS cost_usd
+      FROM (
+        SELECT
+          agent_id,
+          duration_ms,
+          cost_usd,
+          row_number() OVER (
+            PARTITION BY agent_id
+            ORDER BY ran_at DESC, id DESC
+          ) AS rn
+        FROM agent_runs
+        WHERE workspace_id = ${workspaceId}
+          AND status = 'done'
+          AND agent_id IS NOT NULL
+      ) r
+      WHERE r.rn <= ${perAgent}
+      ORDER BY r.agent_id ASC, r.rn ASC
+    `);
+
+    return [...rows].map((row) => ({
+      agentId: row.agent_id,
+      durationMs: row.duration_ms,
+      costUsd: row.cost_usd,
+    }));
   }
 
   async getById(workspaceId: string, id: string): Promise<AgentRow | undefined> {

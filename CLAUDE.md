@@ -105,6 +105,9 @@ Never hand-edit:
   `client/CLAUDE.md`, `reviewer-core/CLAUDE.md`, `e2e/CLAUDE.md`, `mcp-server/CLAUDE.md`.
   `agent-runner/` has none — read `agent-runner/README.md`
 - Agent prompt templates → read `docs/agent-prompts/`
+- **Writing a brief for a subagent** → read `docs/dispatching-subagents.md`. A
+  subagent inherits no images and no chat: an artifact reaches it as a **path**, never
+  as a description, and where a design contradicts an `AC-nn` the criterion wins.
 - Skill bodies meant to be **imported** rather than seeded → read `docs/skills/`
 - Writing a feature spec → read `docs/specs-convention.md`
 - **About to open a PR** → run `/pr-self-review`. It reviews the open local diff

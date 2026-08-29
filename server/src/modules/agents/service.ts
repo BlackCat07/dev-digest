@@ -1,6 +1,7 @@
 import type { Container } from '../../platform/container.js';
 import type {
   Agent,
+  AgentRunEstimate,
   AgentSkillLink,
   AgentVersion,
   CiFailOn,
@@ -10,7 +11,7 @@ import type {
 } from '@devdigest/shared';
 import { AgentVersionConfig } from '@devdigest/shared';
 import { ValidationError } from '../../platform/errors.js';
-import { AgentsRepository, type UpdateAgent } from './repository.js';
+import { AgentsRepository, type AgentRunSampleRow, type UpdateAgent } from './repository.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
 
 /**
@@ -190,6 +191,131 @@ export async function promoteAgentVersion<TRow>(
   return row;
 }
 
+// ---- per-agent run estimates ----------------------------------------------
+
+/**
+ * How many of an agent's most recent `done` runs a run estimate averages.
+ *
+ * Ten, and the number lives here rather than in the repository because it is a
+ * product rule ("recent enough to reflect the agent as it is configured today")
+ * and not a query detail. The repository takes it as an argument and uses it to
+ * bound what the window function transfers; the reduction below applies it
+ * again as the rule of record, so the estimate stays correct even if the SQL
+ * ever hands back more rows than were asked for.
+ */
+export const AGENT_ESTIMATE_SAMPLE_SIZE = 10;
+
+/**
+ * The two reads a run estimate needs, as a port.
+ *
+ * Consumer-declared and narrow, like {@link AgentPromotionStore}:
+ * `AgentsRepository` satisfies it structurally under its own method names, and a
+ * test satisfies it with two functions and no Postgres — which matters here
+ * because the whole point of this feature is a set of null-versus-zero rules
+ * that no typechecker can see.
+ */
+export interface AgentEstimateStore {
+  /** Every agent id in the workspace, in a total order. */
+  listAgentIds(workspaceId: string): Promise<string[]>;
+  /**
+   * The `perAgent` most recent `done` runs of each agent in the workspace.
+   * **Rows MUST arrive newest-first within each agent** — the reduction does no
+   * sorting of its own and cannot detect an unsorted caller, exactly as
+   * `pulls/latest.ts`'s `groupLatestPerAgent` cannot.
+   */
+  recentDoneRunSamples(workspaceId: string, perAgent: number): Promise<AgentRunSampleRow[]>;
+}
+
+/**
+ * Mean of the non-null values, or `null` when there is not one of them.
+ *
+ * `null` and `0` are different answers and the difference is the feature: a zero
+ * is a measurement, an absence is not one, and the screen renders them
+ * differently. `[]` and `[null, null]` both mean "nothing was recorded" and both
+ * yield `null`; `[0, 0]` means "two runs, both genuinely free" and yields `0`.
+ */
+function meanOfPresent(values: readonly (number | null)[]): number | null {
+  let sum = 0;
+  let n = 0;
+  for (const value of values) {
+    if (value == null) continue;
+    sum += value;
+    n += 1;
+  }
+  return n === 0 ? null : sum / n;
+}
+
+/**
+ * Turn one agent list plus a flat sample of its runs into one estimate per agent.
+ *
+ * Pure, and the rules it carries are the whole of AC-42…AC-44:
+ *
+ * - **One row per agent in the workspace**, including an agent that has never
+ *   run. The sample drives the figures, never the row set.
+ * - **`sample_size` is how many `done` runs were sampled** — not how many of
+ *   them priced themselves. An agent with ten unpriced `done` runs reports a
+ *   duration mean, a `null` cost mean and a sample size of ten.
+ * - **An agent with no `done` run reports both means `null` and `sample_size: 0`,
+ *   never `0 ms` and never `$0.00`.**
+ * - **The cost mean averages only the sampled runs whose `cost_usd` is non-null**
+ *   and is `null` when none of them recorded one. `agent_runs.cost_usd`'s own
+ *   doc-comment says why: `null` = no cost data at all, `0` = a genuinely free
+ *   model. The duration mean is treated the same way, because `duration_ms` is
+ *   nullable too and a missing measurement must not be averaged in as a zero.
+ * - Samples naming an agent that is not in `agentIds` are **dropped**: a run
+ *   whose agent was deleted belongs to no row this read returns.
+ *
+ * Rows come back in `agentIds` order, so the response inherits that total order.
+ *
+ * The mean duration is rounded to whole milliseconds — sub-millisecond precision
+ * on a figure the screen renders in seconds is noise. The mean cost is NOT
+ * rounded: it is fractions of a cent and the client sums several of them.
+ */
+export function runEstimatesFrom(
+  agentIds: readonly string[],
+  samples: readonly AgentRunSampleRow[],
+  sampleSize: number = AGENT_ESTIMATE_SAMPLE_SIZE,
+): AgentRunEstimate[] {
+  const known = new Set(agentIds);
+  const byAgent = new Map<string, AgentRunSampleRow[]>();
+  for (const sample of samples) {
+    if (!known.has(sample.agentId)) continue;
+    const bucket = byAgent.get(sample.agentId);
+    // Newest-first is the caller's contract, so the first `sampleSize` rows of a
+    // bucket ARE the most recent ones and everything past them is discarded.
+    if (bucket === undefined) byAgent.set(sample.agentId, [sample]);
+    else if (bucket.length < sampleSize) bucket.push(sample);
+  }
+
+  return agentIds.map((agentId) => {
+    const sampled = byAgent.get(agentId) ?? [];
+    const meanDuration = meanOfPresent(sampled.map((s) => s.durationMs));
+    return {
+      agent_id: agentId,
+      mean_duration_ms: meanDuration === null ? null : Math.round(meanDuration),
+      mean_cost_usd: meanOfPresent(sampled.map((s) => s.costUsd)),
+      sample_size: sampled.length,
+    };
+  });
+}
+
+/**
+ * One run estimate per agent in the workspace — the read behind the agent picker
+ * and the Configure-run screen's aggregate.
+ *
+ * A free function over the port rather than a method, so the rules above are
+ * reachable from a test without a database, a container or an app.
+ */
+export async function agentRunEstimates(
+  store: AgentEstimateStore,
+  workspaceId: string,
+): Promise<AgentRunEstimate[]> {
+  const agentIds = await store.listAgentIds(workspaceId);
+  if (agentIds.length === 0) return [];
+  const samples = await store.recentDoneRunSamples(workspaceId, AGENT_ESTIMATE_SAMPLE_SIZE);
+  return runEstimatesFrom(agentIds, samples);
+}
+
 export class AgentsService {
   private repo: AgentsRepository;
 
@@ -205,6 +331,16 @@ export class AgentsService {
   async get(workspaceId: string, id: string): Promise<Agent | undefined> {
     const row = await this.repo.getById(workspaceId, id);
     return row ? toAgentDto(row) : undefined;
+  }
+
+  /**
+   * One run estimate per agent in the workspace.
+   *
+   * A thin delegation to {@link agentRunEstimates}, which holds the sampling and
+   * the null-versus-zero rules; this method exists to hand it the repository.
+   */
+  async estimates(workspaceId: string): Promise<AgentRunEstimate[]> {
+    return agentRunEstimates(this.repo, workspaceId);
   }
 
   /** Delete an agent (and its versions/skill-links, via cascade). */

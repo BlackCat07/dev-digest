@@ -11,7 +11,8 @@
     "title": "Where agents disagree",
     "onlyConflicts": "Show only conflicts",
     "empty": "No conflicts — the agents agree on every flagged location.",
-    "didNotFlag": "did not flag"
+    "didNotFlag": "did not flag",
+    "synthesisedNote": "These sentences are generated from what each agent reported — they are not quotations."
   },
   "tabs": {
     "noSummary": "No summary."
@@ -107,29 +108,81 @@
     "warning": "Warning",
     "suggestion": "Suggestion"
   },
+  "picker": {
+    "trigger": "Run review",
+    "title": "Choose agents",
+    "run": "Run {count, plural, one {# agent} other {# agents}}",
+    "clear": "Clear",
+    "noEstimate": "—",
+    "manageAgents": "Manage agents",
+    "noAgents": "There are no agents in this workspace yet."
+  },
+  "configure": {
+    "title": "Configure a run",
+    "step1": "Choose a pull request",
+    "step2": "Choose agents",
+    "selectPrFirst": "Choose a pull request first — then pick the agents to run on it.",
+    "selectPrFirstTitle": "Pick a pull request first",
+    "selectAll": "Select all",
+    "run": "Run {count, plural, one {# agent} other {# agents}}",
+    "estimate": "Estimated {duration} · {cost}",
+    "estimateUnavailable": "Estimated —",
+    "neverRun": "No previous run on this pull request",
+    "noOpenPulls": "No open pull requests — everything in this repository is merged or closed."
+  },
+  "results": {
+    "mode": {
+      "columns": "Columns",
+      "tabs": "Tabs"
+    },
+    "modeLabel": "View mode",
+    "status": {
+      "running": "Running",
+      "done": "Done",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "viewTrace": "View trace",
+    "noScore": "No score",
+    "backToConfigure": "Configure run",
+    "openFromPr": "Multi-agent results",
+    "selectedAgents": "{count, plural, one {# selected agent} other {# selected agents}} · parallel"
+  },
+  "detail": {
+    "rationale": "Rationale",
+    "suggestion": "Suggested fix",
+    "accept": "Accept",
+    "dismiss": "Dismiss",
+    "turnIntoEvalCase": "Turn into eval case",
+    "accepted": "Accepted",
+    "dismissed": "Dismissed",
+    "confidence": "{pct}% confidence",
+    "actionFailed": "That didn't go through — nothing was recorded. Try again in a moment."
+  },
   "page": {
     "title": "Multi-Agent Review",
-    "subtitle": "this PR through every enabled agent in parallel",
+    "subtitle": "Compare what each agent found on this pull request, side by side.",
     "selectPr": "Select PR",
     "prItem": "#{number} · {title}",
     "view": {
       "columns": "columns",
       "tabs": "tabs"
     },
-    "runAll": "Run all agents",
+    "runAll": "New multi-agent run",
     "running": "Running…",
-    "meta": "{count} agents · fan-out via p-queue · {duration}s total · {cost}",
+    "meta": "{count, plural, one {# agent} other {# agents}} · parallel fan-out, up to 4 at once · {duration}s total · {cost}",
     "noAgents": {
       "title": "Enable agents to run reviews",
-      "body": "Multi-agent review runs the PR through every enabled agent in parallel. You have no agents enabled yet.",
+      "body": "Multi-agent review fans a pull request out to the agents you pick. There are no agents in this workspace yet.",
       "cta": "Go to Agents"
     },
     "noRun": {
       "title": "No multi-agent run yet",
-      "bodyReady": "Run all enabled agents on this PR to see N columns + conflicts.",
+      "bodyReady": "Pick the agents to run on this pull request and read their findings side by side.",
       "bodySelect": "Select a PR to begin.",
-      "cta": "Run all agents"
+      "cta": "Choose agents to run"
     },
     "crumb": "Multi-Agent Review"
-  }
+  },
+  "startFailed": "The run could not be started."
 }
