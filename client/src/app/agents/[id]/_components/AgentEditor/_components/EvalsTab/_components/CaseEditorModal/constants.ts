@@ -1,7 +1,6 @@
 /* Unit-private constants for the eval case editor.
 
    Labels are KEYS into `messages/en/eval.json`; no user-visible string is here. */
-import type { EvalCaseOutcome } from "@devdigest/shared";
 
 /** Wide enough for a diff and the expected output side by side at 1280. */
 export const MODAL_WIDTH = 880;
@@ -34,17 +33,3 @@ export const DIFF_ROWS = 14;
 
 /** Rows the expected-output textarea shows before it scrolls. */
 export const EXPECTED_ROWS = 14;
-
-/**
- * Last-run outcome → the colour its badge carries.
- *
- * A map rather than a ternary chain in the markup, and keyed by the contract
- * enum so a fourth outcome fails to compile instead of rendering uncoloured.
- * `not_run` is `--warn`, never `--crit`: nothing was measured, which is not the
- * same as measured and wrong. The badge always carries the WORD as well.
- */
-export const LAST_RUN_COLOR: Record<EvalCaseOutcome, string> = {
-  passed: "var(--ok)",
-  failed: "var(--crit)",
-  not_run: "var(--warn)",
-};

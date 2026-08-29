@@ -357,6 +357,43 @@ Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
 
+- **2026-08-25** — **This module has one deliberately SYNCHRONOUS long-ish route, and the rule
+  that makes it different from every fire-and-forget one is worth stating: a route may await
+  the work when the work is one model call AND there is no row the answer could be read back
+  from.** `POST /eval/agents/:agentId/trial-runs` runs a single unsaved eval case and returns
+  its outcome inside the request, where `POST /eval/agents/:agentId/batches` answers `202` with
+  a `running` batch and `POST /pulls/:id/review` returns before its first finding exists
+  (2026-08-13, this file). The difference is not "how long" — it is that a batch and a review
+  both WRITE rows a client can poll, so returning early costs nothing, while a trial run
+  persists nothing by design (that absence is its whole point: pressing `Run case` four times
+  must not move the agent's recall four times) and an early return would throw the only copy of
+  the answer away. It is bounded by one `CASE_DEADLINE_MS` (120 s), not by `BATCH_DEADLINE_MS`
+  (15 min), which is what keeps it defensible. Before making a new eval route async "for
+  consistency", check which of those two it is. Evidence: `src/modules/eval/routes.ts`
+  (`/trial-runs`), `src/modules/eval/runner.ts` (`runTrial` vs `start`),
+  `src/modules/eval/constants.ts` (`CASE_DEADLINE_MS`).
+
+
+- **2026-08-24** — **Deleting every `reviews` and `agent_runs` row for a repo does NOT reset its
+  pull requests to `needs_review` — the list status is DERIVED from
+  `pull_requests.last_reviewed_sha`, which no delete touches.** `deriveReviewStatus` compares
+  that column against `head_sha` and never reads a review row, so a wipe that misses it leaves
+  the whole list showing `reviewed`/`stale` with no score, no cost and no findings behind it —
+  the one state the screen cannot otherwise reach. The column survives because it has a single
+  writer (`markReviewed`, called on the run's success path) and neither an FK nor a cascade
+  pointing at it. A demo reset for one repo is therefore four statements, not two: delete
+  `reviews` by `pr_id` (findings cascade via `findings.review_id`), delete `agent_runs` by
+  `pr_id` (`run_traces` + `run_skills` cascade), delete `pr_intent` / `pr_brief` if the
+  derivations should re-run, then `UPDATE pull_requests SET last_reviewed_sha = NULL`. Two
+  things that look wrong afterwards and are not: closed PRs still read `Closed`, because the
+  `pull_requests.status` column is GitHub's merge state and `deriveReviewStatus` returns it
+  untouched; and `eval_cases` survive the findings they came from by design
+  (`source_finding_id` carries no FK, `schema/eval.ts`). No API restart is needed — unlike the
+  re-seed case in Recurring Errors (2026-08-06), the workspace row is not recreated, so the
+  memoised `currentWorkspace` stays valid. Evidence: `src/modules/pulls/status.ts`
+  (`deriveReviewStatus`), `src/db/schema/pulls.ts` (`lastReviewedSha`),
+  `src/modules/reviews/repository/pull.repo.ts` (`markReviewed`).
+
 - **2026-08-23** — **`AgentsRepository.snapshotVersion` re-reads `skillIdsForAgent(row.id)` from
   INSIDE `update`, so a caller that wants the new version's snapshot to record a particular skill
   set must write the links BEFORE calling `update`.** Writing them after leaves the snapshot

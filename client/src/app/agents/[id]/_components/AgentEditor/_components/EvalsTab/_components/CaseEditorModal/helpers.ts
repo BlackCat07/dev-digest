@@ -1,98 +1,16 @@
 /* Unit-private pure helpers for the eval case editor.
 
-   No React, no fetch, no i18n — the validity gate and the two display
-   formatters, each a function of its arguments. */
+   One function is left here: `resolveLastRun`, which is about THIS unit's two
+   sources of a last execution. The validity gate and the two display formatters
+   moved to `src/lib/eval.ts` when a second editor — the draft modal opened from
+   a finding — needed exactly the same four, and two copies of a JSON gate is how
+   two screens come to disagree about what `valid JSON` means. */
 import type {
   EvalAgentCase,
   EvalBatchCaseResult,
   EvalCaseOutcome,
   EvalNotRunReason,
 } from "@devdigest/shared";
-
-/**
- * The stored expected output as editable text.
- *
- * Two-space JSON rather than one line, because the thing a reader is being asked
- * to check is its SHAPE. `undefined` — a case whose `expected_output` jsonb is
- * absent — becomes empty text, which the gate below then reports as invalid: a
- * case with nothing to assert is exactly a case that must not be saved as is,
- * and an empty box saying `valid JSON` would claim otherwise.
- *
- * The `try` is not defensive padding: the value arrives typed as `unknown`, and
- * `JSON.stringify` throws on a BigInt and returns `undefined` for a function or
- * a bare `undefined`. Both are unreachable through an HTTP JSON response, and
- * neither may take the editor down if the shape ever widens.
- */
-export function stringifyExpected(value: unknown): string {
-  if (value === undefined) return "";
-  try {
-    return JSON.stringify(value, null, 2) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-/** The JSON-validity gate's answer: the parsed value, or the fact that there is none. */
-export type ExpectedOutputParse =
-  | { valid: true; value: unknown }
-  | { valid: false; value: null };
-
-/**
- * Parse the expected-output text.
- *
- * `unknown` and never `any`: the contract's `expected_output` is `unknown` and
- * this value's only destination is that field, so there is no shape to check it
- * against and nothing that may be assumed about it. What IS checked is that it
- * is JSON at all — which is the whole of AC-66's gate, and the reason `Save` and
- * `Run case` read their disabled state from `valid` rather than from a
- * try/catch at submit time, where the user would have already committed.
- *
- * Empty (or whitespace-only) text is invalid, not `null`: an empty box is an
- * unfinished edit, and treating it as the JSON value `null` would silently
- * replace a case's assertion with nothing.
- */
-export function parseExpected(text: string): ExpectedOutputParse {
-  if (text.trim() === "") return { valid: false, value: null };
-  try {
-    const value: unknown = JSON.parse(text);
-    return { valid: true, value };
-  } catch {
-    return { valid: false, value: null };
-  }
-}
-
-/**
- * A case execution's duration: `1840` → `"1.8s"`.
- *
- * Seconds with one decimal, matching how the dashboard's own result summary
- * spells a duration. `null` → `"—"`, never `"0.0s"`: a `not_run` case has no
- * duration, and zero would claim it finished instantly.
- */
-export function formatDurationMs(ms: number | null | undefined): string {
-  if (ms == null || !Number.isFinite(ms)) return "—";
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
-/**
- * One execution's outcome → its catalogue key, exhaustively.
- *
- * `not_run` gets its own sentence rather than being folded into "failed": the
- * case was never measured, and the reason is named beside it.
- */
-export function lastRunLabelKey(outcome: EvalCaseOutcome): string {
-  switch (outcome) {
-    case "passed":
-      return "caseEditor.lastRunPassed";
-    case "failed":
-      return "caseEditor.lastRunFailed";
-    case "not_run":
-      return "caseEditor.lastRunNotRun";
-    default: {
-      const exhaustive: never = outcome;
-      return exhaustive;
-    }
-  }
-}
 
 /** The most recent execution of this case, as the last-run strip states it. */
 export interface CaseLastRun {

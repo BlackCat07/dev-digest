@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EvalCaseSave, EvalPeriod } from '@devdigest/shared';
+import { EvalCaseCreate, EvalCaseSave, EvalPeriod, EvalTrialRunRequest } from '@devdigest/shared';
 import { DEFAULT_PERIOD } from './constants.js';
 
 /**
@@ -33,17 +33,45 @@ export const BatchIdParams = z.object({ batchId: z.string().uuid() });
 export type BatchIdParams = z.infer<typeof BatchIdParams>;
 
 /**
- * Turning a decided finding into a case: the finding id, and NOTHING else.
+ * Deriving a draft from a decided finding: the finding id, and NOTHING else.
  *
- * No expectation type is accepted, and that is a requirement rather than an
- * omission — what the case asserts is DERIVED from the finding's own decision
- * (accepted → `must_find`, dismissed → `must_not_flag`), so a caller that could
- * send an expectation could file a case that contradicts the human decision it
- * claims to come from. `strict()` makes that refusal explicit instead of
- * silently stripping the field.
+ * `strict()` because there is genuinely nothing else to send — the whole draft
+ * is computed server-side, and a field silently stripped here would be a field a
+ * client thought it had contributed.
  */
-export const CreateEvalCaseBody = z.object({ finding_id: z.string().uuid() }).strict();
+export const DraftEvalCaseBody = z.object({ finding_id: z.string().uuid() }).strict();
+export type DraftEvalCaseBody = z.infer<typeof DraftEvalCaseBody>;
+
+/**
+ * Saving a derived case: the finding id, plus the three fields the draft modal
+ * makes editable.
+ *
+ * The contract schema itself, narrowed only where a route may be stricter than a
+ * wire type: `finding_id` is a uuid here, and the name has a length bound. What
+ * the body still cannot carry is an EXPECTATION or an anchor — those are derived
+ * from the finding's own decision (accepted → `must_find`, dismissed →
+ * `must_not_flag`), so a caller able to send one could file a case that
+ * contradicts the human decision it claims to come from. `strict()` makes that
+ * refusal explicit instead of silently stripping the field.
+ */
+export const CreateEvalCaseBody = EvalCaseCreate.extend({
+  finding_id: z.string().uuid(),
+  name: z.string().min(1).max(200).optional(),
+}).strict();
 export type CreateEvalCaseBody = z.infer<typeof CreateEvalCaseBody>;
+
+/**
+ * One trial run of an unsaved draft — the contract schema itself.
+ *
+ * It carries the expectation and the anchors where {@link CreateEvalCaseBody}
+ * may not, and the asymmetry is not an inconsistency: a trial writes nothing, so
+ * there is no stored assertion for a mismatched expectation to corrupt. What it
+ * would do is produce a run whose outcome answers a different question than the
+ * case the reader is about to save — which the client prevents by sending the
+ * draft's own values, and which no schema can check.
+ */
+export const TrialRunEvalCaseBody = EvalTrialRunRequest;
+export type TrialRunEvalCaseBody = z.infer<typeof TrialRunEvalCaseBody>;
 
 /**
  * A hand-edited case, saved as submitted — the contract schema itself.

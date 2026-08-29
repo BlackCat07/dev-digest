@@ -265,9 +265,9 @@ describe("FindingCard — the eval-case action", () => {
   });
 
   it.each([
-    ["adding", "adding" as const, c.turnIntoEvalCaseAdding],
+    ["opening", "opening" as const, c.turnIntoEvalCaseOpening],
     ["added", "added" as const, c.turnIntoEvalCaseAdded],
-  ])("says so while the request is %s, and stops taking presses", (_l, state, label) => {
+  ])("says so while the case is %s, and stops taking presses", (_l, state, label) => {
     const onTurnIntoEvalCase = vi.fn();
     renderWithIntl(
       <FindingCard
@@ -324,5 +324,73 @@ describe("FindingCard — the eval-case action", () => {
   it("shows nothing where the refusal would be when there is none", () => {
     renderWithIntl(<FindingCard f={DECIDED} defaultExpanded onTurnIntoEvalCase={() => {}} />);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * L06 follow-up — WHICH decision the reader made has to be visible on the card.
+ *
+ * This block exists because the previous version passed `active={accepted}` /
+ * `active={dismissed}` to the two buttons and neither did anything: `Button`
+ * honours `active` for `kind: "tertiary"` only, and these are `secondary` and
+ * `ghost`. The card was dimmed either way, so an accepted finding and a
+ * dismissed one looked the same. Nothing failed — the props were passed, the
+ * types were satisfied, and every assertion in this file still passed.
+ *
+ * So the assertions below are on the RENDERED style and on `aria-pressed`, not
+ * on a prop being handed over. A test that checked the prop would have gone on
+ * being green through the entire bug.
+ */
+describe("FindingCard — showing which decision was made", () => {
+  const c = messages.finding;
+  const ACCEPTED: FindingRecord = { ...FINDING, accepted_at: "2026-08-20T10:00:00.000Z" };
+  const DISMISSED: FindingRecord = { ...FINDING, dismissed_at: "2026-08-20T10:00:00.000Z" };
+
+  const accept = () => screen.getByRole("button", { name: c.accept });
+  const dismiss = () => screen.getByRole("button", { name: c.dismiss });
+
+  it("marks Accept as the chosen control, and leaves Dismiss unmarked", () => {
+    renderWithIntl(<FindingCard f={ACCEPTED} defaultExpanded />);
+
+    expect(accept()).toHaveAttribute("aria-pressed", "true");
+    expect(dismiss()).toHaveAttribute("aria-pressed", "false");
+    // The visual half. `--ok-bg` is the chosen background; the untouched control
+    // keeps the kind's own default, which is what makes the two distinguishable
+    // at a glance rather than only to a screen reader.
+    expect(accept().style.background).toBe("var(--ok-bg)");
+    expect(dismiss().style.background).not.toBe("var(--ok-bg)");
+  });
+
+  it("marks Dismiss instead when that is what was pressed", () => {
+    renderWithIntl(<FindingCard f={DISMISSED} defaultExpanded />);
+
+    expect(dismiss()).toHaveAttribute("aria-pressed", "true");
+    expect(accept()).toHaveAttribute("aria-pressed", "false");
+    // Neutral, never `--crit`: dismissing a finding is a normal decision about
+    // the agent's output, not an error the reader committed.
+    expect(dismiss().style.background).toBe("var(--bg-hover)");
+    expect(dismiss().style.background).not.toContain("crit");
+  });
+
+  it("neither control is marked while the finding is undecided", () => {
+    renderWithIntl(<FindingCard f={FINDING} defaultExpanded />);
+    expect(accept()).toHaveAttribute("aria-pressed", "false");
+    expect(dismiss()).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("spells the decision out in the title row, one chip and not two", () => {
+    // The word is the channel that survives both the card's dimming and a reader
+    // who cannot tell green from grey.
+    const { rerender } = renderWithIntl(<FindingCard f={ACCEPTED} defaultExpanded />);
+    expect(screen.getByText(c.accepted)).toBeInTheDocument();
+    expect(screen.queryByText(c.dismissed)).not.toBeInTheDocument();
+
+    rerender(
+      <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
+        <FindingCard f={DISMISSED} defaultExpanded />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByText(c.dismissed)).toBeInTheDocument();
+    expect(screen.queryByText(c.accepted)).not.toBeInTheDocument();
   });
 });

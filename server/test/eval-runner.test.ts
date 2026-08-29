@@ -654,6 +654,103 @@ describe('EvalRunner — failure', () => {
     expect(progress.events.some((e) => e.kind === 'error')).toBe(true);
   });
 
+  /* ─── the trial run of an unsaved draft ─────────────────────────────────── */
+
+  /* `runTrial` exists so a reader can press `Run case` repeatedly and watch
+     whether a finding reproduces BEFORE the case joins the set. The whole value
+     of that depends on an absence — no batch row, no run row, no event — which
+     an assertion over the returned outcome cannot see. Every store method is
+     `unreachable` by construction in this file, so a write of any kind fails
+     with the name of the call it made. */
+  describe('runTrial', () => {
+    const draft = {
+      id: 'trial',
+      name: 'src/a.ts:2-8',
+      input_diff: diffFor('src/a.ts'),
+      expectation: 'must_find' as const,
+      expected_anchors: [{ file: 'src/a.ts', low_line: 2, high_line: 8 }],
+    };
+
+    const trialInput = {
+      agentId: 'agent-1',
+      systemPrompt: 'the CURRENT prompt',
+      model: 'gpt-5-mini',
+      provider: 'openai',
+      evalCase: draft,
+    };
+
+    it('scores one draft and writes NOTHING — no batch row, no run row, no event', async () => {
+      const { engine } = engineOver({
+        'src/a.ts': async () => outcome([finding('src/a.ts', 4, 6)], 1, 0.02),
+      });
+      const { runner, recorded, progress } = runnerFor({
+        review: engine,
+        // Both writes are removed, so the defaults in `store()` apply and each
+        // throws with its own name. A trial that recorded anything fails here.
+        store: { insertRun: unreachable('insertRun'), updateBatch: unreachable('updateBatch') },
+      });
+
+      const result = await runner.runTrial(trialInput);
+
+      expect(result.outcome).toBe('passed');
+      expect(result.expected_count).toBe(1);
+      expect(result.actual_count).toBe(1);
+      expect(result.kept_count).toBe(1);
+      expect(result.dropped_count).toBe(1);
+      expect(result.cost_usd).toBe(0.02);
+      expect(result.actual_output).toEqual({ findings: [finding('src/a.ts', 4, 6)] });
+      // The absences, stated rather than implied by the greens above.
+      expect(recorded.runs).toEqual([]);
+      expect(recorded.patches).toEqual([]);
+      expect(progress.events).toEqual([]);
+      expect(progress.completed).toEqual([]);
+    });
+
+    it('replays against the prompt it was handed, with the agent’s current skills', async () => {
+      const { engine, calls } = engineOver({
+        'src/a.ts': async () => outcome([], 0, null),
+      });
+      const skills = skillSource(['## skill\nprefer env vars']);
+      const { runner } = runnerFor({
+        review: engine,
+        skills,
+        store: { insertRun: unreachable('insertRun'), updateBatch: unreachable('updateBatch') },
+      });
+
+      const result = await runner.runTrial(trialInput);
+
+      // A `must_find` case whose run produced no finding FAILS — it did not
+      // reproduce, which is exactly what a reader presses the button to learn.
+      expect(result.outcome).toBe('failed');
+      expect(result.actual_count).toBe(0);
+      expect(calls[0]!.systemPrompt).toBe('the CURRENT prompt');
+      expect(calls[0]!.skills).toEqual(['## skill\nprefer env vars']);
+      expect(calls[0]!.maxRetries).toBe(0);
+      // Its own session namespace: a trial is not a batch and must not collide
+      // with one in anything keyed on the session id.
+      expect(calls[0]!.sessionId).toBe('eval-trial:agent-1:trial');
+      expect(skills.calls).toEqual(['agent-1']);
+    });
+
+    it('records an unparseable draft diff as not_run with zero model calls', async () => {
+      const { runner } = runnerFor({
+        review: unreachable('reviewPullRequest'),
+        llm: unreachable('llm'),
+        store: { insertRun: unreachable('insertRun'), updateBatch: unreachable('updateBatch') },
+      });
+
+      const result = await runner.runTrial({
+        ...trialInput,
+        evalCase: { ...draft, input_diff: '' },
+      });
+
+      expect(result.outcome).toBe('not_run');
+      expect(result.not_run_reason).toBe('diff_unparseable');
+      expect(result.actual_output).toBeNull();
+      expect(result.cost_usd).toBeNull();
+    });
+  });
+
   it('start() detaches and never rejects, even when recording the failure fails too', async () => {
     const { runner } = runnerFor({
       review: unreachable('reviewPullRequest'),

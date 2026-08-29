@@ -101,6 +101,29 @@
     "lastRunSummary": "expected {expected} · actual {actual} · {duration} · {cost}",
     "close": "Close"
   },
+  "caseDraft": {
+    "subtitle": "Seeded from {decision} finding · assert the expected output",
+    "decision": {
+      "accepted": "an accepted",
+      "dismissed": "a dismissed"
+    },
+    "positiveCase": "Positive case",
+    "negativeCase": "Negative case",
+    "assertMustFind": "MUST find “{title}” at {file}:{lines}",
+    "assertMustNotFlag": "MUST NOT flag anything at {file}:{lines}",
+    "findingSkeleton": "Finding skeleton",
+    "findingSkeletonHint": "Reset the expected output to the finding as the agent reported it",
+    "runOnSave": "Run on save",
+    "cancel": "Cancel",
+    "notRunYet": "Not run yet",
+    "reproHint": "Run it a few times — a case that only passes sometimes will flake in every batch.",
+    "runSummary": "expected {expected}, got {actual} · {duration} · {cost}",
+    "runTally": "{runs} runs · {passed} passed",
+    "runError": "That run couldn’t start: {message}",
+    "saveError": "Couldn’t save this case: {message}",
+    "targetSet": "Saves to {agent}",
+    "runOnSaveFailed": "Saved — but the run on save couldn’t start: {message}"
+  },
   "evalsTab": {
     "metricsTitle": "Eval metrics",
     "casesHeading": "Eval cases",

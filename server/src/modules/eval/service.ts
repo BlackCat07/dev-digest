@@ -3,6 +3,8 @@ import type {
   EvalAnchor,
   EvalBatch,
   EvalBatchCaseResult,
+  EvalCaseCreate,
+  EvalCaseDraft,
   EvalCaseSave,
   EvalComparison,
   EvalDashboardRow,
@@ -10,6 +12,8 @@ import type {
   EvalPeriod,
   EvalRefusalReason,
   EvalRunAllResult,
+  EvalTrialRunRequest,
+  EvalTrialRunResult,
   EvalWorkspaceDashboard,
 } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
@@ -18,6 +22,7 @@ import {
   anchorsOverlap,
   diffByteLength,
   diffFragmentFor,
+  expectedOutputSkeleton,
   normaliseAnchor,
   periodStart,
   toEvalBatchTrendPoint,
@@ -127,6 +132,41 @@ export interface EvalDeps {
   runner: EvalBatchRunner;
   now?: () => Date;
 }
+
+/* ─── the derived case, before anything is written ────────────────────────── */
+
+/**
+ * Everything a case derived from a decided finding would hold — the answer both
+ * `draftCaseFromFinding` and `createCaseFromFinding` compute, from the one
+ * private method that applies every refusal.
+ *
+ * Not a contract type, and it must not become one: it carries the RESOLVED
+ * agent and the source finding row, neither of which crosses the wire. The two
+ * public methods project it into `EvalCaseDraft` and into an insert
+ * respectively, so the shape a client sees stays theirs to choose.
+ */
+interface DerivedCase {
+  agent: EvalAgentFacts;
+  finding: EvalSourceFinding;
+  reviewId: string;
+  expectation: EvalExpectation;
+  anchor: EvalAnchor;
+  inputDiff: string;
+  inputFiles: { path: string }[];
+  inputMeta: Record<string, unknown>;
+  /** `<file>:<low>-<high>`, the default name a reader may overwrite. */
+  name: string;
+}
+
+/**
+ * The `case_id` a trial run is scored under.
+ *
+ * A constant rather than an id, because a trial stores nothing: there is no row
+ * for an id to name, and generating one would put a value in a response that
+ * reads like something a client could go and fetch. It reaches the scorer and
+ * the engine's session id, and nothing else.
+ */
+const TRIAL_CASE_ID = 'trial';
 
 /* ─── pure decisions, stated once ─────────────────────────────────────────── */
 
@@ -281,7 +321,8 @@ export class EvalService implements Evals {
   // ---- cases --------------------------------------------------------------
 
   /**
-   * Turn one decided finding into an eval case for the agent that produced it.
+   * Everything a case derived from this finding would hold, before anything is
+   * written.
    *
    * The order of the checks is the requirement, not an implementation detail.
    * The two facts about the finding itself come first, because neither depends
@@ -295,8 +336,15 @@ export class EvalService implements Evals {
    * parser on the other end derives the same new-side line numbers the review
    * that produced the finding did. A fragment shaped differently would anchor at
    * lines the agent can never report.
+   *
+   * **Shared by the draft and the save on purpose.** The two paths must refuse
+   * the same finding for the same reason: a modal that opened on a finding the
+   * save would later reject is a modal that wastes a human's editing, and a save
+   * that skipped a check the draft applied is a hole in the set's invariants.
+   * The one thing the caller decides is whether the result is returned or
+   * inserted.
    */
-  async createCaseFromFinding(workspaceId: string, findingId: string): Promise<EvalAgentCase> {
+  private async deriveCase(workspaceId: string, findingId: string): Promise<DerivedCase> {
     const context = await this.deps.findings.findingContext(findingId);
     if (!context) throw new NotFoundError('Finding not found');
     const { finding, review } = context;
@@ -375,15 +423,20 @@ export class EvalService implements Evals {
       );
     }
 
+    // The agent the case would land on, resolved here rather than trusted from
+    // the review row: `reviews.agent_id` carries no foreign key, so an agent
+    // deleted after its review ran leaves an id pointing at nothing. A case
+    // filed under one would be invisible in every list (`listCases` resolves the
+    // agent first) and unrunnable — a `404` now is the honest answer.
+    const agent = await this.requireAgent(workspaceId, agentId);
     const repo = await this.deps.findings.getRepo(pull.repoId);
 
-    return this.deps.store.insertCase({
-      workspaceId,
-      // `agent`, always: a case derived from a review's finding belongs to the
-      // agent that produced it. `EvalOwnerKind`'s `skill` half stays unused.
-      ownerKind: 'agent',
-      ownerId: agentId,
-      name: `${finding.file}:${anchor.low_line}-${anchor.high_line}`,
+    return {
+      agent,
+      finding,
+      reviewId: review.id,
+      expectation,
+      anchor,
       inputDiff,
       // The one file the fragment carries, and the PR it was cut from — what the
       // case editor's `Files` and `PR meta` tabs read. Metadata, never an input
@@ -395,7 +448,102 @@ export class EvalService implements Evals {
         pr_title: pull.title,
         review_id: review.id,
       },
-      expectedOutput: {},
+      name: `${finding.file}:${anchor.low_line}-${anchor.high_line}`,
+    };
+  }
+
+  /**
+   * What a case derived from this finding WOULD be. Nothing is written.
+   *
+   * This is what `Turn into eval case` calls, and the reason the button no
+   * longer files anything: a derived case is a proposal a human reads, edits and
+   * runs before it becomes part of the set an agent is measured against. An eval
+   * set that grows by one row per button press is a set nobody trusts, and every
+   * number computed from it inherits that.
+   *
+   * The response carries no id, because there is no row. It carries the agent it
+   * would land on, so the modal can name it before anything exists.
+   */
+  async draftCaseFromFinding(workspaceId: string, findingId: string): Promise<EvalCaseDraft> {
+    const derived = await this.deriveCase(workspaceId, findingId);
+    const { finding, anchor, expectation } = derived;
+    return {
+      agent_id: derived.agent.id,
+      agent_name: derived.agent.name,
+      name: derived.name,
+      input_diff: derived.inputDiff,
+      input_files: derived.inputFiles,
+      input_meta: derived.inputMeta,
+      expectation,
+      expected_anchors: [anchor],
+      expected_output: expectedOutputSkeleton(expectation, anchor, finding),
+      source: {
+        finding_id: finding.id,
+        title: finding.title,
+        file: anchor.file,
+        low_line: anchor.low_line,
+        high_line: anchor.high_line,
+        severity: finding.severity,
+        category: finding.category,
+        decision: finding.acceptedAt ? 'accepted' : 'dismissed',
+      },
+    };
+  }
+
+  /**
+   * File a derived case into the agent's set, with whatever the reader edited.
+   *
+   * Three fields may arrive from the client and they are exactly the three the
+   * draft modal makes editable: the name, the input diff and the expected
+   * output. `expectation` and `expected_anchors` are NOT among them and are
+   * re-derived here — what a case asserts comes from the finding's own decision,
+   * so a client able to send an expectation could file a case contradicting the
+   * human decision it claims to come from.
+   *
+   * The whole derivation runs again rather than trusting a draft the client is
+   * holding: the finding may have been un-accepted, another case may have taken
+   * a conflicting anchor, and the set may have filled since the modal opened.
+   * The draft is a proposal, and this is the moment it is checked.
+   *
+   * An edited diff is re-measured against the byte budget, because a bound that
+   * only holds on the server's own fragment is not a bound at all once a text
+   * area is in the path.
+   */
+  async createCaseFromFinding(
+    workspaceId: string,
+    body: EvalCaseCreate,
+  ): Promise<EvalAgentCase> {
+    const derived = await this.deriveCase(workspaceId, body.finding_id);
+    const { finding, anchor, expectation } = derived;
+
+    const name = body.name?.trim() ? body.name.trim() : derived.name;
+    const inputDiff = body.input_diff ?? derived.inputDiff;
+    if (body.input_diff !== undefined) {
+      const bytes = diffByteLength(inputDiff);
+      if (bytes > DIFF_MAX_BYTES) {
+        throw new EvalRefusal(
+          'diff_too_large',
+          `That diff is ${bytes} bytes, over the ${DIFF_MAX_BYTES}-byte limit for a stored eval case`,
+          422,
+          { bytes, limit: DIFF_MAX_BYTES },
+        );
+      }
+    }
+
+    return this.deps.store.insertCase({
+      workspaceId,
+      // `agent`, always: a case derived from a review's finding belongs to the
+      // agent that produced it. `EvalOwnerKind`'s `skill` half stays unused.
+      ownerKind: 'agent',
+      ownerId: derived.agent.id,
+      name,
+      inputDiff,
+      inputFiles: derived.inputFiles,
+      inputMeta: derived.inputMeta,
+      expectedOutput:
+        body.expected_output === undefined
+          ? expectedOutputSkeleton(expectation, anchor, finding)
+          : body.expected_output,
       expectation,
       expectedAnchors: [anchor],
       sourceFindingId: finding.id,
@@ -404,6 +552,74 @@ export class EvalService implements Evals {
       // reachable. A case whose review is deleted later still renders its chip.
       sourceSeverity: finding.severity,
       sourceCategory: finding.category,
+    });
+  }
+
+  /**
+   * Run one unsaved draft against the agent, and record nothing.
+   *
+   * This is the `Run case` button of the draft modal, and it exists so a reader
+   * can press it three times and watch whether a finding actually reproduces
+   * before committing the case to the set. That is also why it opens no batch:
+   * a batch per press would move the agent's recall, precision and citation
+   * accuracy — and the regression alert computed from them — every time somebody
+   * checked whether an assertion was flaky. Nothing here writes an
+   * `eval_batches`, an `eval_runs` or an `eval_cases` row.
+   *
+   * The agent's CURRENT prompt, model and skills are what it runs against, not a
+   * snapshot: the question a trial answers is "does this reproduce against the
+   * agent as it is now", and there is no stored batch for a snapshot to belong
+   * to.
+   *
+   * Two guards, both borrowed from {@link saveCase} deliberately: a trial that
+   * accepted a diff or an anchor the save would refuse would report a green run
+   * for a case that cannot be saved.
+   */
+  async trialRunCase(
+    workspaceId: string,
+    agentId: string,
+    body: EvalTrialRunRequest,
+  ): Promise<EvalTrialRunResult> {
+    const agent = await this.requireAgent(workspaceId, agentId);
+
+    const bytes = diffByteLength(body.input_diff);
+    if (bytes > DIFF_MAX_BYTES) {
+      throw new EvalRefusal(
+        'diff_too_large',
+        `That diff is ${bytes} bytes, over the ${DIFF_MAX_BYTES}-byte limit for a stored eval case`,
+        422,
+        { bytes, limit: DIFF_MAX_BYTES },
+      );
+    }
+
+    if (body.expectation === 'must_not_flag') {
+      const paths = this.filesIn(body.input_diff);
+      const missing = body.expected_anchors.find((a) => !paths.has(a.file));
+      if (missing) {
+        throw new EvalRefusal(
+          'anchor_not_in_diff',
+          `This case's diff contains no file '${missing.file}', so nothing there can be forbidden`,
+          422,
+          { file: missing.file },
+        );
+      }
+    }
+
+    return this.deps.runner.runTrial({
+      agentId: agent.id,
+      systemPrompt: agent.systemPrompt,
+      model: agent.model,
+      provider: agent.provider,
+      evalCase: {
+        // A constant, not an id: nothing is stored, so there is no row for this
+        // to name. It reaches the scorer's `case_id` and the engine's session
+        // id, and no further.
+        id: TRIAL_CASE_ID,
+        name: body.name,
+        input_diff: body.input_diff,
+        expectation: body.expectation,
+        expected_anchors: body.expected_anchors,
+      },
     });
   }
 

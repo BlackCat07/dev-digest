@@ -1,8 +1,11 @@
 import { Provider } from '@devdigest/shared';
 import type {
   EvalAgentCase,
+  EvalAnchor,
   EvalBatch,
   EvalCaseOutcome,
+  EvalExpectation,
+  EvalTrialRunResult,
   LLMProvider,
   RunEventKind,
   UnifiedDiff,
@@ -131,6 +134,59 @@ export interface EvalRunnerDeps {
   heartbeatMs?: number;
 }
 
+/**
+ * The subset of a case this runner actually replays and scores.
+ *
+ * Narrower than `EvalAgentCase` on purpose: a TRIAL run has no stored row, so
+ * there is no id to take, no owner and no `last_execution` — and a signature
+ * demanding them would force the service to fabricate four fields to run a
+ * draft. `EvalAgentCase` satisfies this structurally, so the batch path passes
+ * its stored cases through unchanged.
+ *
+ * `id` is still required, because the scorer keys its per-case result on one.
+ * A draft passes a constant; nothing persists it.
+ */
+export interface EvalRunnableCase {
+  id: string;
+  name: string;
+  input_diff: string;
+  expectation: EvalExpectation;
+  expected_anchors: EvalAnchor[];
+}
+
+/**
+ * The prompt identity one case is replayed under.
+ *
+ * A batch takes it from its own snapshot (`system_prompt_snapshot` /
+ * `model_snapshot`), because a run's numbers belong to the prompt that produced
+ * them. A trial takes it from the agent's CURRENT config, because the question
+ * a trial answers is "does this reproduce against the agent as it is now".
+ */
+interface CaseExecConfig {
+  systemPrompt: string;
+  model: string;
+  /** Prefixes the engine session id; the case id is appended. */
+  sessionPrefix: string;
+}
+
+/**
+ * One trial execution of an unsaved draft.
+ *
+ * There is no batch and no workspace here, and that is the shape of the promise:
+ * this path writes no `eval_batches` row, no `eval_runs` row and publishes
+ * nothing — so it needs neither an id to write under nor a workspace to scope a
+ * write to. The service has already resolved the agent (which IS the
+ * authorization check) before it builds one of these.
+ */
+export interface EvalTrialRunInput {
+  /** Whose skills are resolved, and whose session id is derived. */
+  agentId: string;
+  systemPrompt: string;
+  model: string;
+  provider: string;
+  evalCase: EvalRunnableCase;
+}
+
 /** What the service hands over when it opens a batch. */
 export interface EvalBatchRunInput {
   workspaceId: string;
@@ -151,6 +207,16 @@ export interface EvalBatchRunInput {
  */
 export interface EvalBatchRunner {
   start(input: EvalBatchRunInput): void;
+  /**
+   * Run ONE unsaved draft and answer with its outcome.
+   *
+   * Awaited rather than detached, which is the opposite of `start` and for the
+   * opposite reason: a trial exists to be read, it is bounded by one
+   * `CASE_DEADLINE_MS`, and there is no row for its answer to be recovered from
+   * afterwards. It rejects only when the agent's skills cannot be resolved —
+   * every failure of the case itself is an outcome, not a throw.
+   */
+  runTrial(input: EvalTrialRunInput): Promise<EvalTrialRunResult>;
 }
 
 /**
@@ -184,7 +250,7 @@ class CaseDeadlineError extends Error {
  * that never executed structurally cannot contribute to citation accuracy.
  */
 interface CaseRecord {
-  readonly evalCase: EvalAgentCase;
+  readonly evalCase: EvalRunnableCase;
   readonly output: EvalCaseOutput;
   readonly durationMs: number;
   readonly costUsd: number | null;
@@ -284,6 +350,58 @@ export class EvalRunner implements EvalBatchRunner {
   }
 
   /**
+   * One unsaved draft, run once against the agent as it is configured NOW.
+   *
+   * Everything this method does not do is the point of it. No `eval_batches`
+   * row is opened, no `eval_runs` row is written, nothing is published to the
+   * bus and no retention is trimmed — a reader pressing `Run case` four times
+   * to see whether a finding reproduces must not move the agent's recall four
+   * times, and a batch row per press would do exactly that. The only shared
+   * machinery is the part that has to be shared: the same `runCase` the batch
+   * path replays through, and the same pure `scoreEvalBatch` its outcomes come
+   * from, so "passed" here and "passed" in a batch cannot come to mean two
+   * different things.
+   *
+   * The skills are the agent's current links, resolved the same way a batch
+   * resolves them, and a failure to resolve them REJECTS rather than degrading
+   * to none — a trial measured without the agent's skills would answer a
+   * question nobody asked, and quietly.
+   *
+   * Bounded by one `CASE_DEADLINE_MS`, which is what makes awaiting it inside a
+   * request defensible where awaiting a whole batch is not.
+   */
+  async runTrial(input: EvalTrialRunInput): Promise<EvalTrialRunResult> {
+    const skills = await this.resolveSkills(input.agentId);
+    const record = await this.runCase(
+      {
+        systemPrompt: input.systemPrompt,
+        model: input.model,
+        sessionPrefix: `eval-trial:${input.agentId}`,
+      },
+      input.evalCase,
+      skills,
+      this.memoisedProvider(input.provider),
+    );
+    const score = this.scoreOne(record);
+    const output = record.output;
+    return {
+      outcome: score.outcome,
+      not_run_reason: score.not_run_reason,
+      expected_count: score.expected_count,
+      actual_count: score.actual_count,
+      kept_count: output.kind === 'output' ? output.kept_count : null,
+      dropped_count: output.kind === 'output' ? output.dropped_count : null,
+      duration_ms: record.durationMs,
+      cost_usd: record.costUsd,
+      // What the agent actually SAID, so a reader can see why a run disagrees
+      // with the expectation rather than only that it did. Null when nothing
+      // was produced — never an empty findings array, which would claim the
+      // agent answered and found nothing.
+      actual_output: output.kind === 'output' ? { findings: output.findings } : null,
+    };
+  }
+
+  /**
    * A heartbeat while nothing has resolved.
    *
    * A case can legitimately take the full per-case deadline, so "no event yet"
@@ -331,6 +449,13 @@ export class EvalRunner implements EvalBatchRunner {
     const cases = input.cases;
     const results = new Array<CaseRecord | undefined>(cases.length);
     const provider = this.memoisedProvider(input.provider);
+    // The batch's OWN snapshot, never the agent's current config: a run's
+    // numbers belong to the prompt that produced them.
+    const exec: CaseExecConfig = {
+      systemPrompt: input.batch.system_prompt_snapshot,
+      model: input.batch.model_snapshot,
+      sessionPrefix: `eval:${input.batch.id}`,
+    };
     const total = cases.length;
     let cursor = 0;
     let done = 0;
@@ -350,7 +475,7 @@ export class EvalRunner implements EvalBatchRunner {
         const record =
           this.now() >= deadline
             ? this.cancelled(evalCase)
-            : await this.runCase(input, evalCase, skills, provider);
+            : await this.runCase(exec, evalCase, skills, provider);
 
         results[index] = record;
         done += 1;
@@ -388,7 +513,7 @@ export class EvalRunner implements EvalBatchRunner {
   }
 
   /** A case the batch never started, because the batch ran out of time. */
-  private cancelled(evalCase: EvalAgentCase): CaseRecord {
+  private cancelled(evalCase: EvalRunnableCase): CaseRecord {
     return {
       evalCase,
       output: { kind: 'no_output', reason: 'cancelled' },
@@ -407,8 +532,8 @@ export class EvalRunner implements EvalBatchRunner {
    * predates this feature, and an empty diff must cost nothing and never pass.
    */
   private async runCase(
-    input: EvalBatchRunInput,
-    evalCase: EvalAgentCase,
+    exec: CaseExecConfig,
+    evalCase: EvalRunnableCase,
     skills: readonly string[],
     provider: () => Promise<LLMProvider>,
   ): Promise<CaseRecord> {
@@ -427,17 +552,18 @@ export class EvalRunner implements EvalBatchRunner {
       const llm = await provider();
       const outcome = await this.withDeadline(() =>
         this.engine({
-          // The batch's OWN snapshot, never the agent's current config: a run's
-          // numbers belong to the prompt that produced them.
-          systemPrompt: input.batch.system_prompt_snapshot,
-          model: input.batch.model_snapshot,
+          // Whatever prompt identity the caller decided on — a batch's stored
+          // snapshot, or the agent's current config for a trial. Neither is
+          // chosen here: see {@link CaseExecConfig}.
+          systemPrompt: exec.systemPrompt,
+          model: exec.model,
           diff,
           llm,
           // R9 — the caller owns the deadline, so the provider must not multiply
           // the work behind it. The engine takes a retry-budget override for
           // exactly this reason.
           maxRetries: 0,
-          sessionId: `eval:${input.batch.id}:${evalCase.id}`,
+          sessionId: `${exec.sessionPrefix}:${evalCase.id}`,
           // The agent's enabled skill bodies, in link order, ALREADY wrapped by
           // the skills service where a body's source is untrusted — passed
           // through untouched, exactly as `run-executor.ts:350` passes them.

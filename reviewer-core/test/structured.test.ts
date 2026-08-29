@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { toJsonSchema, parseWithRepair } from '../src/llm/structured.js';
+import { Review } from '@devdigest/shared';
 
 const Sample = z.object({
   score: z
@@ -58,5 +59,50 @@ describe('toJsonSchema — provider-portable schemas', () => {
     const result = parseWithRepair(Sample, bad);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.repromptMessage).toContain('score');
+  });
+});
+
+/* Google's structured outputs do not resolve `$ref`. `zodResponseFormat`
+   deduplicates any sub-schema it sees twice into `definitions`, so a schema that
+   is perfectly valid JSON Schema is rejected by Gemini with
+   `400 Provider returned error` — the same opaque surface the numeric-range
+   problem wears. Measured against `google/gemini-3.7-flash` via OpenRouter:
+   `reference to undefined schema at properties.findings.items.properties.evidence…`,
+   and a 200 with the identical schema once the refs are inlined. */
+describe('toJsonSchema — no $ref reaches the wire', () => {
+  const hasRef = (node: unknown): boolean => {
+    if (Array.isArray(node)) return node.some(hasRef);
+    if (node === null || typeof node !== 'object') return false;
+    const obj = node as Record<string, unknown>;
+    if ('$ref' in obj) return true;
+    return Object.values(obj).some(hasRef);
+  };
+
+  it('inlines a sub-schema that appears twice, and drops the definitions block', () => {
+    // Two fields sharing one enum is exactly what makes `zodResponseFormat`
+    // hoist — the shape `Finding` has in `trifecta_components` / `evidence`.
+    const shared = z.enum(['a', 'b', 'c']);
+    const schema = z.object({
+      first: z.array(shared),
+      second: z.object({ component: shared }),
+    });
+
+    const { schema: wire } = toJsonSchema(schema, 'shared');
+
+    expect(hasRef(wire)).toBe(false);
+    expect(wire).not.toHaveProperty('definitions');
+    expect(wire).not.toHaveProperty('$schema');
+    // Inlining must not change what the schema ACCEPTS — the enum is still
+    // there, in both places, with all three members.
+    const asAny = wire as any;
+    expect(asAny.properties.first.items.enum).toEqual(['a', 'b', 'c']);
+    expect(asAny.properties.second.properties.component.enum).toEqual(['a', 'b', 'c']);
+  });
+
+  it('leaves the real Review schema free of references', () => {
+    // The regression itself: `Review` is what every agent sends.
+    const { schema: wire } = toJsonSchema(Review, 'review');
+    expect(hasRef(wire)).toBe(false);
+    expect(wire).not.toHaveProperty('definitions');
   });
 });

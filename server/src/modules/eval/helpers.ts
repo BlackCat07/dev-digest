@@ -126,6 +126,43 @@ export function anchorsOverlap(a: EvalAnchor, b: EvalAnchor): boolean {
   return aLo <= bHi && bLo <= aHi;
 }
 
+/* ─── the seeded expectation ──────────────────────────────────────────────── */
+
+/**
+ * The expected-output skeleton a DRAFT opens with.
+ *
+ * Prefilled rather than demanded from a blank box: a reader is being asked to
+ * check an assertion, and an empty text area asks them to invent one. The shape
+ * is the finding as the agent reported it, trimmed to the five fields that say
+ * what must be found and where.
+ *
+ * **It is documentation, not a score input.** `scoreEvalBatch` compares the
+ * expectation and the anchors and reads none of this, which is why a `must_find`
+ * skeleton may carry a title the agent will word differently without failing the
+ * case. A negative case gets `[]`, because "no finding here" IS the empty list —
+ * a skeleton there would state the opposite of what the case asserts.
+ *
+ * `end_line` is emitted only when the finding spans more than one line, so a
+ * single-line anchor reads as the design's own example does.
+ */
+export function expectedOutputSkeleton(
+  expectation: EvalExpectation,
+  anchor: EvalAnchor,
+  finding: { title: string; severity: string; category: string },
+): unknown {
+  if (expectation === 'must_not_flag') return [];
+  return [
+    {
+      severity: finding.severity,
+      category: finding.category,
+      title: finding.title,
+      file: anchor.file,
+      start_line: anchor.low_line,
+      ...(anchor.high_line !== anchor.low_line ? { end_line: anchor.high_line } : {}),
+    },
+  ];
+}
+
 /* ─── the stored input diff ───────────────────────────────────────────────── */
 
 /**

@@ -1,6 +1,8 @@
 /* hooks/eval.ts — React Query + SSE hooks for the Eval Pipeline (L06).
 
-     POST   /eval/cases                        → turn a decided finding into a case
+     POST   /eval/cases/drafts                 → derive a case from a finding, store nothing
+     POST   /eval/cases                        → file a derived (and edited) case
+     POST   /eval/agents/:agentId/trial-runs   → run one unsaved draft, record nothing
      GET    /eval/agents/:agentId/cases        → that agent's whole eval set
      PUT    /eval/cases/:caseId                → save a hand-edited case
      DELETE /eval/cases/:caseId                → drop a case (batch history is kept)
@@ -32,6 +34,8 @@ import { api, API_BASE } from "../api";
 import { DEFAULT_EVAL_PERIOD } from "../eval";
 import type { Agent, EvalAgentCase, EvalBatch, EvalPeriod } from "@devdigest/shared";
 import type { EvalBatchCaseResult, EvalCaseSave, EvalComparison } from "@devdigest/shared";
+import type { EvalCaseCreate, EvalCaseDraft } from "@devdigest/shared";
+import type { EvalTrialRunRequest, EvalTrialRunResult } from "@devdigest/shared";
 import type { EvalDashboardRow, EvalRunAllResult, EvalWorkspaceDashboard } from "@devdigest/shared";
 import type { RunEvent } from "@devdigest/shared";
 
@@ -154,14 +158,59 @@ export function useEvalComparison(
 // ===========================================================================
 
 /**
- * Turn one decided finding into an eval case.
+ * Derive what an eval case from this finding WOULD be, and store nothing.
  *
- * **The body is `{ finding_id }` and nothing else.** The expectation is derived
+ * This is what `Turn into eval case` calls. It is a mutation and not a query
+ * despite reading nothing back into the cache: it is a POST fired by a press,
+ * it must not be retried or refetched behind the reader's back, and its result
+ * belongs to the modal that opened rather than to any cached key. Nothing is
+ * invalidated for the same reason — no set changed, because nothing was
+ * written.
+ *
+ * Every refusal the save answers with arrives HERE instead, with its own
+ * `ApiError.code`, so the finding card states why a case cannot be derived
+ * before a modal ever opens on it.
+ */
+export function useEvalCaseDraft() {
+  return useMutation({
+    mutationFn: (findingId: string) =>
+      api.post<EvalCaseDraft>("/eval/cases/drafts", { finding_id: findingId }),
+  });
+}
+
+/**
+ * Run one unsaved draft against its agent, and record nothing.
+ *
+ * The `Run case` button of the draft modal, pressed as many times as a reader
+ * wants: no batch is opened, so watching whether a finding reproduces cannot
+ * move the agent's recall, precision or citation accuracy. Nothing is
+ * invalidated because nothing on the server changed.
+ *
+ * The request resolves only when the run does — one case, bounded by the
+ * server's per-case deadline — so the caller renders `isPending` as the running
+ * state rather than subscribing to a stream that would have nothing to say.
+ */
+export interface TrialRunEvalCaseInput extends EvalTrialRunRequest {
+  agentId: string;
+}
+
+export function useTrialRunEvalCase() {
+  return useMutation({
+    mutationFn: ({ agentId, ...body }: TrialRunEvalCaseInput) =>
+      api.post<EvalTrialRunResult>(`/eval/agents/${agentId}/trial-runs`, body),
+  });
+}
+
+/**
+ * File a derived case into the agent's eval set — the modal's `Save`.
+ *
+ * **The body carries the finding id plus at most the three fields the modal
+ * makes editable**, and never an expectation or an anchor: those are derived
  * SERVER-side from the finding's decision — `must_find` for an accepted
- * finding, `must_not_flag` for a dismissed one — so a client that also sent an
- * expectation would be a second source of truth for the one field the whole
- * feature scores against. `eval.test.tsx` asserts the outgoing body's exact key
- * set for this reason.
+ * finding, `must_not_flag` for a dismissed one — so a client that also sent one
+ * would be a second source of truth for the one field the whole feature scores
+ * against. `eval.test.tsx` asserts the outgoing body's exact key set for this
+ * reason, including that an untouched draft still posts `{ finding_id }` alone.
  *
  * The response carries the case, whose `owner_id` is the agent it landed on —
  * which is how this invalidates the right set without the caller having to know
@@ -170,8 +219,7 @@ export function useEvalComparison(
 export function useCreateEvalCase() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (findingId: string) =>
-      api.post<EvalAgentCase>("/eval/cases", { finding_id: findingId }),
+    mutationFn: (body: EvalCaseCreate) => api.post<EvalAgentCase>("/eval/cases", body),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["eval-cases", data.owner_id] });
       qc.invalidateQueries({ queryKey: ["eval-agent-dashboard", data.owner_id] });

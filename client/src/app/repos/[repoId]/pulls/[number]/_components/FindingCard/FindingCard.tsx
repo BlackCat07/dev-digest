@@ -41,11 +41,16 @@ import { githubBlobUrl } from "../../../../../../../lib/github-urls";
 import { s } from "./styles";
 
 /**
- * Where this card's eval-case request stands. Passed in, never stored here: the
- * panel owns the mutation, so it owns the state, and a copy in this component
- * would be a second source of truth for one request.
+ * Where this card's eval case stands. Passed in, never stored here: the panel
+ * owns the request, so it owns the state, and a copy in this component would be
+ * a second source of truth for one press.
+ *
+ * `opening` and NOT `adding`: the press derives a draft and opens an editor over
+ * it, and nothing is added to the agent's eval set until a human saves that
+ * draft. A label promising otherwise would be the one sentence on this screen
+ * that describes the previous behaviour.
  */
-export type EvalCaseState = "idle" | "adding" | "added";
+export type EvalCaseState = "idle" | "opening" | "added";
 
 export function FindingCard({
   f,
@@ -73,11 +78,14 @@ export function FindingCard({
   repoFullName?: string | null;
   headSha?: string | null;
   /**
-   * Turn this finding into an eval case for the agent that produced it.
+   * Open an eval case derived from this finding, for the agent that produced it.
    *
    * OPTIONAL, and the control renders only when it is supplied — the request is a
    * mutation, and a card cannot own one without the query client its parent
    * provides. Absent, the row is four controls and nothing breaks.
+   *
+   * It ADDS NOTHING. The parent derives a draft and opens an editor over it; the
+   * eval set changes when that editor is saved and at no other moment.
    *
    * It is called only on a DECIDED finding: an accepted or dismissed finding is
    * what carries the expectation the case is scored against, and the server
@@ -145,8 +153,8 @@ export function FindingCard({
   const decided = accepted || dismissed;
   const evalInert = !decided || evalCaseState !== "idle";
   const evalLabel =
-    evalCaseState === "adding"
-      ? t("finding.turnIntoEvalCaseAdding")
+    evalCaseState === "opening"
+      ? t("finding.turnIntoEvalCaseOpening")
       : evalCaseState === "added"
         ? t("finding.turnIntoEvalCaseAdded")
         : t("finding.turnIntoEvalCase");
@@ -170,8 +178,14 @@ export function FindingCard({
             {f.scope === "out_of_scope" && (
               <span style={s.outOfScopeTag}>{t("finding.outOfScope")}</span>
             )}
-            {accepted && <span style={s.acceptedTag}>{t("finding.accepted")}</span>}
-            {dismissed && <span style={s.dismissedTag}>{t("finding.dismissed")}</span>}
+            {/* One chip, never two: the server clears the other timestamp, and
+                the chip is the state in WORDS — the only channel that does not
+                depend on the reader distinguishing green from grey. */}
+            {decided && (
+              <span style={s.decisionTag(accepted)}>
+                {accepted ? t("finding.accepted") : t("finding.dismissed")}
+              </span>
+            )}
           </div>
           <div style={s.metaRow}>
             <MonoLink href={fileHref}>
@@ -198,12 +212,21 @@ export function FindingCard({
           )}
 
           <div style={s.actions}>
+            {/* `active` is NOT passed to either control, and its absence is the
+                fix: `Button` honours that prop only for `kind: "tertiary"`, so on
+                a `secondary` and a `ghost` it was silently inert and neither
+                button ever showed which one had been pressed. `s.chosenAction`
+                goes through `style`, which the primitive spreads last.
+
+                `aria-pressed` carries the same fact to a screen reader, where a
+                background colour carries nothing at all. */}
             <Button
               kind="secondary"
               size="sm"
               icon="Check"
               disabled={pending}
-              active={accepted}
+              aria-pressed={accepted}
+              style={accepted ? s.chosenAction(true) : undefined}
               onClick={() => onAction?.("accept")}
             >
               {t("finding.accept")}
@@ -213,7 +236,8 @@ export function FindingCard({
               size="sm"
               icon="X"
               disabled={pending}
-              active={dismissed}
+              aria-pressed={dismissed}
+              style={dismissed ? s.chosenAction(false) : undefined}
               onClick={() => onAction?.("dismiss")}
             >
               {t("finding.dismiss")}
