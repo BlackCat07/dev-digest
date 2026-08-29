@@ -162,6 +162,17 @@ export const CiInstallation = z.object({
   repo: z.string(),
   target_type: CiTarget,
   installed_at: z.string(),
+  /**
+   * Status of this installation's MOST RECENT CI run, derived at read time from
+   * the newest `ci_runs` row — deliberately not a stored column, because a
+   * stored copy is a denormalisation with a staleness bug in it. `null` is the
+   * ordinary first state: installed, never run. Typed as a loose string for the
+   * same reason `CiRun.status` is — an unreadable artifact is recorded with a
+   * named reason, and those reasons are not `CiRunStatus` values.
+   */
+  last_run_status: z.string().nullable(),
+  /** When that most recent run happened (ISO 8601); `null` when it never ran. */
+  last_run_at: z.string().nullable(),
 });
 export type CiInstallation = z.infer<typeof CiInstallation>;
 
@@ -173,7 +184,13 @@ export const CiExport = z.object({
 });
 export type CiExport = z.infer<typeof CiExport>;
 
-export const CiRunStatus = z.enum(['succeeded', 'failed', 'no_findings', 'running']);
+/**
+ * `skipped` is a run that HAPPENED and reviewed nothing — every file in the diff
+ * was excluded, so no model was called. It is not `no_findings`, which is the
+ * model having read the diff and reported nothing, and the two must not render
+ * as the same word.
+ */
+export const CiRunStatus = z.enum(['succeeded', 'failed', 'no_findings', 'running', 'skipped']);
 export type CiRunStatus = z.infer<typeof CiRunStatus>;
 
 /** A CI run row (mirrors `ci_runs`) — ingested from GitHub Actions artifacts. */
@@ -189,6 +206,23 @@ export const CiRun = z.object({
   source: z.string().nullable(),
   agent: z.string().nullish(),
   duration_s: z.number().nullish(),
+  /**
+   * Repository the run belongs to. Denormalised on purpose: `ci_installation_id`
+   * is ON DELETE SET NULL and `ci_installations.agent_id` cascades from `agents`,
+   * so a deleted agent would otherwise take a run's provenance with it.
+   */
+  repo: z.string().nullable(),
+  /** Head commit the run reviewed, read from the workflow run rather than the artifact. */
+  head_sha: z.string().nullable(),
+  /** Findings that tripped the agent's gate (severity >= its `ci_fail_on`). */
+  blockers: z.number().int().nullable(),
+  /**
+   * Why this run carries no result — `artifact_missing`, `artifact_unreadable`,
+   * `result_file_missing`, `result_unparseable`. `null` on a run whose result was
+   * read. A run with an unreadable artifact is still ONE row with a named reason;
+   * dropping it would report a CI run that happened as a CI run that did not.
+   */
+  reason: z.string().nullable(),
 });
 export type CiRun = z.infer<typeof CiRun>;
 
@@ -206,6 +240,24 @@ export const CiResultArtifact = z.object({
   agent: z.string(),
   version: z.string().nullish(),
   pr_number: z.number().int().nullish(),
+  /**
+   * Outcome the runner reached; absent from results written by older runners.
+   *
+   * `skipped` and `no_findings` are DIFFERENT answers and the distinction is the
+   * point: `no_findings` means the model read the diff and reported nothing,
+   * `skipped` means there was no reviewable diff to read — a pull request
+   * touching only excluded paths (DevDigest's own files, binaries), where the
+   * runner deliberately makes no model call because an approval on a diff nobody
+   * looked at is a lie. Collapsing them showed a green "No findings" on a pull
+   * request that was never reviewed.
+   */
+  status: z.enum(['succeeded', 'failed', 'no_findings', 'skipped']).nullish(),
+  /** Failure reason when the runner terminated on an error rather than a review. */
+  error: z.string().nullish(),
+  /** Findings that tripped the manifest's `ci_fail_on` — the runner's exit code. */
+  blockers: z.number().int().nullish(),
+  /** Manifest skill slugs that resolved to no file; the run continues without them. */
+  missing_skills: z.array(z.string()).nullish(),
 });
 export type CiResultArtifact = z.infer<typeof CiResultArtifact>;
 

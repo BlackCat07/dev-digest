@@ -1,0 +1,15 @@
+node_modules/
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+# NOTE: dist/ is NOT ignored. The runner travels as the single committed file
+# dist/runner.mjs, which the export copies verbatim into a target repository as
+# .devdigest/runner.mjs and the generated workflow invokes with `node` — there
+# is no build step on the other side. The root .gitignore ignores `dist/`
+# globally; re-include ours here.
+!dist/
+!dist/**
+
+# The result the runner writes when it is executed here (the smoke check in the
+# Done-condition runs it from this directory). It is a run artefact, not source.
+devdigest-result.json
