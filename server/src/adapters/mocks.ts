@@ -16,6 +16,8 @@ import type {
   PrReviewComment,
   OpenPrPayload,
   CommitFilesPayload,
+  CiWorkflowRunRef,
+  ListWorkflowRunsOptions,
   IssueMeta,
   GitClient,
   CloneOptions,
@@ -125,6 +127,13 @@ export interface MockGitHubOptions {
   login?: string;
   /** Existing inline review comments returned by listReviewComments. */
   comments?: PrReviewComment[];
+  /** Canned Actions runs returned by listWorkflowRuns (filtered on headSha when asked). */
+  workflowRuns?: CiWorkflowRunRef[];
+  /**
+   * Artifact bytes keyed `"<runId>:<artifactName>"`. Anything not in here
+   * downloads as `null` — the expired / nothing-uploaded case.
+   */
+  artifacts?: Record<string, Uint8Array>;
 }
 
 export class MockGitHubClient implements GitHubClient {
@@ -132,6 +141,8 @@ export class MockGitHubClient implements GitHubClient {
   public openedPrs: OpenPrPayload[] = [];
   public committed: CommitFilesPayload[] = [];
   public createdComments: CreateReviewCommentInput[] = [];
+  public listedRuns: { repo: RepoRef; opts: ListWorkflowRunsOptions }[] = [];
+  public downloads: { runId: number; artifactName: string }[] = [];
 
   constructor(private opts: MockGitHubOptions = {}) {}
 
@@ -228,6 +239,25 @@ export class MockGitHubClient implements GitHubClient {
   async findOpenPr(_repo: RepoRef, branch: string): Promise<{ url: string } | null> {
     const pr = this.openedPrs.find((p) => p.head === branch);
     return pr ? { url: 'https://github.com/mock/mock/pull/1' } : null;
+  }
+
+  async listWorkflowRuns(
+    repo: RepoRef,
+    opts: ListWorkflowRunsOptions,
+  ): Promise<CiWorkflowRunRef[]> {
+    this.listedRuns.push({ repo, opts });
+    const runs = this.opts.workflowRuns ?? [];
+    const matching = opts.headSha ? runs.filter((r) => r.headSha === opts.headSha) : runs;
+    return opts.limit === undefined ? matching : matching.slice(0, opts.limit);
+  }
+
+  async downloadRunArtifact(
+    _repo: RepoRef,
+    runId: number,
+    artifactName: string,
+  ): Promise<Uint8Array | null> {
+    this.downloads.push({ runId, artifactName });
+    return this.opts.artifacts?.[`${runId}:${artifactName}`] ?? null;
   }
 
   async getIssue(_repo: RepoRef, n: number): Promise<IssueMeta> {

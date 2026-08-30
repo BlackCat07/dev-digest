@@ -19,6 +19,7 @@ import repoIntel from './repo-intel/routes.js';
 // `eval` is not a legal binding name in a module (ES modules are strict mode), so
 // the import is aliased and the REGISTRY KEY below carries the module's real name.
 import evalPipeline from './eval/routes.js';
+import ci from './ci/routes.js';
 
 /**
  * Module registry. Each feature module is a Fastify plugin in
@@ -31,8 +32,8 @@ import evalPipeline from './eval/routes.js';
  *
  * This is the Part-0 starter set plus L02's `skills`/`conventions`, L03's
  * `intent` and `smart-diff`, L04's `blast` + `prior-prs`, L05's
- * `project-context` + `onboarding` + `brief`, and L06's `eval`. Each further
- * lesson adds its own module here (ci/hooks, memory, plugins,
+ * `project-context` + `onboarding` + `brief`, and L06's `eval` + `ci`. Each
+ * further lesson adds its own module here (hooks, memory, plugins,
  * …) without touching any other module.
  */
 export const modules: Record<string, FastifyPluginAsync> = {
@@ -54,4 +55,5 @@ export const modules: Record<string, FastifyPluginAsync> = {
   reviews,
   repoIntel,
   eval: evalPipeline,
+  ci,
 };

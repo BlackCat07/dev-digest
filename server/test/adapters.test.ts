@@ -32,6 +32,70 @@ describe('mock adapters (no network)', () => {
     expect(url).toContain('github.com');
   });
 
+  it('MockGitHubClient.listWorkflowRuns returns the canned runs and filters on headSha', async () => {
+    const runs = [
+      {
+        id: 101,
+        prNumber: 7,
+        headSha: 'aaa111',
+        status: 'completed',
+        conclusion: 'success',
+        htmlUrl: 'https://github.com/mock/mock/actions/runs/101',
+        runStartedAt: '2026-06-01T00:00:00Z',
+        updatedAt: '2026-06-01T00:01:00Z',
+      },
+      {
+        id: 102,
+        prNumber: 8,
+        headSha: 'bbb222',
+        status: 'completed',
+        conclusion: 'failure',
+        htmlUrl: 'https://github.com/mock/mock/actions/runs/102',
+        runStartedAt: '2026-06-02T00:00:00Z',
+        updatedAt: '2026-06-02T00:01:00Z',
+      },
+    ];
+    const gh = new MockGitHubClient({ workflowRuns: runs });
+    const repo = { owner: 'a', name: 'b' };
+
+    const all = await gh.listWorkflowRuns(repo, { workflowFile: 'devdigest-review.yml' });
+    expect(all.map((r) => r.id)).toEqual([101, 102]);
+
+    const one = await gh.listWorkflowRuns(repo, {
+      workflowFile: 'devdigest-review.yml',
+      headSha: 'bbb222',
+    });
+    expect(one.map((r) => r.id)).toEqual([102]);
+    expect(one[0]!.prNumber).toBe(8);
+
+    // `limit` caps the list, and every call is recorded so an ingest test can
+    // prove a repository with no installation is never polled.
+    const capped = await gh.listWorkflowRuns(repo, {
+      workflowFile: 'devdigest-review.yml',
+      limit: 1,
+    });
+    expect(capped).toHaveLength(1);
+    expect(gh.listedRuns).toHaveLength(3);
+    expect(gh.listedRuns[0]!.opts.workflowFile).toBe('devdigest-review.yml');
+  });
+
+  it('MockGitHubClient.downloadRunArtifact returns null for an unknown artifact name', async () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const gh = new MockGitHubClient({ artifacts: { '101:devdigest-result': bytes } });
+    const repo = { owner: 'a', name: 'b' };
+
+    expect(await gh.downloadRunArtifact(repo, 101, 'devdigest-result')).toEqual(bytes);
+    // null, not a throw: "no artifact on this run" is the ordinary outcome for an
+    // expired artifact and for a cancelled run that uploaded nothing.
+    expect(await gh.downloadRunArtifact(repo, 101, 'something-else')).toBeNull();
+    expect(await gh.downloadRunArtifact(repo, 999, 'devdigest-result')).toBeNull();
+    expect(gh.downloads).toEqual([
+      { runId: 101, artifactName: 'devdigest-result' },
+      { runId: 101, artifactName: 'something-else' },
+      { runId: 999, artifactName: 'devdigest-result' },
+    ]);
+  });
+
   it('MockCodeIndex + MockEmbedder return deterministic shapes', async () => {
     const ci = new MockCodeIndex();
     expect((await ci.symbols({ owner: 'a', name: 'b' }))[0]!.name).toBe('rateLimit');

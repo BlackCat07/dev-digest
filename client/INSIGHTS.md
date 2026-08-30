@@ -340,6 +340,20 @@ Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
 
+- **2026-08-25** — **The 2026-08-20 entry below says most `vendor/ui` primitives take a
+  `style` prop; `ExportWizardSteps` takes NONE, and it hard-codes a colour a criterion can
+  forbid.** It paints every step label after the current one `var(--text-muted)`
+  (`src/vendor/ui/ExportWizardSteps.tsx:33`) with no prop, no override and no slot — so a
+  wizard whose spec says *every* step label is `--text-primary` cannot use it, and the
+  do-not-touch rule forbids giving it the prop. The answer is neither a `vendor/ui` edit nor
+  a fork: compose the rail locally at the same sizes (~6 lines) and dim the not-yet-reached
+  steps by their **bullet** instead of by muting the label. Read with 2026-08-20 as a pair —
+  the escape hatch is per-component, so the first thing to check when a primitive fights a
+  visual requirement is whether it accepts anything at all. Evidence:
+  `src/vendor/ui/ExportWizardSteps.tsx:33`,
+  `src/app/agents/[id]/_components/AgentEditor/_components/CiTab/_components/ExportWizard/ExportWizard.tsx`
+  (`WizardSteps`).
+
 - **2026-08-20** — **`vendor/ui`'s "extend via a new file, don't restyle a primitive" rule
   has a third path it doesn't name: most primitives take a `style` prop, so trimming one
   for a single surface needs no `vendor/ui` edit and no fork.** `Badge` spreads
@@ -485,47 +499,6 @@ Conventions and architectural decisions, each with the reason behind it.
 Dependency and tooling quirks.
 
 <!-- append below -->
-- **2026-08-25** — **`Button`'s `active` prop is honoured by `kind: "tertiary"` and by NOTHING
-  else**, so passing it to a `secondary`, `ghost`, `primary` or `danger` button is a silent
-  no-op. `Button.tsx`'s `kinds` record reads `active` only inside the `tertiary` entry; every
-  other kind hard-codes its background and colour, and the spread order means the prop never
-  reaches the DOM. Cost: `FindingCard`'s `Accept` (`secondary`) and `Dismiss` (`ghost`) both
-  passed `active={accepted}` / `active={dismissed}` and neither ever showed which one the
-  reader had pressed — the only remaining signals were a 12px chip and `opacity` on the card,
-  and the `dismissed` chip was `var(--text-muted)`, i.e. the same grey the dimming produces.
-  Nothing caught it: the props were passed, the types were satisfied, and 19 existing tests on
-  that card stayed green. The fix is `style` (which `Button` spreads LAST over its own
-  defaults) plus `aria-pressed`, not switching the kind to `tertiary` — that strips the
-  border and flattens a five-control row into plain text. **Assert the rendered
-  `element.style.background`, never that the prop was handed over**; mutation-verified by
-  restoring `active` here, which turns three tests red. Same family as the `SeverityBadge`
-  `compact` entry above: a prop on this design system that reads as cosmetic and is really
-  load-bearing, or vice versa. Evidence: `src/vendor/ui/primitives/Button.tsx` (`kinds`),
-  `src/app/repos/[repoId]/pulls/[number]/_components/FindingCard/styles.ts` (`chosenAction`,
-  `decisionTag`), `FindingCard.test.tsx` ("showing which decision was made").
-
-
-- **2026-08-25** — **A hyphenated JSX attribute (`aria-*`, `data-*`) is EXEMPT from
-  TypeScript's excess-property check, so passing one to a vendored primitive that does not
-  spread `...rest` compiles, lints, builds — and renders nothing.** Measured directly:
-  `<Textarea value="" onChange={…} aria-label="hi" data-nonsense="q" />` is accepted by
-  `tsc --noEmit` even though `Textarea`'s props type names five keys and its body forwards
-  none of them. This is not a quirk of that one component — **25 of the kit/primitive
-  components forward no rest props** (`Textarea`, `Toggle`, `Checkbox`, `Tabs`, `Modal`,
-  `FormField`, `SelectInput`, `SearchableSelect`, `Dropdown`, `Drawer`, `Badge`, `Chip`,
-  `Card`, `IconBtn`, `EmptyState`, `ErrorState`, `MonoLink`, `Markdown`, `ProgressBar`,
-  `Skeleton`, `Avatar`, `Kbd`, `CircularScore`, `ConfidenceNum`, `SectionLabel`), while
-  `Button` and `TextInput` DO spread and therefore really do carry `aria-disabled` /
-  `aria-label` — which is why the idiom works everywhere it is already used and fails
-  silently the first time it is tried on a sibling. Before relying on an `aria-*` on a
-  vendor component, `grep '\.\.\.rest' src/vendor/ui/<Kind>/<Name>.tsx`; where it is
-  absent, label the enclosing element instead (a `<section aria-label>`, a `<label>`), and
-  do not "fix" the primitive — `vendor/ui` is extend-by-new-file. A test querying
-  `getByLabelText` is the only thing that catches this. Evidence:
-  `src/vendor/ui/kit/Textarea.tsx`, `src/vendor/ui/primitives/Button.tsx` (`...rest`),
-  `src/app/repos/[repoId]/pulls/[number]/_components/EvalCaseDraftModal/EvalCaseDraftModal.tsx`
-  (the comment where the `aria-label` was removed).
-
 
 - **2026-08-23** — **jsdom implements no `EventSource`, and `src/test/setup.ts` does not shim it**
   (it shims `ResizeObserver` and `scrollIntoView`). A test that mounts a component reaching a hook
@@ -605,20 +578,18 @@ An error string, its real cause, and the fix.
 
 <!-- append below -->
 
-- **2026-08-25** — **`Cannot find module './7161.js'` with a `.next/server/webpack-runtime.js`
-  require stack means a production `next build` ran while `next dev` was running, and
-  `rm -rf .next` does NOT recover it.** The build replaces the dev server's chunk map
-  underneath it; the running process keeps its in-memory manifest, so every route answers
-  `500` — and after deleting `.next` it still does, because that manifest is gone rather than
-  stale. Only restarting `pnpm dev` fixes it. It reads exactly like "the change I just made
-  broke the app", and it is worth knowing because `next build` is the natural way to check
-  that a change survives the production compiler (it catches the `eslint` **error**-level
-  React rules that `pnpm test` and `tsc` do not). Either stop the dev server first, or accept
-  that verifying with a build costs a dev-server restart. Related: the 2026-08-20 entry above
-  on the two other cheap causes of a full-screen error that are not your code. Evidence:
-  `client/.next/server/webpack-runtime.js` (the require stack in the 500 body), `package.json`
-  (`dev`, `build`).
-
+- **2026-08-25** — **On a screen that renders its table frame in ALL THREE data states,
+  `await waitFor(() => screen.getByRole("region", …))` resolves while the read is still in
+  flight — so the assertions after it run against skeletons and fail with "unable to find the
+  text".** The frame is present during loading, empty and loaded alike, so waiting on it waits
+  for nothing; the handle that actually tracks the read is the skeleton count reaching zero,
+  `container.getElementsByClassName("skeleton")` — the same last-resort escape 2026-08-10 in
+  Tool & Library Notes prescribes for asserting a loading state at all, since the vendored
+  `Skeleton` is a bare `div.skeleton` with no role. The failure reads as a broken component
+  rather than a mis-timed wait, which is what makes it expensive. Rule: wait on something
+  that is **absent in the state you are leaving**, never on the container that survives every
+  state. Evidence: `src/app/ci-runs/_components/CiRunsView/CiRunsView.test.tsx` (the first
+  test), `src/vendor/ui/primitives/Skeleton.tsx`.
 
 - **2026-08-20** — **"Couldn't load this pull request" with the sidebar reading "No repo
   selected" is almost never the screen you just changed — it is the app talking to an API

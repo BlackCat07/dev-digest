@@ -45,6 +45,11 @@ export const NAV: NavGroup[] = [
         gKey: "o",
       },
       { key: "context", label: "Project Context", icon: "FileText", href: "/repos/:repoId/context", gKey: "x" },
+      /* No gKey: every g-prefixed letter in SHORTCUTS is taken (p o x s a c e ,),
+         and inventing a two-key chord for one screen is a shortcut nobody was
+         told about. `key` is exactly "ci-runs" because that is what
+         `activeKeyFor("/ci-runs")` already returns. */
+      { key: "ci-runs", label: "CI Runs", icon: "Play", href: "/ci-runs" },
     ],
   },
   {
