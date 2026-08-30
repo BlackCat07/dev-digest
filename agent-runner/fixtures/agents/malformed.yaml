@@ -1,0 +1,7 @@
+# `model` is missing entirely — the manifest must be rejected by NAME and by
+# FIELD, not by a stack trace three calls later.
+name: broken-reviewer
+provider: openrouter
+system_prompt: |
+  Review the diff.
+skills: []

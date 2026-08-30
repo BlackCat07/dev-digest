@@ -1,0 +1,24 @@
+{
+  "name": "@devdigest/agent-runner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DevDigest CI runner — the I/O wrapper that runs the reviewer-core engine inside someone else's repository. Travels as ONE committed file (dist/runner.mjs), exported to .devdigest/runner.mjs and invoked by the generated workflow as `node .devdigest/runner.mjs review --agent <slug>`. Reads the PR diff from the GitHub API, runs the shared engine, posts the review, writes devdigest-result.json, and exits non-zero exactly when the manifest's ci_fail_on gate trips.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "node build.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "openai": "^4.77.0",
+    "yaml": "^2.6.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

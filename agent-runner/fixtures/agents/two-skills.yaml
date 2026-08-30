@@ -1,0 +1,13 @@
+# One skill file exists (secret-gate.md), the other does not. The run must
+# continue and NAME the missing slug — a silently skipped skill is a review run
+# under rules nobody knows were absent.
+name: two-skill-reviewer
+provider: openrouter
+model: deepseek/deepseek-v4-flash
+system_prompt: |
+  Review the diff for security defects.
+skills:
+  - secret-gate
+  - never-exported
+ci_fail_on: critical
+strategy: auto
