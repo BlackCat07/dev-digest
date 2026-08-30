@@ -26,6 +26,16 @@ export const agentRuns = pgTable(
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     agentId: uuid('agent_id').references(() => agents.id, { onDelete: 'set null' }),
     prId: uuid('pr_id').references(() => pullRequests.id, { onDelete: 'set null' }),
+    /**
+     * The multi-agent run this run was created by, or null when it belongs to
+     * none — a single-agent run has no parent, and every run made before this
+     * column existed has none either. `set null` rather than `cascade` because
+     * the parent cascades away with its pull request while the run row outlives
+     * it, exactly as `pr_id` and `agent_id` already do.
+     */
+    multiAgentRunId: uuid('multi_agent_run_id').references(() => multiAgentRuns.id, {
+      onDelete: 'set null',
+    }),
     ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
     provider: text('provider'),
     model: text('model'),
@@ -61,6 +71,10 @@ export const agentRuns = pgTable(
     runningIdx: index('agent_runs_running_idx')
       .on(t.workspaceId, t.prId)
       .where(sql`${t.status} = 'running'`),
+    // Postgres does not auto-index a foreign-key column. The multi-run read's
+    // whole query is `where multi_agent_run_id = :id`, and `set null` on delete
+    // rewrites every matching row, so both paths want this index.
+    multiAgentRunIdx: index('agent_runs_multi_agent_run_idx').on(t.multiAgentRunId),
   }),
 );
 
@@ -105,13 +119,52 @@ export const runTraces = pgTable('run_traces', {
   trace: jsonb('trace').notNull(),
 });
 
-export const multiAgentRuns = pgTable('multi_agent_runs', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  workspaceId: uuid('workspace_id')
-    .notNull()
-    .references(() => workspaces.id, { onDelete: 'cascade' }),
-  prId: uuid('pr_id')
-    .notNull()
-    .references(() => pullRequests.id, { onDelete: 'cascade' }),
-  ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const multiAgentRuns = pgTable(
+  'multi_agent_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    prId: uuid('pr_id')
+      .notNull()
+      .references(() => pullRequests.id, { onDelete: 'cascade' }),
+    ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
+    /**
+     * The one structured synthesis output for this multi-run: a sentence per
+     * (contended location, agent) pair, and a short label per contended
+     * location. Written exactly once, when every run of the set has reached a
+     * terminal status; read back on every subsequent read so no second model
+     * call is ever made.
+     *
+     * Shape — deliberately two flat arrays rather than a nested document, so a
+     * missing note and a missing label degrade independently:
+     *
+     * ```
+     * {
+     *   notes:  [{ file: string, line: number, agent_id: string, note: string }],
+     *   labels: [{ file: string, line: number, label: string }]
+     * }
+     * ```
+     *
+     * `(file, line)` is the group key and matches a group's file and its lowest
+     * `start_line`. `agent_id` is the agent key the grouping uses, so a run with
+     * a deleted agent is keyed by its prefixed run id rather than by null.
+     *
+     * null — the common state — means "not synthesised": not yet, failed,
+     * timed out, or unparseable. It is not an error condition. It renders as
+     * every stance carrying an empty note and every group title falling back to
+     * the deterministic rule (the highest-severity finding's title). Groups are
+     * derived on read and are never stored here; only what cost a model call is.
+     *
+     * Untyped on purpose: it is a boundary, and the reader parses it rather
+     * than trusting a `$type<>` cast over whatever the column happens to hold.
+     */
+    notes: jsonb('notes'),
+  },
+  (t) => ({
+    // The only access path there is: the most recent multi-run of one pull
+    // request. `ran_at` descending is the ordering the read asks for.
+    prRanIdx: index('multi_agent_runs_pr_ran_idx').on(t.prId, t.ranAt.desc()),
+  }),
+);

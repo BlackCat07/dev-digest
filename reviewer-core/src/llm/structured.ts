@@ -20,7 +20,8 @@ export function toJsonSchema<T>(schema: z.ZodType<T>, name: string): JsonSchema 
   const rf = zodResponseFormat(schema as z.ZodTypeAny, name);
   const json = rf.json_schema.schema as Record<string, unknown>;
   stripNumericRangeKeywords(json);
-  return { schema: inlineDefinitions(json), name };
+  inlineDefinitions(json);
+  return { schema: json, name };
 }
 
 /**
@@ -62,55 +63,83 @@ function stripNumericRangeKeywords(node: unknown): void {
 }
 
 /**
- * Google's structured outputs do not resolve `$ref`, so a schema that hoists a
- * repeated sub-schema into `definitions` is rejected outright with
- * `400 Provider returned error` — the same opaque surface the numeric-range
- * problem above wears, and for a different reason.
+ * Google rejects `$ref`, so every reference is inlined and the `definitions`
+ * block is dropped.
  *
- * `zodResponseFormat` deduplicates any sub-schema it sees twice. `Finding`
- * reuses one enum in two places (`trifecta_components[]` and
- * `evidence[].component`), so the wire schema carries exactly one `$ref` and one
- * `definitions` entry, and Gemini answers
- * `reference to undefined schema at properties.findings.items.properties.evidence…`.
- * OpenAI and DeepSeek resolve it, which is why this surfaced only when an agent
- * was pointed at a Google model.
+ * `zodResponseFormat` hoists a schema reused in two places into `definitions`
+ * and points at it with `{"$ref": "#/definitions/..."}`. OpenAI and DeepSeek
+ * resolve that; Google AI Studio does not, and answers the whole request with
  *
- * Inlining is safe because the reference graph a zod schema produces is a TREE:
- * `definitions` here is deduplication, never recursion, so expanding every
- * reference terminates and changes nothing about what the schema accepts. A
- * self-referential zod type would not survive this — it also would not survive
- * being sent to any structured-output provider, and `parseWithRepair` still
- * validates every response against the original zod schema either way.
+ *   400 INVALID_ARGUMENT — reference to undefined schema at
+ *   properties.findings.items.properties.evidence.anyOf.0.items.properties.component
  *
- * `$schema` goes with it: it is metadata no provider reads, and Google rejects
- * unknown top-level keys on some routes.
+ * which OpenRouter passes through as a bare "400 Provider returned error". The
+ * effect was total: EVERY review by an agent on a Gemini model failed, in under
+ * a second, with no tokens spent — while the same schema on DeepSeek answered
+ * 200. Measured 2026-08-28 against the shared `Review` schema, whose
+ * `finding.evidence[].component` and `trifecta.components[]` share one enum.
+ *
+ * Inlining loses nothing: `definitions` is a de-duplication device, not a
+ * constraint, and `parseWithRepair` still re-checks every response against the
+ * original zod schema. The same reasoning as `stripNumericRangeKeywords` above —
+ * the wire schema is trimmed to the dumbest validator, and the real validation
+ * happens here on the way back.
+ *
+ * A cyclic or unresolvable reference is left exactly as it was, and then the
+ * `definitions` block is KEPT, because removing it would turn a schema this
+ * function merely failed to simplify into a schema that is definitively broken.
+ *
+ * `$schema` goes with the references, unconditionally and even when there is no
+ * `definitions` block to inline: it is metadata no provider reads, and Google
+ * rejects unknown top-level keys on some routes. Two independent fixes for the
+ * same Gemini 400 landed three days apart — this one and c3e1930's — and that
+ * is the one behaviour the other had and this did not.
  */
-function inlineDefinitions(root: Record<string, unknown>): Record<string, unknown> {
-  const defs = (root.definitions ?? {}) as Record<string, unknown>;
+function inlineDefinitions(root: Record<string, unknown>): void {
+  delete root.$schema;
+  const defsKey = '$defs' in root ? '$defs' : 'definitions' in root ? 'definitions' : null;
+  if (defsKey === null) return;
+  const defs = root[defsKey];
+  if (defs === null || typeof defs !== 'object' || Array.isArray(defs)) return;
+  const table = defs as Record<string, unknown>;
+  const prefix = `#/${defsKey}/`;
+  let unresolved = false;
 
-  const walk = (node: unknown): unknown => {
-    if (Array.isArray(node)) return node.map(walk);
+  const resolve = (node: unknown, seen: readonly string[]): unknown => {
+    if (Array.isArray(node)) return node.map((item) => resolve(item, seen));
     if (node === null || typeof node !== 'object') return node;
     const obj = node as Record<string, unknown>;
 
     const ref = obj.$ref;
     if (typeof ref === 'string') {
-      const target = defs[ref.replace(/^#\/definitions\//, '')];
-      // An unresolvable reference is left exactly as it is rather than dropped:
-      // the provider's own error then names it, which is more useful than a
-      // schema that silently lost a constraint.
-      return target === undefined ? obj : walk(target);
+      const target = ref.startsWith(prefix) ? table[ref.slice(prefix.length)] : undefined;
+      // Points outside this table, or points at something already being
+      // expanded further up this branch — inlining it would not terminate.
+      if (target === undefined || seen.includes(ref)) {
+        unresolved = true;
+        return obj;
+      }
+      // A `$ref` node may carry siblings (`description`, `title`). They are the
+      // caller's words about THIS use of the shared shape, so they win over the
+      // target's own.
+      const { $ref: _ref, ...siblings } = obj;
+      const expanded = resolve(target, [...seen, ref]);
+      if (expanded === null || typeof expanded !== 'object' || Array.isArray(expanded)) {
+        return expanded;
+      }
+      return { ...(expanded as Record<string, unknown>), ...siblings };
     }
 
     const out: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(obj)) {
-      if (key === 'definitions' || key === '$schema') continue;
-      out[key] = walk(value);
-    }
+    for (const [key, value] of Object.entries(obj)) out[key] = resolve(value, seen);
     return out;
   };
 
-  return walk(root) as Record<string, unknown>;
+  for (const key of Object.keys(root)) {
+    if (key === defsKey) continue;
+    root[key] = resolve(root[key], []);
+  }
+  if (!unresolved) delete root[defsKey];
 }
 
 /** Best-effort extraction of a JSON object/array from a model's text output. */

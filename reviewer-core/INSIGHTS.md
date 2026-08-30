@@ -110,6 +110,26 @@ Dependency and tooling quirks.
   ("no $ref reaches the wire", mutation-verified), `../server/src/platform/container.ts:516`.
 
 
+- **2026-08-28** — **Google rejects `$ref`, so a schema `zodResponseFormat` de-duplicated
+  breaks every review on a Gemini model.** A shape used twice is hoisted into
+  `definitions` and referenced; Google AI Studio does not resolve that and answers
+  `INVALID_ARGUMENT — reference to undefined schema at properties.findings.items.
+  properties.evidence.…`, which OpenRouter passes through as a bare
+  `400 Provider returned error`. The failure is total and looks like anything but a
+  schema problem: every run failed in **under a second with zero tokens spent**, while the
+  identical schema on DeepSeek answered 200, and the model id was still valid in
+  OpenRouter's catalogue. Bisecting the request is what finds it — a trivial
+  `json_schema`, `temperature: 0`, `usage.include` and `session_id` all pass on Gemini;
+  only the real `Review` schema fails. **This is the SECOND instance of the class the
+  2026-08-07 entry below describes** (a provider rejecting a wire-schema construct that
+  others accept, surfaced as a bare 400), so `toJsonSchema` now runs two provider-
+  portability passes and should be assumed to need more. Fixed by `inlineDefinitions`:
+  references are expanded in place and the block dropped — the shared `Review` schema went
+  4208 → 2183 bytes and two `$ref`s → none — while a cyclic or unresolvable reference is
+  left alone AND the block kept, since removing it would turn a schema this function
+  merely failed to simplify into one that is definitively broken. Evidence:
+  `src/llm/structured.ts` (`toJsonSchema`, `inlineDefinitions`), `test/structured.test.ts`.
+
 - **2026-08-23** — **`tsconfig.eslint.json` here carries a baseline of 4 `error TS` that no script
   surfaces** — the same include-hole `server` has: `tsconfig.json`'s `include` is `src/**/*.ts` and
   `vitest` transpiles without typechecking, so `npm test` and the typecheck script can both be green
@@ -143,7 +163,18 @@ An error string, its real cause, and the fix.
 
 <!-- append below -->
 
-_No entries yet._
+- **2026-08-28** — **`400 Provider returned error` no longer has to be replayed by hand to
+  be read.** OpenRouter wraps an upstream failure as `{"error":{"message":"Provider
+  returned error","code":400,"metadata":{"provider_name":…,"raw":…}}}`, and the OpenAI SDK
+  builds its `Error.message` from `error.message` alone — so what reached a log was that
+  string and nothing else: no model, no reason, no way to tell a bad schema from a rate
+  limit from an outage. `metadata.raw` is where the actual sentence lives. `openrouter.ts`
+  now folds `provider_name` and `raw` into the message (`withProviderDetail`), widening it
+  in place so `status`, `code` and the original stack survive for anything that branches on
+  them. **Supersedes the half of the 2026-08-07 entry that says the real message "is only
+  visible by replaying the request directly against `/chat/completions`"** — that was true
+  and cost this class of bug two separate investigations before it was fixed at the source.
+  Evidence: `src/llm/openrouter.ts` (`withProviderDetail`, `completeStructured`).
 
 ## Session Notes
 

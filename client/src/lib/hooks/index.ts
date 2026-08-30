@@ -17,3 +17,4 @@ export * from "./repo-intel";
 export * from "./onboarding";
 export * from "./eval";
 export * from "./ci";
+export * from "./multi-agent";

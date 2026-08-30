@@ -68,3 +68,8 @@ test-results/
 /ORDER-TASKS
 /HOME-TASK-SCREENSHOTS/
 .claude/settings.local.json
+
+# Reference design exports dropped in for UI work — single-file HTML with
+# fonts inlined as base64, ~40MB. Kept out of history on purpose: it cannot be
+# taken back out once committed, and every clone would carry it forever.
+/design fixes/
