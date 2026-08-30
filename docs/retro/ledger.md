@@ -16,6 +16,8 @@ taken from what the orchestrator witnessed in context.
 | 2026-08-18 | Project Context spec (SPEC-01) | 4 — main + `spec-creator` → 2 × `researcher` | 3.06M | 130m (30m in agents) | yes | `specs/project-context.md`, 742 lines, 52 AC / 0 open questions | [report](./2026-08-18-project-context-spec.md) |
 | 2026-08-25 | **Export to CI (SPEC-05)** — spec → plan → build | 11 — main + `spec-creator` (4 dispatches, 1 nested `researcher`) + `implementation-planner` + 5 × `implementer` + `plan-verifier` + `architecture-reviewer` + `doc-writer` | not measured (in-context) — ~1.96M subagent tokens on opus, 642k on sonnet | 300m (≈150m in agents) | no | SPEC-05 `implemented`; 3 commits; 42 paths; 903/468/53 tests; verdict `comment`, 0 CRITICAL | [report](./2026-08-25-export-to-ci.md) |
 | 2026-08-25 | Multi-Agent Review (SPEC-06) — spec → plan → 16-task build → review → 2 fix rounds | 27 — main + `spec-creator` ×2 (→ 2 × `researcher`) + `implementation-planner` + 18 × `implementer` + `plan-verifier` + `architecture-reviewer` + `doc-writer` | 15.53M | 364m (350m summed in agents) | yes | SPEC-06 `implemented`, 105 AC; 126 files, +16.9k/−206; server 842→933 tests, client 455→491; depcruise unchanged at 22 warnings | [report](./2026-08-25-multi-agent-review.md) |
+| 2026-08-30 | **Export to CI (SPEC-05) — measured** | 13 across 3 sessions — `9d503a4e` (11 subagents) + `6ca9fec5` (solo) + a fragment | **14 272 751** | 266m in agents (session spans include human time) | yes | Supersedes the 2026-08-25 row's `not measured` cell: that estimate quoted ~1.96M of subagent tokens and missed both the main loop and a whole solo session | [report](./2026-08-30-l07-deep-measurement.md) |
+| 2026-08-30 | **Multi-Agent Review (SPEC-06) — measured** | 40 across 3 sessions — `a4a08885` (26 subagents) + `b511842d` (11) + a fragment | **22 598 862** | 412m in agents | yes | Supersedes the 2026-08-25 row's 15.53M: that figure was one session of three and was accurate for it (15 691 487); the fix-round session added 6 863 483 | [report](./2026-08-30-l07-deep-measurement.md) |
 
 ## Insights by module
 
@@ -50,6 +52,35 @@ taken from what the orchestrator witnessed in context.
   `docs/retro/2026-08-25-multi-agent-review.md` (Duplicated reading).
 
 ### Agents & dispatch
+
+- **2026-08-30** — **A ledger row that names one session under-reports a run that
+  took several, and both L07 features took several.** Measured with `collect.py`:
+  Export to CI was 14 272 751 uncached across three sessions where the row quoted
+  ~1.96M of subagent tokens — off by roughly seven times, because the estimate
+  counted some subagents and neither the main loop nor a whole solo rework session
+  that dispatched nobody. Multi-Agent Review's 15.53M was accurate for the session
+  it measured (15 691 487) and missed a second session of fix rounds worth
+  6 863 483. Two rules follow. Write the row when the run's LAST session ends, not
+  its first; and a session that dispatched no subagent still costs — the solo one
+  here was 3.18M over 506 turns. Evidence:
+  [2026-08-30 report](./2026-08-30-l07-deep-measurement.md).
+
+- **2026-08-30** — **The 2026-08-25 finding about journal reads is now measured a
+  second time and the fix was never applied.** That entry recorded 84 opens of
+  `server/INSIGHTS.md` and 75 of `client/INSIGHTS.md` across 12 participants and
+  concluded the exemption has to be written into the session protocol, because a
+  brief asking agents to skip a journal is asking them to break a standing rule.
+  The same run remeasured: 75 and 71. The other run: 32 and 39. **A retro finding
+  that names no applied edit is a finding that will be rediscovered at full price.**
+  Evidence: [2026-08-30 report](./2026-08-30-l07-deep-measurement.md).
+
+- **2026-08-30** — **A plan file handed to a wave as a PATH is read by every member
+  of the wave.** `.claude/.plans/multi-agent-review/plan.md` was opened by **17
+  participants** — every implementer plus the verifier — for 36 opens of a document
+  each needed one task from. Carry the task's `Owned paths`, `Done-conditions` and
+  dependencies verbatim in the brief and say the file need not be opened; the plan
+  is the orchestrator's artefact, not the implementer's. Evidence:
+  [2026-08-30 report](./2026-08-30-l07-deep-measurement.md).
 
 - **2026-08-25** — **Cache creation, not generation, is what a multi-agent run costs.**
   Measured over 27 participants: 13.47M of 15.53M uncached tokens (**87%**) were
