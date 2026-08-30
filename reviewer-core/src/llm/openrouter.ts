@@ -43,6 +43,43 @@ export interface OpenRouterProviderOptions {
   fetchImpl?: typeof fetch;
 }
 
+/**
+ * Put the UPSTREAM provider's own words into the error message.
+ *
+ * OpenRouter wraps an upstream failure as `{"error":{"message":"Provider
+ * returned error","code":400,"metadata":{"provider_name":…,"raw":…}}}`, and the
+ * OpenAI SDK builds its `Error.message` from `error.message` alone. What reaches
+ * a log is therefore the string `400 Provider returned error` and nothing else —
+ * no model, no reason, no way to tell a bad schema from a rate limit from an
+ * outage. `metadata.raw` is where the actual sentence lives.
+ *
+ * Measured 2026-08-28: a Gemini agent failed every review in under a second and
+ * the logs said only "400 Provider returned error"; the real cause —
+ * `reference to undefined schema at properties.findings.…` — was reachable only
+ * by replaying the request by hand against the API.
+ *
+ * The error is re-thrown as-is with its message widened, so `status`, `code` and
+ * the original stack all survive for anything that branches on them.
+ */
+async function withProviderDetail<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (err) {
+    const meta = (err as { error?: { metadata?: { raw?: unknown; provider_name?: unknown } } })?.error
+      ?.metadata;
+    if (meta && typeof err === 'object' && err !== null && 'message' in err) {
+      const raw = typeof meta.raw === 'string' ? meta.raw : meta.raw == null ? '' : JSON.stringify(meta.raw);
+      const provider = typeof meta.provider_name === 'string' ? meta.provider_name : '';
+      const detail = [provider, raw].filter(Boolean).join(': ').replace(/\s+/g, ' ').trim();
+      if (detail !== '') {
+        const e = err as { message: string };
+        e.message = `${e.message} — ${detail.slice(0, 600)}`;
+      }
+    }
+    throw err;
+  }
+}
+
 export class OpenRouterProvider implements LLMProvider {
   readonly id: 'openai' | 'openrouter';
   private client: OpenAI;
@@ -77,7 +114,7 @@ export class OpenRouterProvider implements LLMProvider {
     let lastRaw = '';
 
     for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
-      const res = await this.client.chat.completions.create({
+      const res = await withProviderDetail(() => this.client.chat.completions.create({
         model: req.model,
         messages,
         temperature: req.temperature ?? 0,
@@ -92,7 +129,7 @@ export class OpenRouterProvider implements LLMProvider {
         // OpenRouter usage accounting — ask it to return the REAL generation
         // cost (USD) in `usage.cost`, instead of estimating from a price book.
         ...(this.id === 'openrouter' ? { usage: { include: true } } : {}),
-      });
+      }));
 
       // OpenRouter can return HTTP 200 with no `choices` (an upstream provider
       // error / moderation / free-tier limit in the body) — surface it.

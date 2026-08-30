@@ -18,6 +18,7 @@ export const FeatureModelId = z.enum([
   'risk_brief',
   'conformance',
   'conventions',
+  'multi_agent_notes',
 ]);
 export type FeatureModelId = z.infer<typeof FeatureModelId>;
 
@@ -87,6 +88,19 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     id: 'conventions',
     label: 'Conventions',
     description: 'Extracts coding conventions from the repo.',
+    defaultProvider: 'openrouter',
+    defaultModel: 'deepseek/deepseek-v4-flash',
+  },
+  // ONE structured call per multi-agent review, after every run of the fan-out
+  // has finished — it phrases one sentence per agent per contended location and
+  // one short label per group, over facts already computed, so a flash-class
+  // model is the right default. It also has to be an OpenRouter one: Settings →
+  // Feature Models writes `provider: 'openrouter'` for every pick, so an OpenAI
+  // default is one the UI can never restore.
+  {
+    id: 'multi_agent_notes',
+    label: 'Multi-Agent · Stance Notes',
+    description: 'Phrases each agent’s stance where agents disagree, and labels the location.',
     defaultProvider: 'openrouter',
     defaultModel: 'deepseek/deepseek-v4-flash',
   },

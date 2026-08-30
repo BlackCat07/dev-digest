@@ -19,6 +19,7 @@ const VersionParams = z.object({
 /**
  * A2 — agents module (owner A2).
  *   GET    /agents                  → list (workspace-scoped)
+ *   GET    /agents/estimates        → per-agent mean duration/cost of recent runs
  *   GET    /agents/:id              → one agent
  *   POST   /agents                  → create
  *   PUT    /agents/:id              → update / toggle enabled (versions config)
@@ -75,6 +76,25 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
   app.get('/agents', async (req) => {
     const { workspaceId } = await getContext(app.container, req);
     return service.list(workspaceId);
+  });
+
+  /**
+   * L07 — what each agent's next run is expected to take and cost, one row per
+   * agent in the caller's workspace.
+   *
+   * It carries no parameters at all: the sample is the whole workspace and every
+   * pull request, so there is nothing for a caller to scope and nothing to
+   * validate. The one query it triggers is workspace-scoped in the repository.
+   *
+   * **`estimates` is a static segment and `/agents/:id` is a parametric one.**
+   * Fastify's radix router prefers the static match regardless of declaration
+   * order, so this does not become a `422` from `IdParams`' uuid check — but
+   * that is asserted in `test/agent-estimates.test.ts` rather than assumed,
+   * because the failure mode is a route that answers the wrong handler.
+   */
+  app.get('/agents/estimates', async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    return service.estimates(workspaceId);
   });
 
   app.get('/agents/:id', { schema: { params: IdParams } }, async (req) => {

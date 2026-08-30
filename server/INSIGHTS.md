@@ -122,6 +122,16 @@ valuable one — the code does not record what was tried and abandoned.
   **pairwise different** rather than merely present — an assertion that each case yields *a*
   reason passes with one catch-all. Evidence: `src/modules/ci/artifact.ts`
   (`readResultArtifact`, `reasonForMissingArtifact`), `test/ci-ingest.test.ts`.
+- **2026-08-25** — **`@fastify/rate-limit` is not registered at all under `NODE_ENV=test`, so a
+  test asserting a per-route `config.rateLimit` passes with the declaration DELETED.** `src/app.ts`
+  guards the `app.register` on `config.nodeEnv !== 'test'`, which makes the per-route config inert
+  and the assertion vacuous — the same class of false green as the 2026-08-20 injection-defence
+  entry, and invisible for the same reason: the test exercises the mechanics around the thing
+  rather than the thing. What works, and stays hermetic: build the app with
+  `NODE_ENV=development` + `LOG_LEVEL=silent`. The limiter runs in `onRequest`, **ahead of
+  validation**, so ten deliberately-invalid requests and then a `429` exercise the limit without a
+  handler, a service or a query ever running. Evidence: `src/app.ts` (the guarded register),
+  `test/reviews-multi-run.test.ts` ("the per-route rate limit").
 
 - **2026-08-20** — **A test suite that checks WRAPPING MECHANICS is not evidence of an
   injection defence, and the gap is measurable: 9 of 10 passed with the defence deleted.**
@@ -393,6 +403,24 @@ valuable one — the code does not record what was tried and abandoned.
 Conventions and architectural decisions, each with the reason behind it.
 
 <!-- append below -->
+
+- **2026-08-28** — **A multi-agent group is NOT identified by its file and line, and a
+  persisted record keyed that way silently merges groups.** `SPEC-05`'s `EC-9` allows two
+  groups at one file and line differing only in their titles — two agents flagging
+  intersecting ranges with unrelated titles do not cluster — while `EC-32` asserts the
+  opposite in one sentence, and the code followed the sentence. `GroupLabel` and
+  `StanceNote` were stored as `(file, line, …)`, so on a real run three groups sharing
+  `test/tasks.test.ts:70` all rendered the SAME synthesised heading while two of the three
+  labels sat unused in the blob, and the client was handed three identical React keys. The
+  key now carries the group's **deterministic fallback title** (`AC-31`), which both sides
+  already held and neither persisted. Prefer a CONTENT key over a positional one here: if
+  the grouping rule changes, a content key stops matching and the group keeps its fallback
+  title — a state the read already renders (`AC-38`) — whereas an index would attach a
+  label to the wrong group with no signal at all. Same shape as the 2026-08-03 entry above
+  (a per-agent `Map` keyed on a nullable `agent_id` collapses every agent-deleted row into
+  one bucket): the bug is always "the natural key is not unique and nothing says so".
+  Evidence: `src/modules/multi-agent/helpers.ts` (`mergeSynthesis`),
+  `src/modules/multi-agent/schemas.ts` (`GroupLabel`), `test/multi-agent-read.test.ts`.
 
 - **2026-08-23** — **`AgentsRepository.snapshotVersion` re-reads `skillIdsForAgent(row.id)` from
   INSIDE `update`, so a caller that wants the new version's snapshot to record a particular skill
@@ -727,6 +755,42 @@ Dependency and tooling quirks.
   schema, so a key that serialises one way and parses another splits the two ends silently.
   Evidence: `src/modules/ci/manifest.ts`, `test/ci-generate.test.ts` (the AC-4 case),
   `src/vendor/shared/contracts/eval-ci.ts` (`AgentManifest.skills`).
+- **2026-08-28** — **Where the NUL bytes of the 2026-08-19 entry come from, and how to stop
+  making them.** Extends 2026-08-19 (`grep` without `-a` reports nothing on a source file
+  holding a NUL). The cause is a **raw `0x00` written into a template literal as a key
+  separator** — `` `${locationKey(f, l)}<NUL>${agentId}` `` — which is a sound separator
+  (it cannot occur in a path or a uuid) written the one way that breaks every text tool:
+  `file(1)` calls the whole file `data`, and `grep`/`ripgrep` then return **silence**, not
+  "binary file matches". Write it as the escape `\0` instead: byte-identical at runtime,
+  ASCII in the source, and the file needs no `-a` at all. Fixed in
+  `src/modules/multi-agent/helpers.ts` (`mergeSynthesis`) — this was the THIRD file with
+  the defect, and it cost real time, because the module was invisible to every grep while
+  a bug in it was being hunted. The two files 2026-08-19 names,
+  `src/modules/project-context/service.ts` and `src/modules/onboarding/service.ts`, are
+  still raw and still need `-a`. Evidence: `src/modules/multi-agent/helpers.ts`.
+
+- **2026-08-28** — **Corrects the bullet above, and nobody's list of the NUL-byte files was
+  right.** Counted directly (`b"\x00" in f.read_bytes()` over every `.ts`/`.tsx`), `server/src`
+  holds exactly **four**: `src/adapters/depgraph/index.ts`,
+  `src/modules/project-context/service.ts`, `src/modules/repo-intel/pipeline/repo-map.ts` and
+  `src/platform/model-router.ts`. `client/src` and `reviewer-core/src` hold none. So the bullet
+  above is wrong that `src/modules/onboarding/service.ts` is still raw — it is clean now — and
+  `.claude/skills/pr-self-review/gate.md` names only two of the four, missing
+  `project-context/service.ts` and `model-router.ts`. Three sources, three different lists, none
+  of them complete: **count it, do not cite it.** The `-a` flag stays load-bearing for any
+  `grep -r` over `server/src` until all four are written as `\0` escapes.
+
+- **2026-08-25** — **`depcruise`'s `application-no-db-schema` does not cover `src/db/client.ts`**,
+  so a service can acquire a Drizzle *handle* — and with it `db.transaction` — while the onion gate
+  stays at its 22-warning baseline. The rule's `to.path` is
+  `^src/db/schema|node_modules/drizzle-orm/`, and `src/db/client.ts` matches neither. Found while
+  assessing whether a service could own a transaction spanning two repositories: the answer is that
+  nothing mechanical would have stopped it, and the rule that actually forbids it (a Drizzle type
+  crossing a consumer-declared port) is checked by no tool in this repo. Read with the 2026-08-04
+  entry on anchored `to.path` patterns silently never firing — same failure, different cause: there
+  the pattern could not match, here the pattern was never meant to. Evidence:
+  `.dependency-cruiser.cjs` (`application-no-db-schema`), `src/db/client.ts`,
+  `src/modules/multi-agent/types.ts` (the port header that states the real rule).
 
 - **2026-08-23** — **`git status --short` reports a newly generated file as `??`, never `A`, so a
   Done-condition written against an `A` line cannot pass on an implementer's tree** — `A` needs a
@@ -990,6 +1054,27 @@ An error string, its real cause, and the fix.
   boundary. Evidence: `src/app.ts` (`setErrorHandler`),
   `src/adapters/github/octokit.ts` (`mapGitHubError`, `ghRetry`), `test/github-errors.test.ts`,
   `test/ci-routes.test.ts`.
+- **2026-08-25** — **Adding a REQUIRED method to a port that a module's `Store` interface extends
+  breaks every hand-built fake of that `Store`, and `tsc --noEmit -p tsconfig.eslint.json` is the
+  only gate that sees it.** Measured adding `discard` to `MultiAgentRecorder`, which
+  `MultiAgentStore` extends: the main typecheck stayed `rc=0`, `eslint` stayed clean, `vitest` was
+  fully green — and the eslint-project typecheck went **16 → 20**, one error per fake, back to 16
+  once each gained `discard: unreachable('discard')`. So a port's blast radius is "the port ring
+  **plus every hand-built fake of anything that extends it**", which is not visible from the port
+  file. This is the 2026-08-10 entry's mechanism (no test file is typechecked) reaching a second
+  feature, and the practical rule is the same: after widening an injected interface, run that
+  project and diff the count. Evidence: `src/modules/multi-agent/types.ts`
+  (`MultiAgentRecorder.discard`), `test/multi-agent-read.test.ts` (`store`).
+
+- **2026-08-25** — **Fastify hands a request with NO body to the zod validator as `null`, not
+  `undefined`, so a top-level `.default({})` on a body schema never fires** and a route that used
+  to tolerate a body-less POST starts answering `422 validation_error` with
+  `"expected":"object","received":"null"`. Measured both cases on `POST /pulls/:id/review` before
+  choosing: no payload → the 422; `{}` → the handler's own named 400. This matters wherever a
+  tolerated empty body is load-bearing — here it was the difference between "behaves exactly as
+  today" and a broken existing route. The shape that works is
+  `z.preprocess((body) => body ?? {}, Schema)`. Evidence:
+  `src/modules/reviews/routes.ts` (the `POST /pulls/:id/review` body schema).
 
 - **2026-08-07** — **`Cannot read properties of undefined (reading 'skills')` on
   `trace.prompt_assembly`, CI-only, right after a run turns `done`.** The executor committed
@@ -1134,4 +1219,13 @@ Left unresolved, stated precisely enough for the next session to pick up.
 
 <!-- append below -->
 
-_No entries yet._
+- **2026-08-25** — **Nothing copies `src/prompts` → `dist/prompts`, so every prompt template is
+  absent from a compiled build.** `package.json`'s `build` is `tsc -p tsconfig.json` and nothing
+  else, while `src/platform/prompts.ts`'s own header states that a production build must copy that
+  directory. Six templates are affected — `brief.system.md`, `intent.classify.system.md`,
+  `onboarding.system.md`, both `conventions.*.system.md` and `multi-agent-notes.system.md` — and it
+  is invisible in development because `tsx` reads `src/`. Unresolved because the fix is a
+  build-script change that belongs to whoever owns deployment, and because no consumer in this repo
+  currently runs from `dist/`. Whoever picks this up: confirm first whether anything ships compiled
+  at all, since the answer decides between fixing the build and deleting the loader's promise.
+  Evidence: `package.json` (`build`), `src/platform/prompts.ts` (the header).
