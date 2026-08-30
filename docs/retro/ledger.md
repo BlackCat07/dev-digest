@@ -15,7 +15,7 @@ taken from what the orchestrator witnessed in context.
 |---|---|---|---|---|---|---|---|
 | 2026-08-18 | Project Context spec (SPEC-01) | 4 — main + `spec-creator` → 2 × `researcher` | 3.06M | 130m (30m in agents) | yes | `specs/project-context.md`, 742 lines, 52 AC / 0 open questions | [report](./2026-08-18-project-context-spec.md) |
 | 2026-08-25 | **Export to CI (SPEC-05)** — spec → plan → build | 11 — main + `spec-creator` (4 dispatches, 1 nested `researcher`) + `implementation-planner` + 5 × `implementer` + `plan-verifier` + `architecture-reviewer` + `doc-writer` | not measured (in-context) — ~1.96M subagent tokens on opus, 642k on sonnet | 300m (≈150m in agents) | no | SPEC-05 `implemented`; 3 commits; 42 paths; 903/468/53 tests; verdict `comment`, 0 CRITICAL | [report](./2026-08-25-export-to-ci.md) |
-| 2026-08-25 | Multi-Agent Review (SPEC-06) — spec → plan → 16-task build → review → 2 fix rounds | 27 — main + `spec-creator` ×2 (→ 2 × `researcher`) + `implementation-planner` + 18 × `implementer` + `plan-verifier` + `architecture-reviewer` + `doc-writer` | 15.53M | 364m (350m summed in agents) | yes | SPEC-05 `implemented`, 105 AC; 126 files, +16.9k/−206; server 842→933 tests, client 455→491; depcruise unchanged at 22 warnings | [report](./2026-08-25-multi-agent-review.md) |
+| 2026-08-25 | Multi-Agent Review (SPEC-06) — spec → plan → 16-task build → review → 2 fix rounds | 27 — main + `spec-creator` ×2 (→ 2 × `researcher`) + `implementation-planner` + 18 × `implementer` + `plan-verifier` + `architecture-reviewer` + `doc-writer` | 15.53M | 364m (350m summed in agents) | yes | SPEC-06 `implemented`, 105 AC; 126 files, +16.9k/−206; server 842→933 tests, client 455→491; depcruise unchanged at 22 warnings | [report](./2026-08-25-multi-agent-review.md) |
 
 ## Insights by module
 
@@ -70,7 +70,7 @@ taken from what the orchestrator witnessed in context.
 
 - **2026-08-25** — **Subagents do not inherit chat images, and describing a design in
   prose instead is a third source of truth that will diverge.** `spec-creator` wrote
-  SPEC-05 from a textual description of six screenshots; comparing the shipped spec to
+  SPEC-06 from a textual description of six screenshots; comparing the shipped spec to
   the actual images afterwards found the grouping rule's entry condition inverted badly
   enough that the design's own reference screen would have rendered empty. The
   correction cost a second full `spec-creator` run (357k uncached, opus) plus two
